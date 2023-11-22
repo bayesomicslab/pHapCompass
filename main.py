@@ -1,8 +1,10 @@
 import argparse
 from data.input_handler import InputHandler
-from data.data_manager import DataManager
+from data.configuration import Configuration
 from algorithm.haplotype_assembly import HaplotypeAssembly
-# ... other imports ...
+from models.fragment_graph import FragmentGraph
+from models.quotient_graph import QuotientGraph
+from models.factor_graph import Factorgraph
 
 
 def main():
@@ -11,12 +13,25 @@ def main():
     parser.add_argument("--data_path", type=str, required=True, help="Path to the input data")
     parser.add_argument("--ploidy", type=int, required=True, help="Ploidy of the organism")
     parser.add_argument("--genotype_path", type=str, required=True, help="Path to the genotype data")
+    parser.add_argument("--error_rate", type=float, required=True, help="Error rate")
+    parser.add_argument("--alleles", nargs='*', help="List of alleles (optional)")
+    # parser.add_argument("--epsilon", help="epsilon in computing prob.")
 
     args = parser.parse_args()
 
     # Initialize classes with parsed arguments
-    input_handler = InputHandler(args.data_path, args.genotype_path)
-    data_manager = DataManager()
+    input_handler = InputHandler(args.data_path, args.genotype_path, args.ploidy, args.alleles)
+    config = Configuration(args.ploidy, args.error_rate, input_handler.alleles)
+    fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
+    frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
+    quotient_g = QuotientGraph(frag_graph).construct()
+
+    fg = Factorgraph(args.ploidy, args.error_rate, epsilon=0.0001)
+    fg_nodes, fg.edges = fg.get_weights(fragment_list, quotient_g, config, input_handler)
+    factor_graph = fg.construct_factor_graph(fg_nodes, fg.edges)
+    print(factor_graph.nodes())
+    
+    # data_manager = DataManager()
     haplotype_assembly = HaplotypeAssembly(ploidy=args.ploidy)
 
     # Perform initial computations or setup
