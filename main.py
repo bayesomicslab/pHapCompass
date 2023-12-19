@@ -5,7 +5,7 @@ from algorithm.haplotype_assembly import HaplotypeAssembly
 from models.fragment_graph import FragmentGraph
 from models.quotient_graph import QuotientGraph
 from models.factor_graph import Factorgraph
-
+from algorithm.chordal_contraction import chordal_contraction
 
 def main():
     # Parse command-line arguments
@@ -26,8 +26,10 @@ def main():
     fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
     
-    quotient_g = QuotientGraph(frag_graph).construct()
-
+    quotient_g = QuotientGraph(frag_graph).construct(fragment_list, args.ploidy, args.error_rate)
+    qg = chordal_contraction(quotient_g, args.ploidy, fragment_list, args.error_rate)
+    
+    # todo: after this should be fixed
     fg = Factorgraph(args.ploidy, args.error_rate, epsilon=0.0001)
     fg_nodes, fg.edges = fg.get_weights(fragment_list, quotient_g, config, input_handler)
     factor_graph = fg.construct_factor_graph(fg_nodes, fg.edges)
