@@ -1,6 +1,8 @@
 from utils.utils import phas_2_str
 from algorithm.haplotype_assembly_helper import *
+import os
 
+os.environ['KMP_DUPLICATE_LIB_OK'] = 'TRUE'
 
 class Configuration:
     def __init__(self, ploidy, error_rate, epsilon, alleles):
