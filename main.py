@@ -45,6 +45,7 @@ def main():
     source, target = '1-2', '4-7-8'
     path_ph = query_paths_gibbs(source, target, qg, beliefs, n_samples=1000)
     
+    
 
 if __name__ == "__main__":
     main()

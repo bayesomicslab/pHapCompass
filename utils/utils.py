@@ -11,7 +11,7 @@ def get_matching_reads_for_positions(pos, fragment_list):
     obs_reads = fragment_list[1::2]
     
     matching_obs = [(obs_positions[idx], obs_reads[idx]) for idx in range(len(obs_positions)) if
-                    len(set(pos).intersection(set(obs_positions[idx]))) > 0]
+                    len(set(pos).intersection(set(obs_positions[idx]))) > 1]
     
     matches = []
     for mat in matching_obs:

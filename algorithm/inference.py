@@ -60,3 +60,12 @@ def query_paths_gibbs(source, target, qg, beliefs, n_samples):
     
     samples['path_phasing'] = samples.apply(lambda row: merge_one_row(columns, row, sh_dict), axis=1)
     return samples['path_phasing']
+
+def phas2hap(inp, ploidy):
+    if isinstance(inp, str):
+        phas = str_2_phas([inp], ploidy)[0]
+    else:
+        phas = inp
+    haplotypes = [''.join([str(i) for i in (list(phas[r, :]))]) for r in range(ploidy)]
+    return haplotypes
+    
