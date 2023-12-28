@@ -5,7 +5,7 @@ import pandas as pd
 from pgmpy.sampling import GibbsSampling
 from pgmpy.models import MarkovNetwork
 from pgmpy.factors.discrete import DiscreteFactor
-
+from utils.utils import *
 
 def factor_graph_inference(factor_graph):
     beliefs = BeliefPropagation(factor_graph)
@@ -40,8 +40,7 @@ def path_sample_gibbs(path_graph, n_samples, qg):
         sample_df_phases[col] = sample[col].apply(lambda x: list(qg.nodes[col]['weight'].keys())[x])
     return sample_df_phases
 
-def sample_gibbs(source, target, beliefs, qg):
-    n_samples = 1000
+def sample_gibbs(source, target, beliefs, qg, n_samples):
     paths = list(nx.all_shortest_paths(qg, source, target))
     if len(paths) > 0:
         spath = random.choices(paths, k=1)[0]
@@ -51,3 +50,13 @@ def sample_gibbs(source, target, beliefs, qg):
     else:
         gibbs_sample_df = None
     return gibbs_sample_df
+
+
+def query_paths_gibbs(source, target, qg, beliefs, n_samples):
+    samples = sample_gibbs(source, target, beliefs, qg, n_samples)
+    
+    sh_dict = make_shared_dict(samples)
+    columns = list(samples.columns.values)
+    
+    samples['path_phasing'] = samples.apply(lambda row: merge_one_row(columns, row, sh_dict), axis=1)
+    return samples['path_phasing']

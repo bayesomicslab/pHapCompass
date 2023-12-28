@@ -89,3 +89,79 @@ def longest_common_substring(s1, s2):
                 dp[i][j] = 0
 
     return s1[end_pos - length: end_pos]
+
+def merge_phasings_dict(u_phase, v_phase, v, shared_dict):
+    shared_idx = shared_dict[f'{v}']['shared_idx'][0][1:]
+    non_redundants = shared_dict[f'{v}']['non_redundant_sites']
+    u_sorted = u_phase[u_phase[:, shared_idx[0]].argsort()]
+    v_sorted = v_phase[v_phase[:, shared_idx[1]].argsort()]
+    matx = np.hstack([u_sorted, v_sorted])
+    nr_matx = matx[:, non_redundants]
+    return nr_matx
+
+def merge_one_row2(samples, columns, row, shared_dict2):
+    u = columns[0]
+    u_phase = str_2_phas([samples.loc[row, u]], 3)[0]
+    for co in range(1, len(columns)):
+        v = columns[co]
+        v_phase = str_2_phas([samples.loc[row, v]], 3)[0]
+        u_phase = merge_phasings_dict(u_phase, v_phase, v, shared_dict2)
+    return phas_2_str(u_phase)
+
+
+def merge_one_row(columns, row, shared_dict):
+    u = columns[0]
+    u_phase = str_2_phas([row[u]], 3)[0]
+    for co in range(1, len(columns)):
+        v = columns[co]
+        v_phase = str_2_phas([row[v]], 3)[0]
+        u_phase = merge_phasings_dict(u_phase, v_phase, v, shared_dict)
+    return phas_2_str(u_phase)
+
+    
+    
+def make_shared_dict_general(samples_df):
+    columns = list(samples_df.columns.values)
+    shared_dict = {}
+    for co in range(len(columns) - 1):
+        col1, col2 = columns[co], columns[co + 1]
+        shared_dict[f'{col1}:{col2}'] = {}
+        corresponding_indices = [(item, i, col2.split('-').index(item)) for i, item in enumerate(col1.split('-')) if
+                                 item in col2.split('-')]
+        shared_dict[f'{col1}:{col2}']['shared_idx'] = corresponding_indices
+
+        u_sites = [(i, elem) for i, elem in enumerate(col1.split('-'))]
+        v_sites = [(i + len(u_sites), elem) for i, elem in enumerate(col2.split('-'))]
+
+        redundant_sites = [elem[0] for elem in v_sites if elem[1] in col1.split('-')]
+
+        non_redundant_sites = [col for col in range(len(u_sites) + len(v_sites)) if col not in redundant_sites]
+        # shared_dict[f'{col1}:{col2}']['redundant_sites'] = redundant_sites
+        shared_dict[f'{col1}:{col2}']['non_redundant_sites'] = non_redundant_sites
+    return shared_dict
+
+
+def make_shared_dict(samples_df):
+    columns = list(samples_df.columns.values)
+    col1 = columns[0]
+    shared_dict = {}
+    for co in range(1, len(columns)):
+        col2 = columns[co]
+        shared_dict[f'{col2}'] = {}
+        corresponding_indices = [(item, i, col2.split('-').index(item)) for i, item in enumerate(col1.split('-')) if
+                                 item in col2.split('-')]
+        
+        shared_dict[f'{col2}']['shared_idx'] = corresponding_indices
+        
+        u_sites = [(i, elem) for i, elem in enumerate(col1.split('-'))]
+        v_sites = [(i + len(u_sites), elem) for i, elem in enumerate(col2.split('-'))]
+        
+        redundant_sites = [elem[0] for elem in v_sites if elem[1] in col1.split('-')]
+        
+        non_redundant_sites = [col for col in range(len(u_sites) + len(v_sites)) if col not in redundant_sites]
+        # shared_dict[f'{col1}:{col2}']['redundant_sites'] = redundant_sites
+        shared_dict[f'{col2}']['non_redundant_sites'] = non_redundant_sites
+        col1 = '-'.join(sorted(list(set(col1.split('-') + col2.split('-')))))
+        
+    return shared_dict
+
