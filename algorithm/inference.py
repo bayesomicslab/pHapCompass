@@ -1,4 +1,4 @@
-from pgmpy.inference import BeliefPropagation
+from pgmpy.inference import BeliefPropagation, VariableElimination
 import networkx as nx
 import random
 import pandas as pd
