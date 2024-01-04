@@ -113,7 +113,7 @@ class InputHandler:
         command = [prefix, os.path.join(root_dir, "extract_poly/build/extractHAIRS"), "--bam", bam_filename,
                    "--vcf", vcf_filename, "--out", out_filename]
         print("Executing command:", ' '.join(command))
-        # subprocess.check_call(command)
+        subprocess.check_output(command)
         
         # subprocess.check_call(
         #     [prefix, root_dir + "/extract-poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
