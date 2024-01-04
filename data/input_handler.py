@@ -102,7 +102,9 @@ class InputHandler:
             prefix = "wsl"
             root_dir = subprocess.check_output(["wsl", "wslpath", "-a", root_dir]).strip().decode()
             out_filename = subprocess.check_output(["wsl", "wslpath", "-a", out_filename]).strip().decode()
-    
+        print(root_dir)
+        print(prefix)
+        print(out_filename)
         subprocess.check_call(
                 [prefix, root_dir+"/../extract-poly-src/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
                  "--out", out_filename])
