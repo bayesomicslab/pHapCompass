@@ -110,6 +110,13 @@ class InputHandler:
         print(bam_filename)
         print(vcf_filename)
         print(root_dir+"/extract-poly-src/build/extractHAIRS")
+        subprocess.check_call(
+            [prefix, root_dir + "/extract_poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
+             "--out", out_filename])
+        
+        # subprocess.check_call(
+        #     [prefix, root_dir + "/extract-poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
+        #      "--out", out_filename])
         # subprocess.check_call(
         #         [prefix, root_dir+"/../extract-poly-src/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
         #          "--out", out_filename])
