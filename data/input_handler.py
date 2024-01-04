@@ -109,11 +109,13 @@ class InputHandler:
         print(out_filename)
         print(bam_filename)
         print(vcf_filename)
-        
+        print(root_dir+"/extract-poly-src/build/extractHAIRS")
+        # subprocess.check_call(
+        #         [prefix, root_dir+"/../extract-poly-src/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
+        #          "--out", out_filename])
         subprocess.check_call(
-                [prefix, root_dir+"/../extract-poly-src/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
+                [prefix, root_dir+"/extract-poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
                  "--out", out_filename])
-        
         if wsl_available():
             out_filename = subprocess.check_output(["wsl", "wslpath", "-a", "-w", out_filename]).strip().decode()
     
