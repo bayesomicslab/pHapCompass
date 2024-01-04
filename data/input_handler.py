@@ -110,9 +110,10 @@ class InputHandler:
         print(bam_filename)
         print(vcf_filename)
         print(root_dir+"/extract-poly-src/build/extractHAIRS")
-        subprocess.check_call(
-            [prefix, root_dir + "/extract_poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
-             "--out", out_filename])
+        command = [prefix, os.path.join(root_dir, "extract_poly/build/extractHAIRS"), "--bam", bam_filename,
+                   "--vcf", vcf_filename, "--out", out_filename]
+        print("Executing command:", ' '.join(command))
+        subprocess.check_call(command)
         
         # subprocess.check_call(
         #     [prefix, root_dir + "/extract-poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
@@ -120,9 +121,7 @@ class InputHandler:
         # subprocess.check_call(
         #         [prefix, root_dir+"/../extract-poly-src/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
         #          "--out", out_filename])
-        command = [prefix, os.path.join(root_dir, "extract_poly/build/extractHAIRS"), "--bam", bam_filename,
-                   "--vcf", vcf_filename, "--out", out_filename]
-        print("Executing command:", ' '.join(command))
+        
         
         
         subprocess.check_call(
