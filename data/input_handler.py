@@ -1,17 +1,26 @@
 import vcf
 import re
 import pandas as pd
-
+import subprocess
+import os
+from utils.utils import wsl_available
+import shutil
 
 class InputHandler:
 
-    def __init__(self, data_path, genotype_path, ploidy, alleles=None):
+    def __init__(self, args):
         # Initialize with necessary attributes
-        self.data_path = data_path
-        self.genotype_path = genotype_path
-        self.ploidy = ploidy
-        self.alleles = [int(a) for a in alleles] if alleles is not None else self.compute_alleles()
+        self.data_path = args.data_path
+        self.genotype_path = args.genotype_path
+        self.ploidy = args.ploidy
+        self.alleles = [int(a) for a in args.alleles] if args.alleles is not None else self.compute_alleles()
         self.genotype = self.parse_genotype()
+        self.vcf_path = args.vcf_path
+        self.vcf_df = self.load_vcf(self.vcf_path)
+        self.root_dir = args.root_dir
+        self.output_path = args.output_path
+        self.bam_path = args.bam_path
+        data_from_bam = self.bam2fragmentfile()
         
     def compute_alleles(self):
         # Implement the logic to compute alleles based on ploidy
@@ -26,16 +35,20 @@ class InputHandler:
     
     def get_genotype_positions(self, positions):
         return ''.join([self.genotype[p] for p in positions])
-        
-    def parse_input(self):
-        # Implement input parsing logic
-        pass
+
+    def bam2fragmentfile(self):
+        # self.vcf_df = self.load_vcf(self.vcf_path)
+        # if self.data_path == None:
+        test_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
+        print('aaaaaaaaaaaa')
+        # self.G, self.fragments = loadFragments(self.data_path, self.vcf_df, self.ploidy)
+        return test_path
 
     def validate_input(self):
         # Implement input validation logic
         pass
 
-    def loadVCF(self, vcf_filename):
+    def load_vcf(self, vcf_filename):
         '''
         credit: Derek Aguiar
         Loads in a fragment file created by extract-poly
@@ -74,3 +87,28 @@ class InputHandler:
             data.append(t)
     
         return pd.DataFrame(data)
+
+
+    def convertBAM(self, bam_filename, vcf_filename, output_dir, root_dir):
+        '''
+        Converts a BAM or SAM file into a fragment file
+        :param bam_filename: input BAM or SAM file to be converted
+        :return: the path to the fragment file
+        '''
+        # TODO: call the C++ code to extract fragment file
+        prefix=""
+        out_filename = os.path.join(output_dir, "bamfrags.txt")
+        if wsl_available():
+            prefix = "wsl"
+            root_dir = subprocess.check_output(["wsl", "wslpath", "-a", root_dir]).strip().decode()
+            out_filename = subprocess.check_output(["wsl", "wslpath", "-a", out_filename]).strip().decode()
+    
+        subprocess.check_call(
+                [prefix, root_dir+"/../extract-poly-src/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
+                 "--out", out_filename])
+    
+        if wsl_available():
+            out_filename = subprocess.check_output(["wsl", "wslpath", "-a", "-w", out_filename]).strip().decode()
+    
+        return out_filename
+

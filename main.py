@@ -17,18 +17,36 @@ def main():
     parser.add_argument("-p", "--ploidy", type=int, required=True, help="Ploidy of the organism", default=3)
     parser.add_argument("-g", "--genotype_path", type=str, required=True, help="Path to the genotype data",
                         default='example/genotype.txt')
+    parser.add_argument("-a", "--alleles", required=False, nargs='*', help="List of alleles (optional)", default={0, 1})
     parser.add_argument("--error_rate", type=float, required=True, help="Error rate", default=0.001)
     parser.add_argument("--epsilon", type=float, required=True, help="epsilon", default=0.0001)
-    parser.add_argument("-a", "--alleles", required=False, nargs='*', help="List of alleles (optional)", default={0, 1})
+    parser.add_argument("-v", "--vcf_path", required=True, help="VCF file for called variants (string)")
+    parser.add_argument("-b", "--bam_path", help="sam or bam file input (string)")
+    parser.add_argument("-o", "--output_path", required=True, help="output path")
+    parser.add_argument("-r", "--root_dir", required=True, help="root directory")
+    
+
     # parser.add_argument("--epsilon", help="epsilon in computing prob.")
 
     args = parser.parse_args()
 
     # Initialize classes with parsed arguments
-    input_handler = InputHandler(args.data_path, args.genotype_path, args.ploidy, args.alleles)
+    input_handler = InputHandler(args)
+    
+
+
+
     config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+    
+    
     fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
+    
+    
+    
+    fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
+    frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
+
 
     plot_graph(frag_graph)
     
