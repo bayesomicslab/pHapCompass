@@ -113,7 +113,7 @@ class InputHandler:
         command = [prefix, os.path.join(root_dir, "extract_poly/build/extractHAIRS"), "--bam", bam_filename,
                    "--vcf", vcf_filename, "--out", out_filename]
         print("Executing command:", ' '.join(command))
-        subprocess.check_call(command)
+        # subprocess.check_call(command)
         
         # subprocess.check_call(
         #     [prefix, root_dir + "/extract-poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
@@ -121,6 +121,16 @@ class InputHandler:
         # subprocess.check_call(
         #         [prefix, root_dir+"/../extract-poly-src/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
         #          "--out", out_filename])
+        os.makedirs(os.path.dirname(out_filename), exist_ok=True)
+
+        try:
+            subprocess.check_call(command)
+        except subprocess.CalledProcessError as e:
+            print("Error occurred:", e)
+        except Exception as e:
+            print("An unexpected error occurred:", e)
+        
+        
         
         
         
