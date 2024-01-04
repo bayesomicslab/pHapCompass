@@ -174,7 +174,10 @@ def wsl_available() -> bool:
     Uses presence of /etc/os-release in the WSL image to say Linux is there.
     This is a de facto file standard across Linux distros.
     """
+    print('before3')
+    print(os.name)
     if os.name == "nt":
+        print('before4')
         wsl = shutil.which("wsl")
         if not wsl:
             return False
@@ -183,5 +186,5 @@ def wsl_available() -> bool:
         # A Python limitation?
         ret = subprocess.run(["wsl", "test", "-f", "/etc/os-release"])
         return ret.returncode == 0
-
+    print('before5')
     return False

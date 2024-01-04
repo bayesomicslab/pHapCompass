@@ -101,6 +101,7 @@ class InputHandler:
         print('before')
         if wsl_available():
             prefix = "wsl"
+            print('before2')
             root_dir = subprocess.check_output(["wsl", "wslpath", "-a", root_dir]).strip().decode()
             out_filename = subprocess.check_output(["wsl", "wslpath", "-a", out_filename]).strip().decode()
         print(root_dir)
