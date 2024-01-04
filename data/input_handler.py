@@ -116,7 +116,7 @@ class InputHandler:
         subprocess.run(['ls', os.path.join(root_dir, "extract_poly/build")])
         subprocess.run(['ls', '/home/FCAM/mhosseini/HaplOrbit/output/'])
         subprocess.run(['cat', '/home/FCAM/mhosseini/HaplOrbit/output/test.txt'])
-        subprocess.run(['mkdir', 'test2'])
+        subprocess.run(['mkdir', os.path.join(output_dir, 'test2')])
 
         print("Executing command:", ' '.join(command))
         subprocess.run(command)
