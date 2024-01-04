@@ -98,6 +98,7 @@ class InputHandler:
         # TODO: call the C++ code to extract fragment file
         prefix=""
         out_filename = os.path.join(output_dir, "bamfrags.txt")
+        print('before')
         if wsl_available():
             prefix = "wsl"
             root_dir = subprocess.check_output(["wsl", "wslpath", "-a", root_dir]).strip().decode()

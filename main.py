@@ -25,7 +25,6 @@ def main():
     parser.add_argument("-o", "--output_path", required=True, help="output path")
     parser.add_argument("-r", "--root_dir", required=True, help="root directory")
     
-
     # parser.add_argument("--epsilon", help="epsilon in computing prob.")
 
     args = parser.parse_args()
