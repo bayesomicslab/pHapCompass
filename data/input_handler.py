@@ -114,7 +114,7 @@ class InputHandler:
                    "--vcf", vcf_filename, "--out", out_filename]
         print("Executing command:", ' '.join(command))
         subprocess.run(['ls', os.path.join(root_dir, "extract_poly/build")])
-        subprocess.run(['ls', '/labs/Aguiar/haplotype/'])
+        subprocess.run(['ls', '/home/FCAM/mhosseini/HaplOrbit/output/'])
         print("Executing command:", ' '.join(command))
         subprocess.run(command)
         
