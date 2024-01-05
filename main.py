@@ -63,11 +63,9 @@ def main():
     max_phase, positions = query_paths_gibbs_max(fragment_list, qg, beliefs, n_samples=1000)
     h_df = creat_vcf(max_phase, positions, config)
 
-    va_inference = VariableElimination(factor_graph)
-    result = va_inference.query(variables=['1-2'])
+    # va_inference = VariableElimination(factor_graph)
+    # result = va_inference.query(variables=['1-2'])
     
-    
-
 
 if __name__ == "__main__":
     main()
