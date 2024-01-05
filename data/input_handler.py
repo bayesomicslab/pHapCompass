@@ -19,6 +19,7 @@ class InputHandler:
         self.vcf_df = self.load_vcf(self.vcf_path)
         self.root_dir = args.root_dir
         self.output_path = args.output_path
+        print('init1')
         self.bam_path = args.bam_path if args.bam_path is not None else None
         
         data_from_bam = self.bam2fragmentfile()
