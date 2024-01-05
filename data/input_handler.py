@@ -117,7 +117,7 @@ class InputHandler:
         subprocess.run(['ls', os.path.join(root_dir, output_dir)])
         
         print("mkdir on output:")
-        subprocess.run(['mkdir', os.path.join(root_dir, 'test2')])
+        subprocess.run(['mkdir', os.path.join(root_dir, output_dir, 'test2')])
 
         print("Executing command:", ' '.join(command))
         # subprocess.run(['ls', '/home/FCAM/mhosseini/HaplOrbit/output/'])
