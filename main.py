@@ -41,11 +41,14 @@ def main():
     # frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
 
     plot_graph(frag_graph)
-    
+    print('Fragment Graph constructed.')
+
     quotient_g = QuotientGraph(frag_graph).construct(fragment_list, input_handler, config)
     plot_graph(quotient_g)
+    print('Quotient Graph constructed.')
     
     qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
+    print('Chordal Graph constructed.')
     plot_graph(qg)
 
     factor_graph = Factorgraph(args.ploidy, args.error_rate, args.epsilon).construct(qg, fragment_list)
