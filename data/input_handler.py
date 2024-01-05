@@ -19,10 +19,9 @@ class InputHandler:
         self.vcf_df = self.load_vcf(self.vcf_path)
         self.root_dir = args.root_dir
         self.output_path = args.output_path
-        print('init1')
         self.bam_path = args.bam_path if args.bam_path is not None else None
-        
-        data_from_bam = self.bam2fragmentfile()
+        self.data_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
+        # data_from_bam = self.bam2fragmentfile()
         # self.data_path = data_from_bam
         # self.data_path = args.data_path if args.data_path is not None else self.bam2fragmentfile()
     def compute_alleles(self):
