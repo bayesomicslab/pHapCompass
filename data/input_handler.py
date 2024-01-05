@@ -10,7 +10,7 @@ class InputHandler:
 
     def __init__(self, args):
         # Initialize with necessary attributes
-        self.data_path = args.data_path
+        self.data_path = args.data_path if args.data_path is not None else self.bam2fragmentfile()
         self.genotype_path = args.genotype_path
         self.ploidy = args.ploidy
         self.alleles = [int(a) for a in args.alleles] if args.alleles is not None else self.compute_alleles()
@@ -19,8 +19,8 @@ class InputHandler:
         self.vcf_df = self.load_vcf(self.vcf_path)
         self.root_dir = args.root_dir
         self.output_path = args.output_path
-        self.bam_path = args.bam_path
-        data_from_bam = self.bam2fragmentfile()
+        self.bam_path = args.bam_path if args.data_path is not None else None
+        # data_from_bam = self.bam2fragmentfile()
         
     def compute_alleles(self):
         # Implement the logic to compute alleles based on ploidy
@@ -38,11 +38,10 @@ class InputHandler:
 
     def bam2fragmentfile(self):
         # self.vcf_df = self.load_vcf(self.vcf_path)
-        # if self.data_path == None:
-        test_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
-        print('aaaaaaaaaaaa')
+        if self.data_path == None:
+            self.data_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
         # self.G, self.fragments = loadFragments(self.data_path, self.vcf_df, self.ploidy)
-        return test_path
+        return self.data_path
 
     def validate_input(self):
         # Implement input validation logic
@@ -121,13 +120,12 @@ class InputHandler:
         # print("Executing command:", ' '.join(command))
         subprocess.check_call(command)
 
-
         # subprocess.check_call(
         #     [prefix, root_dir + "/extract-poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
         #      "--out", out_filename])
         # subprocess.check_call(
-        #         [prefix, root_dir+"/../extract-poly-src/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
-        #          "--out", out_filename])
+        #         [prefix, root_dir+"/../extract-poly-src/build/extractHAIRS", "--bam", bam_filename, "--vcf",
+        #         vcf_filename, "--out", out_filename])
         os.makedirs(os.path.dirname(out_filename), exist_ok=True)
 
         try:
@@ -136,14 +134,10 @@ class InputHandler:
             print("Error occurred:", e)
         except Exception as e:
             print("An unexpected error occurred:", e)
-        
-        
-        
-        
-        
-        subprocess.check_call(
-                [prefix, root_dir+"/extract-poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
-                 "--out", out_filename])
+            
+        # subprocess.check_call(
+        #         [prefix, root_dir+"/extract-poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
+        #          "--out", out_filename])
         if wsl_available():
             out_filename = subprocess.check_output(["wsl", "wslpath", "-a", "-w", out_filename]).strip().decode()
     

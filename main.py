@@ -31,21 +31,14 @@ def main():
 
     # Initialize classes with parsed arguments
     input_handler = InputHandler(args)
-    
-
-
 
     config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
     
-    
     fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
     
-    
-    
-    fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
-    frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
-
+    # fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
+    # frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
 
     plot_graph(frag_graph)
     

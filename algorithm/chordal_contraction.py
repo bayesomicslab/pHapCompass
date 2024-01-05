@@ -23,7 +23,10 @@ def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
         candidate_edges = [edg for edg in list(qg.edges()) if edg not in non_candicate_edges]
         entropies = np.array([qg[edg[0]][edg[1]]['entropy'] for edg in candidate_edges])
         entropies[np.isnan(entropies)] = 0
-        rev_entropies = [1 - e for e in entropies]
+        rev_entropies = [1 - e if 1 > e else 0 for e in entropies]
+        if np.sum(rev_entropies) == 0:
+            for ent_id in range(len(rev_entropies)):
+                rev_entropies[ent_id] = 1 / len(rev_entropies)
         picked_edge = random.choices(candidate_edges, weights=rev_entropies, k=1)
         picked_edge = [picked_edge[0][0], picked_edge[0][1]]
         if picked_edge in [list(edg) for edg in list(qg.edges())]:
@@ -65,7 +68,8 @@ def contract_one_edge(quotient_g, picked_edge, inpt_handler, config, fragment_li
                 # for obs in all_obs:
                 #     obs_np = np.array([int(po) for po in obs])
                 #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
-                weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc, indc,
+                weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+                                                                                 list(range(len(indc))),
                                                                                  config.error_rate)
         entr = entropy(list(weights.values()), base=10)
         new_graph.add_edge(ed[0], ed[1], weight=weights, entropy=entr)
