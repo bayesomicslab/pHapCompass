@@ -296,9 +296,11 @@ def create_pruned_quadtree_ploidy_long(max_depth, genotype, allel_set=[0, 1]):
                             range(len(genotype))}
             
             # print(new_counts)
-            # print('remaining_levels', remaining_levels, 'sum_first_position', sum_first_position, 'sum_second_position',
+            # print('remaining_levels', remaining_levels, 'sum_first_position', sum_first_position,
+            # 'sum_second_position',
             #       sum_second_position)
-            # if remaining_levels - 1 == 0 and ((sum_first_position!= int(genotype[0])) or (sum_second_position != int(genotype[1]))):
+            # if remaining_levels - 1 == 0 and ((sum_first_position!= int(genotype[0])) or
+            # (sum_second_position != int(genotype[1]))):
             #     print('inja 000')
             #     continue
             

@@ -1,12 +1,11 @@
 from pgmpy.inference import BeliefPropagation, VariableElimination
-import networkx as nx
 import random
-import pandas as pd
 from pgmpy.sampling import GibbsSampling
 from pgmpy.models import MarkovNetwork
 from pgmpy.factors.discrete import DiscreteFactor
-from utils.utils import *
 from collections import Counter
+from utils.utils import *
+
 
 def factor_graph_inference(factor_graph):
     beliefs = BeliefPropagation(factor_graph)
