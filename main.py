@@ -1,4 +1,7 @@
 import argparse
+
+import pandas as pd
+
 from data.input_handler import InputHandler
 from data.configuration import Configuration
 from algorithm.haplotype_assembly import HaplotypeAssembly
@@ -55,11 +58,15 @@ def main():
 
     beliefs = factor_graph_inference(factor_graph)
 
-    source, target = '1-2', '4-7-8'
-    path_ph = query_paths_gibbs(source, target, qg, beliefs, n_samples=1000)
+    marginals, max_phasings = give_marginals(factor_graph, qg, beliefs)
+
+    max_phase, positions = query_paths_gibbs_max(fragment_list, qg, beliefs, n_samples=1000)
+    h_df = creat_vcf(max_phase, positions, config)
 
     va_inference = VariableElimination(factor_graph)
     result = va_inference.query(variables=['1-2'])
+    
+    
 
 
 if __name__ == "__main__":

@@ -11,7 +11,6 @@ def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
     # plot_graph(quotient_g)
     qg = quotient_g.copy()
     while not nx.is_chordal(qg):
-        # find cliques larger than 3
         cliques_larger_than_2 = [cli for cli in nx.find_cliques(qg) if len(cli) > 2]
         
         non_candicate_edges = []
@@ -75,3 +74,8 @@ def contract_one_edge(quotient_g, picked_edge, inpt_handler, config, fragment_li
         new_graph.add_edge(ed[0], ed[1], weight=weights, entropy=entr)
     
     return new_graph
+
+
+list1 = [5,1,3,5,1,5,7]
+probs = [4/4, 0/4, 0/4, 0/4]
+entropy(probs)

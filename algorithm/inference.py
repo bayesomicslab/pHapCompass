@@ -6,6 +6,7 @@ from pgmpy.sampling import GibbsSampling
 from pgmpy.models import MarkovNetwork
 from pgmpy.factors.discrete import DiscreteFactor
 from utils.utils import *
+from collections import Counter
 
 def factor_graph_inference(factor_graph):
     beliefs = BeliefPropagation(factor_graph)
@@ -52,7 +53,8 @@ def sample_gibbs(source, target, beliefs, qg, n_samples):
     return gibbs_sample_df
 
 
-def query_paths_gibbs(source, target, qg, beliefs, n_samples):
+def query_paths_gibbs(fragment_list, qg, beliefs, n_samples):
+    source, target, positions = get_first_last_positions(fragment_list, qg)
     samples = sample_gibbs(source, target, beliefs, qg, n_samples)
     
     sh_dict = make_shared_dict(samples)
@@ -61,6 +63,27 @@ def query_paths_gibbs(source, target, qg, beliefs, n_samples):
     samples['path_phasing'] = samples.apply(lambda row: merge_one_row(columns, row, sh_dict), axis=1)
     return samples['path_phasing']
 
+def query_paths_gibbs_max(fragment_list, qg, beliefs, n_samples):
+    source, target, _ = get_first_last_positions(fragment_list, qg)
+    samples = sample_gibbs(source, target, beliefs, qg, n_samples)
+
+    sh_dict = make_shared_dict(samples)
+    columns = list(samples.columns.values)
+
+    samples['path_phasing'] = samples.apply(lambda row: merge_one_row(columns, row, sh_dict), axis=1)
+    
+    counts = Counter(samples['path_phasing'])
+
+    max_count = max(counts.values())
+
+    max_phase = [num for num, count in counts.items() if count == max_count][0]
+    
+    obs_positions = [elem.split('-') for elem in list(samples.columns.values)]
+    positions = [item for sublist in obs_positions for item in sublist]
+    positions = sorted(set([int(pos) for pos in positions]))
+
+    return max_phase, positions
+
 def phas2hap(inp, ploidy):
     if isinstance(inp, str):
         phas = str_2_phas([inp], ploidy)[0]
@@ -68,4 +91,26 @@ def phas2hap(inp, ploidy):
         phas = inp
     haplotypes = [''.join([str(i) for i in (list(phas[r, :]))]) for r in range(ploidy)]
     return haplotypes
+
+
+def get_first_last_positions(fragment_list, qg):
+    obs_positions = fragment_list[::2]
+    positions = [item for sublist in obs_positions for item in sublist]
+    poss = sorted(set(positions))
+    min_p = str(min(poss))
+    max_p = str(max(poss))
+    min_node = ''
+    while min_node == '':
+        for node in qg.nodes():
+            # print(node, min_p in node.split('-'))
+            if min_p in node.split('-'):
+                min_node = node
+                break
     
+    max_node = ''
+    while max_node == '':
+        for node in list(qg.nodes())[::-1]:
+            if max_p in node.split('-'):
+                max_node = node
+                break
+    return min_node, max_node, poss

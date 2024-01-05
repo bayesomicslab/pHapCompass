@@ -5,7 +5,7 @@ import itertools
 import os
 import subprocess
 import shutil
-
+import pandas as pd
 def get_matching_reads_for_positions(pos, fragment_list):
     # pos = [1, 2, 3]
     
@@ -190,3 +190,24 @@ def wsl_available() -> bool:
     return False
 
 
+def give_marginals(factor_graph, qg, beliefs):
+    variable_nodes = [node for node in factor_graph.nodes() if isinstance(node, str)]
+    
+    marginals = {}
+    max_phasings = {}
+    for variable in variable_nodes:
+        marginal = beliefs.query(variables=[variable], show_progress=False)
+        marginals[variable] = marginal
+        
+        max_index = list(marginal.values).index(max(list(marginal.values)))
+        max_phase = list(qg.nodes[variable]['weight'])[max_index]
+        max_phasings[variable] = max_phase
+        # print(variable, ':', max_phase)
+    return marginals, max_phasings
+
+def creat_vcf(max_phase, positions, config):
+    max_ph_np = str_2_phas([max_phase], config.ploidy)[0]
+    h_df = pd.DataFrame(columns=['Position', 'phasing'], index=range(len(positions)))
+    for id, pos in enumerate(positions):
+        h_df.loc[id, :] = pos, '|'.join([str(i) for i in list(max_ph_np[:,id])])
+    return h_df
