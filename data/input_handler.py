@@ -105,16 +105,21 @@ class InputHandler:
             print('before2')
             root_dir = subprocess.check_output(["wsl", "wslpath", "-a", root_dir]).strip().decode()
             out_filename = subprocess.check_output(["wsl", "wslpath", "-a", out_filename]).strip().decode()
-        print(root_dir)
-        print(prefix)
-        print(out_filename)
-        print(bam_filename)
-        print(vcf_filename)
+        print('root_dir:', root_dir)
+        print('prefix:', prefix)
+        print('out_filename:', out_filename)
+        print('bam_filename:', bam_filename)
+        print('vcf_filename:', vcf_filename)
         # print(root_dir+"/extract-poly-src/build/extractHAIRS")
         command = [prefix, os.path.join(root_dir, "extract_poly/build/extractHAIRS"), "--bam", bam_filename,
                    "--vcf", vcf_filename, "--out", out_filename]
+        print("ls command on output:")
+        subprocess.run(['ls', os.path.join(root_dir, output_dir)])
+        
+        print("mkdir on output:")
+        subprocess.run(['mkdir', os.path.join(root_dir, 'test2')])
+
         print("Executing command:", ' '.join(command))
-        subprocess.run(['ls', os.path.join(root_dir, "extract_poly/build")])
         # subprocess.run(['ls', '/home/FCAM/mhosseini/HaplOrbit/output/'])
         # subprocess.run(['cat', '/home/FCAM/mhosseini/HaplOrbit/output/test.txt'])
         # subprocess.run(['mkdir', os.path.join(output_dir, 'test2')])
