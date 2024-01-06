@@ -111,20 +111,25 @@ class InputHandler:
         print('bam_filename:', bam_filename)
         print('vcf_filename:', vcf_filename)
         
-        print("ls command on output:")
-        subprocess.run(['ls', os.path.join(root_dir, "extract_poly/build/")])
-        print('ls done')
-        # print(root_dir+"/extract-poly-src/build/extractHAIRS")
-        # readlink_com = 'readlink -f' + ' ' + os.path.join(root_dir, "extract_poly/build/extractHAIRS")
-        readlink_com = 'readlink -f' + ' ' + vcf_filename
+        run_command = ['sh', os.path.join('/home/FCAM/mhosseini/', 'test.sh')]
+        print(' '.join(run_command))
+        subprocess.run(run_command)
         
-        print('readlink command:', readlink_com)
-        subprocess.run(['readlink', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
-        print('done')
-        subprocess.check_call(['readlink', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
-
-        print("ls command on output:")
-        subprocess.run(['ls', os.path.join(root_dir, output_dir)])
+        subprocess.check_call(run_command)
+        # print("ls command on output:")
+        # subprocess.run(['ls', os.path.join(root_dir, "extract_poly/build/")])
+        # print('ls done')
+        # # print(root_dir+"/extract-poly-src/build/extractHAIRS")
+        # # readlink_com = 'readlink -f' + ' ' + os.path.join(root_dir, "extract_poly/build/extractHAIRS")
+        # readlink_com = 'readlink -f' + ' ' + vcf_filename
+        #
+        # print('readlink command:', readlink_com)
+        # subprocess.run(['readlink', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
+        # print('done')
+        # subprocess.check_call(['readlink', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
+        #
+        # print("ls command on output:")
+        # subprocess.run(['ls', os.path.join(root_dir, output_dir)])
         
         # print("mkdir on output:")
         # subprocess.run(['mkdir', os.path.join(root_dir, output_dir, 'test2')])
@@ -132,12 +137,13 @@ class InputHandler:
         command = [prefix, os.path.join(root_dir, "extract_poly/build/extractHAIRS"), "--bam", bam_filename,
                    "--vcf", vcf_filename, "--out", out_filename]
         print("Executing command:", ' '.join(command))
+        subprocess.check_call(command)
         # subprocess.run(['ls', '/home/FCAM/mhosseini/HaplOrbit/output/'])
         # subprocess.run(['cat', '/home/FCAM/mhosseini/HaplOrbit/output/test.txt'])
         # subprocess.run(['mkdir', os.path.join(output_dir, 'test2')])
 
         # print("Executing command:", ' '.join(command))
-        subprocess.run(command)
+        
 
         # subprocess.check_call(
         #     [prefix, root_dir + "/extract-poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
