@@ -1,0 +1,10 @@
+[submodule "submodules/samtools"]
+	path = submodules/samtools
+	url = https://github.com/samtools/samtools.git
+	branch = 255f97d
+[submodule "sub/samtools"]
+	path = sub/samtools
+	url = https://github.com/samtools/samtools.git
+[submodule "sub/htslib"]
+	path = sub/htslib
+	url = https://github.com/samtools/htslib.git
