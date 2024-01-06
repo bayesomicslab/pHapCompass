@@ -121,15 +121,13 @@ class InputHandler:
         print('readlink command:', readlink_com)
         subprocess.run(['readlink', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
         print('done')
-        subprocess.call(['readlink', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
-
+        subprocess.check_call(['readlink', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
 
         print("ls command on output:")
         subprocess.run(['ls', os.path.join(root_dir, output_dir)])
         
         # print("mkdir on output:")
         # subprocess.run(['mkdir', os.path.join(root_dir, output_dir, 'test2')])
-
 
         command = [prefix, os.path.join(root_dir, "extract_poly/build/extractHAIRS"), "--bam", bam_filename,
                    "--vcf", vcf_filename, "--out", out_filename]
