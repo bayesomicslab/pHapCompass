@@ -111,7 +111,7 @@ class InputHandler:
         print('bam_filename:', bam_filename)
         print('vcf_filename:', vcf_filename)
         # print(root_dir+"/extract-poly-src/build/extractHAIRS")
-        readlink_com = 'readlink - f' + ' ' + os.path.join(root_dir, "extract_poly/build/extractHAIRS")
+        readlink_com = 'readlink -f' + ' ' + os.path.join(root_dir, "extract_poly/build/extractHAIRS")
         print('readlink command:', readlink_com)
         subprocess.run(readlink_com)
         subprocess.call(readlink_com)
