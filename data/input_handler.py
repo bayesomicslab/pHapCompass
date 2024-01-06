@@ -119,9 +119,9 @@ class InputHandler:
         readlink_com = 'readlink -f' + ' ' + vcf_filename
         
         print('readlink command:', readlink_com)
-        subprocess.run(['ls', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
+        subprocess.run(['readlink', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
         print('done')
-        subprocess.call(['ls', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
+        subprocess.call(['readlink', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
 
 
         print("ls command on output:")
