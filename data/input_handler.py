@@ -110,13 +110,18 @@ class InputHandler:
         print('out_filename:', out_filename)
         print('bam_filename:', bam_filename)
         print('vcf_filename:', vcf_filename)
+        
+        print("ls command on output:")
+        subprocess.run(['ls', os.path.join(root_dir, "extract_poly/build/")])
+        print('ls done')
         # print(root_dir+"/extract-poly-src/build/extractHAIRS")
         # readlink_com = 'readlink -f' + ' ' + os.path.join(root_dir, "extract_poly/build/extractHAIRS")
         readlink_com = 'readlink -f' + ' ' + vcf_filename
+        
         print('readlink command:', readlink_com)
-        subprocess.run(readlink_com)
+        subprocess.run(['ls', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
         print('done')
-        subprocess.call(readlink_com)
+        subprocess.call(['ls', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
 
 
         print("ls command on output:")
