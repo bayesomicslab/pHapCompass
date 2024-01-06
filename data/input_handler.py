@@ -111,7 +111,7 @@ class InputHandler:
         print('bam_filename:', bam_filename)
         print('vcf_filename:', vcf_filename)
         
-        run_command = ['sh', os.path.join('/home/FCAM/mhosseini/', 'test.sh')]
+        run_command = ['sh', os.path.join(root_dir, "extract_poly/build", 'test.sh')]
         print(' '.join(run_command))
         subprocess.run(run_command)
         
