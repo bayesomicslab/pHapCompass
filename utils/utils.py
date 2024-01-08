@@ -6,6 +6,8 @@ import os
 import subprocess
 import shutil
 import pandas as pd
+import networkit as nt
+
 def get_matching_reads_for_positions(pos, fragment_list):
     # pos = [1, 2, 3]
     
@@ -211,3 +213,42 @@ def creat_vcf(max_phase, positions, config):
     for id, pos in enumerate(positions):
         h_df.loc[id, :] = pos, '|'.join([str(i) for i in list(max_ph_np[:,id])])
     return h_df
+
+
+def dfs(graph, start, visited=None, path=None):
+    """
+    Depth First Search to find cycles in the graph
+    """
+    if visited is None:
+        visited = set()
+    if path is None:
+        path = [start]
+
+    visited.add(start)
+    for neighbor in graph.iterNeighbors(start):
+        if neighbor in visited:
+            if neighbor == path[-2]:
+                # Skip the immediate parent node in path
+                continue
+            # Cycle found
+            cycle = path[path.index(neighbor):] + [neighbor]
+            yield cycle
+        else:
+            yield from dfs(graph, neighbor, visited, path + [neighbor])
+
+    visited.remove(start)
+
+def networkit_find_cycles(graph):
+
+    visited = set()
+    for node in graph.iterNodes():
+        if node not in visited:
+            yield from dfs(graph, node, visited)
+
+def networkit_is_chordless(graph, cycle):
+
+    for i in range(len(cycle)):
+        for j in range(i+2, len(cycle) - (1 if i == 0 else 0)):
+            if graph.hasEdge(cycle[i], cycle[j]):
+                return False
+    return True

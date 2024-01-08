@@ -1,7 +1,4 @@
 import argparse
-
-import pandas as pd
-
 from data.input_handler import InputHandler
 from data.configuration import Configuration
 from algorithm.haplotype_assembly import HaplotypeAssembly
