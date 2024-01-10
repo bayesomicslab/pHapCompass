@@ -10,7 +10,7 @@ class InputHandler:
 
     def __init__(self, args):
         # Initialize with necessary attributes
-        self.data_path = args.data_path if args.data_path is not None else self.bam2fragmentfile()
+        
         self.genotype_path = args.genotype_path
         self.ploidy = args.ploidy
         self.alleles = [int(a) for a in args.alleles] if args.alleles is not None else self.compute_alleles()
@@ -21,6 +21,7 @@ class InputHandler:
         self.output_path = args.output_path
         self.bam_path = args.bam_path if args.bam_path is not None else None
         self.data_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
+        # self.data_path = args.data_path if args.data_path is not None else self.bam2fragmentfile()
         # data_from_bam = self.bam2fragmentfile()
         # self.data_path = data_from_bam
         # self.data_path = args.data_path if args.data_path is not None else self.bam2fragmentfile()
