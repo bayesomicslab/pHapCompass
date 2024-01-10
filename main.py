@@ -14,8 +14,7 @@ from algorithm.inference import *
 def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Haplotype Assembly and Phasing")
-    parser.add_argument("-d", "--data_path", type=str, required=False, help="Path to the input data",
-                        default='example/test.txt')
+    parser.add_argument("-d", "--data_path", type=str, required=False, help="Path to the input data")
     parser.add_argument("-p", "--ploidy", type=int, required=True, help="Ploidy of the organism", default=3)
     parser.add_argument("-g", "--genotype_path", type=str, required=True, help="Path to the genotype data",
                         default='example/genotype.txt')
