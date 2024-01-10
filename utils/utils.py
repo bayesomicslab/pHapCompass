@@ -6,7 +6,8 @@ import os
 import subprocess
 import shutil
 import pandas as pd
-import networkit as nt
+# import networkit as nk
+
 
 def get_matching_reads_for_positions(pos, fragment_list):
     # pos = [1, 2, 3]
@@ -207,6 +208,7 @@ def give_marginals(factor_graph, qg, beliefs):
         # print(variable, ':', max_phase)
     return marginals, max_phasings
 
+
 def creat_vcf(max_phase, positions, config):
     max_ph_np = str_2_phas([max_phase], config.ploidy)[0]
     h_df = pd.DataFrame(columns=['Position', 'phasing'], index=range(len(positions)))
@@ -216,14 +218,10 @@ def creat_vcf(max_phase, positions, config):
 
 
 def dfs(graph, start, visited=None, path=None):
-    """
-    Depth First Search to find cycles in the graph
-    """
     if visited is None:
         visited = set()
     if path is None:
         path = [start]
-
     visited.add(start)
     for neighbor in graph.iterNeighbors(start):
         if neighbor in visited:
@@ -235,20 +233,54 @@ def dfs(graph, start, visited=None, path=None):
             yield cycle
         else:
             yield from dfs(graph, neighbor, visited, path + [neighbor])
-
     visited.remove(start)
 
-def networkit_find_cycles(graph):
 
+def networkit_find_cycles(graph):
     visited = set()
     for node in graph.iterNodes():
         if node not in visited:
             yield from dfs(graph, node, visited)
 
-def networkit_is_chordless(graph, cycle):
 
+def cycle_is_chordless(graph, cycle):
     for i in range(len(cycle)):
         for j in range(i+2, len(cycle) - (1 if i == 0 else 0)):
             if graph.hasEdge(cycle[i], cycle[j]):
                 return False
     return True
+
+
+def networkit_is_chordal(graph):
+    all_cycles = list(networkit_find_cycles(graph))
+    chordless_cycles = [cycle for cycle in all_cycles if cycle_is_chordless(graph, cycle)]
+    if len(chordless_cycles) > 0:
+        return False
+    else:
+        return True
+
+
+def nx2nk(graphnx):
+    nk_node_map = {node: i for i, node in enumerate(graphnx.nodes())}
+    reverse_map = {i: node for node, i in nk_node_map.items()}
+    graphnk = nk.Graph(graphnx.number_of_nodes(), weighted=False, directed=graphnx.is_directed())
+    for u, v in graphnx.edges():
+        graphnk.addEdge(nk_node_map[u], nk_node_map[v])
+    return graphnk, reverse_map
+
+
+def nk2nx(graphnk, reverse_map):
+    graphnx = nx.Graph()
+    nodes = list(reverse_map.values())
+    graphnx.add_nodes_from(nodes)
+    for u, v in graphnk.iterEdges():
+        graphnx.add_edge(reverse_map[u], reverse_map[v])
+    return graphnx
+
+
+def networkit_find_cliques(graphnk):
+    cliqueFinder = nk.clique.MaximalCliques(graphnk)
+    cliqueFinder.run()
+    cliques = cliqueFinder.getCliques()
+    return cliques
+

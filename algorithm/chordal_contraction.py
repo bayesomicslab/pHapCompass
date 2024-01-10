@@ -1,7 +1,7 @@
 import numpy as np
 import itertools
 from algorithm.haplotype_assembly_helper import generate_phasings_ploidy_long, compute_likelihood_generalized_plus
-from utils.utils import get_matching_reads_for_positions, phas_2_str
+from utils.utils import get_matching_reads_for_positions, phas_2_str, networkit_is_chordal
 from scipy.stats import entropy
 import random
 import networkx as nx
@@ -13,6 +13,36 @@ def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
     while not nx.is_chordal(qg):
         cliques_larger_than_2 = [cli for cli in nx.find_cliques(qg) if len(cli) > 2]
         
+        non_candicate_edges = []
+        for cli in cliques_larger_than_2:
+            non_candicate_edges += sorted(list(itertools.combinations(sorted(cli), 2)))
+        non_candicate_edges = list(set(non_candicate_edges))
+        # nx.is_chordal(quotient_g)
+        # cycles = nx.chordless_cycles(quotient_g)
+        candidate_edges = [edg for edg in list(qg.edges()) if edg not in non_candicate_edges]
+        entropies = np.array([qg[edg[0]][edg[1]]['entropy'] for edg in candidate_edges])
+        entropies[np.isnan(entropies)] = 0
+        rev_entropies = [1 - e if 1 > e else 0 for e in entropies]
+        if np.sum(rev_entropies) == 0:
+            for ent_id in range(len(rev_entropies)):
+                rev_entropies[ent_id] = 1 / len(rev_entropies)
+        picked_edge = random.choices(candidate_edges, weights=rev_entropies, k=1)
+        picked_edge = [picked_edge[0][0], picked_edge[0][1]]
+        if picked_edge in [list(edg) for edg in list(qg.edges())]:
+            qg = contract_one_edge(qg, picked_edge, inpt_handler, config, fragment_list)
+        else:
+            print(f"edge {picked_edge} not in graph")
+    # plot_graph(qg)
+    
+    return qg
+
+
+def chordal_contraction_networkit(quotient_g, fragment_list, inpt_handler, config):
+    # plot_graph(quotient_g)
+    qg = quotient_g.copy()
+    
+    while not networkit_is_chordal(qg):
+        cliques_larger_than_2 = [cli for cli in nx.find_cliques(qg) if len(cli) > 2]
         non_candicate_edges = []
         for cli in cliques_larger_than_2:
             non_candicate_edges += sorted(list(itertools.combinations(sorted(cli), 2)))
