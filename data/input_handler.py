@@ -41,8 +41,8 @@ class InputHandler:
 
     def bam2fragmentfile(self):
         # self.vcf_df = self.load_vcf(self.vcf_path)
-        if self.data_path == None:
-            self.data_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
+        
+        self.data_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
         # self.G, self.fragments = loadFragments(self.data_path, self.vcf_df, self.ploidy)
         return self.data_path
 
