@@ -37,14 +37,37 @@ def main():
     fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
     
+    
     # fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     # frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
 
+    
     plot_graph(frag_graph)
     print('Fragment Graph constructed.')
 
+
+
+
     quotient_g = QuotientGraph(frag_graph).construct(fragment_list, input_handler, config)
     plot_graph(quotient_g)
+
+    # quotient_g.nodes(data=True)
+    # quotient_g.edges(data=True)
+    # nx.write_weighted_edgelist(quotient_g, "example/test_frag_graph.weighted.edgelist")
+    # nx.write_gexf(quotient_g, "example/test.gexf")
+    # newqg = nx.read_gexf("example/test.gexf")
+
+    nodes_dict = dict(quotient_g.nodes(data=True))
+    edges_list = list(quotient_g.edges(data=True))
+    edges_dict = {str(item[0:2]): item[2] for item in edges_list}
+
+
+
+
+
+    # edges_w_data = list(quotient_g.edges(data=True))
+    # dict(quotient_g.edges(data=True))
+
     print('Quotient Graph constructed.')
     
     qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
