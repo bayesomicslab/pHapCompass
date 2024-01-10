@@ -1,4 +1,7 @@
 import argparse
+
+import networkx as nx
+
 from data.input_handler import InputHandler
 from data.configuration import Configuration
 from algorithm.haplotype_assembly import HaplotypeAssembly
@@ -62,6 +65,12 @@ def main():
     edges_dict = {str(item[0:2]): item[2] for item in edges_list}
 
 
+nodes = list(quotient_g.nodes())
+edges = list(quotient_g.edges())
+new_g = nx.Graph()
+new_g.add_nodes_from(nodes)
+new_g.add_edges_from(edges)
+graphnk, reverse_map = nx2nk(new_g)
 
 
 

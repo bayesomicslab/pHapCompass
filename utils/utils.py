@@ -242,13 +242,13 @@ def networkit_find_cycles(graph):
         if node not in visited:
             yield from dfs(graph, node, visited)
 
-
-def cycle_is_chordless(graph, cycle):
-    for i in range(len(cycle)):
-        for j in range(i+2, len(cycle) - (1 if i == 0 else 0)):
-            if graph.hasEdge(cycle[i], cycle[j]):
-                return False
-    return True
+#
+# def cycle_is_chordless(graph, cycle):
+#     for i in range(len(cycle)):
+#         for j in range(i+2, len(cycle) - (1 if i == 0 else 0)):
+#             if graph.hasEdge(cycle[i], cycle[j]):
+#                 return False
+#     return True
 
 
 def networkit_is_chordal(graph):

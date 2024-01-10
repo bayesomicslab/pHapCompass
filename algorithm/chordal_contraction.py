@@ -37,9 +37,9 @@ def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
     return qg
 
 
-def chordal_contraction_networkit(quotient_g, fragment_list, inpt_handler, config):
+def chordal_contraction_networkit(qg, fragment_list, inpt_handler, config):
     # plot_graph(quotient_g)
-    qg = quotient_g.copy()
+    # qg = quotient_g.copy()
     
     while not networkit_is_chordal(qg):
         cliques_larger_than_2 = [cli for cli in nx.find_cliques(qg) if len(cli) > 2]
