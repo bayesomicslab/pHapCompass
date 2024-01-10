@@ -1,7 +1,5 @@
 import argparse
-
 import networkx as nx
-
 from data.input_handler import InputHandler
 from data.configuration import Configuration
 from algorithm.haplotype_assembly import HaplotypeAssembly
@@ -11,6 +9,7 @@ from models.factor_graph import Factorgraph
 from algorithm.chordal_contraction import chordal_contraction
 from utils.utils import *
 from algorithm.inference import *
+
 
 def main():
     # Parse command-line arguments
@@ -40,15 +39,12 @@ def main():
     fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
     
-    
     # fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     # frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
 
     
     plot_graph(frag_graph)
     print('Fragment Graph constructed.')
-
-
 
 
     quotient_g = QuotientGraph(frag_graph).construct(fragment_list, input_handler, config)
@@ -65,14 +61,13 @@ def main():
     edges_dict = {str(item[0:2]): item[2] for item in edges_list}
 
 
-nodes = list(quotient_g.nodes())
-edges = list(quotient_g.edges())
-new_g = nx.Graph()
-new_g.add_nodes_from(nodes)
-new_g.add_edges_from(edges)
-graphnk, reverse_map = nx2nk(new_g)
-
-
+    # nodes = list(quotient_g.nodes())
+    # edges = list(quotient_g.edges())
+    # new_g = nx.Graph()
+    # new_g.add_nodes_from(nodes)
+    # new_g.add_edges_from(edges)
+    # graphnk, reverse_map = nx2nk(new_g)
+    #
 
     # edges_w_data = list(quotient_g.edges(data=True))
     # dict(quotient_g.edges(data=True))
