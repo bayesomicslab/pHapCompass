@@ -6,7 +6,7 @@ from algorithm.haplotype_assembly import HaplotypeAssembly
 from models.fragment_graph import FragmentGraph
 from models.quotient_graph import QuotientGraph
 from models.factor_graph import Factorgraph
-from algorithm.chordal_contraction import chordal_contraction
+from algorithm.chordal_contraction import chordal_contraction_networkit
 from utils.utils import *
 from algorithm.inference import *
 
@@ -89,7 +89,7 @@ def main():
 
     print('Quotient Graph constructed.')
     
-    qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
+    qg = chordal_contraction_networkit(quotient_g, fragment_list, input_handler, config)
     print('Chordal Graph constructed.')
     plot_graph(qg)
 
@@ -101,7 +101,7 @@ def main():
 
     max_phase, positions = query_paths_gibbs_max(fragment_list, qg, beliefs, n_samples=1000)
     h_df = creat_vcf(max_phase, positions, config)
-
+    print(h_df)
     # va_inference = VariableElimination(factor_graph)
     # result = va_inference.query(variables=['1-2'])
     
