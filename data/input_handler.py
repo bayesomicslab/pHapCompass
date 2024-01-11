@@ -20,8 +20,8 @@ class InputHandler:
         self.root_dir = args.root_dir
         self.output_path = args.output_path
         self.bam_path = args.bam_path if args.bam_path is not None else None
-        self.data_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
-        # self.data_path = args.data_path if args.data_path is not None else self.bam2fragmentfile()
+        # self.data_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
+        self.data_path = args.data_path if args.data_path is not None else self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
         # data_from_bam = self.bam2fragmentfile()
         # self.data_path = data_from_bam
         # self.data_path = args.data_path if args.data_path is not None else self.bam2fragmentfile()
