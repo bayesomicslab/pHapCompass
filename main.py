@@ -34,6 +34,7 @@ def main():
     input_handler = InputHandler(args)
 
     config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+    print(config.global_likelihoods[2])
     
     fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
     frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
