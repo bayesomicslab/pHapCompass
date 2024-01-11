@@ -168,10 +168,10 @@ int parse_bamfile_sorted(char* bamfile, HASHTABLE* ht, CHROMVARS* chromvars, VAR
 
 
     while (1) {
-	if (ref < 0) ret = samread(fp,b);  // read full bam file 
-	else ret = bam_iter_read(fp->x.bam,iter,b);  // specific region 
-	//fprintf(stderr,"here %d %d\n",ret,iter);
-	if (ret < 0) break;  
+        if (ref < 0) ret = samread(fp,b);  // read full bam file 
+        else ret = bam_iter_read(fp->x.bam,iter,b);  // specific region 
+        //fprintf(stderr,"here %d %d %d\n",ret,iter,ref);
+        if (ret < 0) break;  
         fetch_func(b, fp, read);
         if ((read->flag & (BAM_FUNMAP | BAM_FSECONDARY | BAM_FQCFAIL | BAM_FDUP)) || read->mquality < MIN_MQ || (USE_SUPP_ALIGNMENTS == 0 && (read->flag & 2048))) {
             free_readmemory(read);
@@ -180,9 +180,9 @@ int parse_bamfile_sorted(char* bamfile, HASHTABLE* ht, CHROMVARS* chromvars, VAR
         // find the chromosome in reflist that matches read->chrom if the previous chromosome is different from current chromosome
         if (read->tid != prevtid) {
             chrom = getindex(ht, read->chrom); // this will return -1 if the contig name is not  in the VCF file
-	    if (chrom < 0) fprintf(stderr,"chrom \"%s\" not in VCF file, skipping all reads for this chrom.... \n",read->chrom);
-	    else fprintf(stderr,"processing reads mapped to chrom \"%s\" \n",read->chrom);
-		// doing this for every read, can replace this by string comparison ..april 4 2012
+	        if (chrom < 0) fprintf(stderr,"chrom \"%s\" not in VCF file, skipping all reads for this chrom.... \n",read->chrom);
+            else fprintf(stderr,"processing reads mapped to chrom \"%s\" \n",read->chrom);
+            // doing this for every read, can replace this by string comparison ..april 4 2012
             i = read->tid;
             if (reflist->ns > 0) {
                 reflist->current = i;
@@ -198,13 +198,12 @@ int parse_bamfile_sorted(char* bamfile, HASHTABLE* ht, CHROMVARS* chromvars, VAR
             }
         } else chrom = prevchrom;
         //if (chrom_missing_index ==1) { prevtid = read->tid; free_readmemory(read); continue; }
-
         fragment.absIS = (read->IS < 0) ? -1 * read->IS : read->IS;
         // add check to see if the mate and its read are on same chromosome, bug for contigs, july 16 2012
         if ((read->flag & 8) || fragment.absIS > MAX_IS || fragment.absIS < MIN_IS || read->IS == 0 || !(read->flag & 1) || read->tid != read->mtid) // single read
         {
             fragment.variants = 0; // v1 =0; v2=0;
-	    if ( (read->flag & 16) ==16) fragment.strand = '-'; else fragment.strand = '+';
+	        if ( (read->flag & 16) ==16) fragment.strand = '-'; else fragment.strand = '+';
             if (chrom >= 0 && PEONLY == 0) {
 
                 fragment.id = read->readid;
@@ -218,6 +217,7 @@ int parse_bamfile_sorted(char* bamfile, HASHTABLE* ht, CHROMVARS* chromvars, VAR
 		else if (fragment.variants >=1) VOfragments[1]++;
                 if (fragment.variants >= 2 || (SINGLEREADS == 1 && fragment.variants >= 1)) print_fragment(&fragment, varlist, fragment_file);
             }
+            
         } else // paired-end read
         {
             fragment.variants = 0;
