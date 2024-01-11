@@ -12,6 +12,7 @@ class Configuration:
         self.epsilon = epsilon
         self.dynamic_config = {}
         self.global_phasings, self.global_likelihoods = self.initialization()
+        print(self.global_likelihoods)
 
     def set_algorithm_type(self, algorithm_type):
         self.algorithm_type = algorithm_type
