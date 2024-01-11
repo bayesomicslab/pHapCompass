@@ -16,7 +16,7 @@ class InputHandler:
         self.alleles = [int(a) for a in args.alleles] if args.alleles is not None else self.compute_alleles()
         self.genotype = self.parse_genotype()
         self.vcf_path = args.vcf_path
-        self.vcf_df = self.load_vcf(self.vcf_path)
+        # self.vcf_df = self.load_vcf(self.vcf_path)
         self.root_dir = args.root_dir
         self.output_path = args.output_path
         self.bam_path = args.bam_path if args.bam_path is not None else None
