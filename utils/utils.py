@@ -6,7 +6,7 @@ import os
 import subprocess
 import shutil
 import pandas as pd
-# import networkit as nk
+import networkit as nk
 
 
 def get_matching_reads_for_positions(pos, fragment_list):
@@ -217,31 +217,31 @@ def creat_vcf(max_phase, positions, config):
     return h_df
 
 
-def dfs(graph, start, visited=None, path=None):
-    if visited is None:
-        visited = set()
-    if path is None:
-        path = [start]
-    visited.add(start)
-    for neighbor in graph.iterNeighbors(start):
-        if neighbor in visited:
-            if neighbor == path[-2]:
-                # Skip the immediate parent node in path
-                continue
-            # Cycle found
-            cycle = path[path.index(neighbor):] + [neighbor]
-            yield cycle
-        else:
-            yield from dfs(graph, neighbor, visited, path + [neighbor])
-    visited.remove(start)
+# def dfs(graph, start, visited=None, path=None):
+#     if visited is None:
+#         visited = set()
+#     if path is None:
+#         path = [start]
+#     visited.add(start)
+#     for neighbor in graph.iterNeighbors(start):
+#         if neighbor in visited:
+#             if neighbor == path[-2]:
+#                 # Skip the immediate parent node in path
+#                 continue
+#             # Cycle found
+#             cycle = path[path.index(neighbor):] + [neighbor]
+#             yield cycle
+#         else:
+#             yield from dfs(graph, neighbor, visited, path + [neighbor])
+#     visited.remove(start)
 
 
-def networkit_find_cycles(graph):
-    visited = set()
-    for node in graph.iterNodes():
-        if node not in visited:
-            yield from dfs(graph, node, visited)
-
+# def networkit_find_cycles(graph):
+#     visited = set()
+#     for node in graph.iterNodes():
+#         if node not in visited:
+#             yield from dfs(graph, node, visited)
+#
 #
 # def cycle_is_chordless(graph, cycle):
 #     for i in range(len(cycle)):
@@ -252,8 +252,11 @@ def networkit_find_cycles(graph):
 
 
 def networkit_is_chordal(graph):
-    all_cycles = list(networkit_find_cycles(graph))
-    chordless_cycles = [cycle for cycle in all_cycles if cycle_is_chordless(graph, cycle)]
+    edges = list(graph.iterEdges())
+    # nodes = list(graph.iterNodes())
+    tempnx = nx.Graph()
+    tempnx.add_edges_from(edges)
+    chordless_cycles = [cyc for cyc in list(nx.chordless_cycles(tempnx)) if len(cyc) > 3]
     if len(chordless_cycles) > 0:
         return False
     else:
@@ -284,3 +287,92 @@ def networkit_find_cliques(graphnk):
     cliques = cliqueFinder.getCliques()
     return cliques
 
+# def cycle_is_chordless(graph, cycle):
+#     cycle_length = len(cycle)
+#     for i in range(cycle_length):
+#         for j in range(i + 2, cycle_length + (i > 0)):
+#             node1 = cycle[i]
+#             node2 = cycle[j % cycle_length]
+#             if graph.hasEdge(node1, node2):
+#                 return False
+#     return True
+
+# def is_hole(graph, cycle):
+#     cycle_length = len(cycle)
+#     if cycle_length < 4:
+#         return False  # A hole must have at least 4 nodes
+#     for i in range(cycle_length):
+#         for j in range(i + 2, cycle_length + (i > 0)):
+#             node1 = cycle[i]
+#             node2 = cycle[j % cycle_length]
+#             # Check if there's an edge between non-consecutive nodes
+#             if graph.hasEdge(node1, node2):
+#                 return False  # Not a hole if there's a chord
+#     return True
+#
+# def is_hole(graph, cycle):
+#     cycle_length = len(cycle)
+#     for i in range(cycle_length):
+#         for j in range(i + 2, cycle_length + (i > 0) - 2):
+#             # print(i, j)
+#             node1 = cycle[i]
+#             node2 = cycle[j % cycle_length]
+#             if not graph.hasEdge(node1, node2):
+#                 return True
+#     return False
+#
+# def simple_cycles(graph, start, visited=None, path=None, cycles=None):
+#     if visited is None:
+#         visited = set()
+#     if path is None:
+#         path = []
+#     if cycles is None:
+#         cycles = []
+#     visited.add(start)
+#     path.append(start)
+#     for neighbor in graph.iterNeighbors(start):
+#         if neighbor not in visited:
+#             simple_cycles(graph, neighbor, visited, path, cycles)
+#         elif len(path) > 2 and neighbor == path[-3]:
+#             # Found a cycle
+#             cycle = path[path.index(neighbor):]
+#             cycles.append(cycle)
+#     path.pop()
+#     if len(path) == 0:  # Reset visited set when unwinding back to start
+#         visited.clear()
+#     return cycles
+#
+#
+# def dfs(graph, node, start, visited, stack, cycles):
+#     visited[node] = True
+#     stack.append(node)
+#     for neighbor in graph.iterNeighbors(node):
+#         if neighbor == start and len(stack) > 2:
+#             # Found a cycle, adding to cycles list
+#             cycles.append(stack.copy())
+#         elif not visited[neighbor]:
+#             dfs(graph, neighbor, start, visited, stack, cycles)
+#     stack.pop()  # Remove current node from stack on backtrack
+#     visited[node] = False  # Mark node as unvisited on backtrack
+#
+# def find_simple_cycles(graph):
+#     cycles = []
+#     visited = [False] * graph.numberOfNodes()
+#     stack = []
+#     for node in graph.iterNodes():
+#         dfs(graph, node, node, visited, stack, cycles)
+#         visited[node] = True  # Ensure each cycle is only found once
+#     return cycles
+#
+def find_simple_cycles2(graph):
+    edges = list(graphnk.iterEdges())
+    nodes = list(graphnk.iterNodes())
+    tempnx = nx.Graph()
+    tempnx.add_edges_from(edges)
+    nx.chordless_cycles(tempnx)
+
+def nk2nx_simple(graphnk):
+    edges = list(graphnk.iterEdges())
+    tempnx = nx.Graph()
+    tempnx.add_edges_from(edges)
+    return tempnx

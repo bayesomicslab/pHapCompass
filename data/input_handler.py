@@ -1,4 +1,4 @@
-from cyvcf2 import VCF
+# from cyvcf2 import VCF
 import re
 import pandas as pd
 import subprocess
@@ -16,12 +16,12 @@ class InputHandler:
         self.alleles = [int(a) for a in args.alleles] if args.alleles is not None else self.compute_alleles()
         self.genotype = self.parse_genotype()
         self.vcf_path = args.vcf_path
-        self.vcf_df = self.load_vcf(self.vcf_path)
+        # self.vcf_df = self.load_vcf(self.vcf_path)
         self.root_dir = args.root_dir
         self.output_path = args.output_path
         self.bam_path = args.bam_path if args.bam_path is not None else None
-        self.data_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
-        # self.data_path = args.data_path if args.data_path is not None else self.bam2fragmentfile()
+        # self.data_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
+        self.data_path = args.data_path if args.data_path is not None else self.bam2fragmentfile()
         # data_from_bam = self.bam2fragmentfile()
         # self.data_path = data_from_bam
         # self.data_path = args.data_path if args.data_path is not None else self.bam2fragmentfile()
@@ -113,12 +113,12 @@ class InputHandler:
         print('out_filename:', out_filename)
         print('bam_filename:', bam_filename)
         print('vcf_filename:', vcf_filename)
+        #
+        # run_command = ['sh', os.path.join(root_dir, "extract_poly/build", 'test.sh')]
+        # print(' '.join(run_command))
+        # subprocess.run(run_command)
         
-        run_command = ['sh', os.path.join(root_dir, "extract_poly/build", 'test.sh')]
-        print(' '.join(run_command))
-        subprocess.run(run_command)
-        
-        subprocess.check_call(run_command)
+        # subprocess.check_call(run_command)
         # print("ls command on output:")
         # subprocess.run(['ls', os.path.join(root_dir, "extract_poly/build/")])
         # print('ls done')

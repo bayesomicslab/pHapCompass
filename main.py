@@ -38,27 +38,43 @@ def main():
     fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
     
+    
     # fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     # frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
 
-    
     plot_graph(frag_graph)
     print('Fragment Graph constructed.')
-
 
     quotient_g = QuotientGraph(frag_graph).construct(fragment_list, input_handler, config)
     plot_graph(quotient_g)
 
     # quotient_g.nodes(data=True)
     # quotient_g.edges(data=True)
-    # nx.write_weighted_edgelist(quotient_g, "example/test_frag_graph.weighted.edgelist")
-    # nx.write_gexf(quotient_g, "example/test.gexf")
-    # newqg = nx.read_gexf("example/test.gexf")
 
-    nodes_dict = dict(quotient_g.nodes(data=True))
-    edges_list = list(quotient_g.edges(data=True))
-    edges_dict = {str(item[0:2]): item[2] for item in edges_list}
-
+    #
+    #
+    # interpreter = '/home/FCAM/mhosseini/anaconda3/envs/t2t/bin/python3'
+    # import networkx as nx
+    # import networkit as nk
+    # nodes = ['1-2', '1-3', '2-3', '3-4', '4-5', '4-7', '5-6', '6-8', '7-8']
+    # edges = [('1-2', '1-3'), ('1-2', '2-3'), ('1-3', '2-3'), ('1-3', '3-4'), ('2-3', '3-4'), ('3-4', '4-5'), ('3-4', '4-7'), ('4-5', '4-7'), ('4-5', '5-6'), ('4-7', '7-8'), ('5-6', '6-8'), ('6-8', '7-8')]
+    # graphnx = nx.Graph()
+    # graphnx.add_nodes_from(nodes)
+    # graphnx.add_edges_from(edges)
+    #
+    # graphnk, reverse_map = nx2nk(graphnx)
+    # cliques = networkit_find_cliques(graphnk)
+    # cycles_g4 = [cyc for cyc in list(simple_cycles(graphnk, 0)) if len(cyc) > 4]
+    # cycles_g4_unique = [list(x) for x in set(tuple(x) for x in cycles_g4)]
+    #
+    # chordless_cycles = list(nx.chordless_cycles(tempnx))
+    #
+    #
+    #
+    #
+    # nodes_dict = dict(quotient_g.nodes(data=True))
+    # edges_list = list(quotient_g.edges(data=True))
+    # edges_dict = {str(item[0:2]): item[2] for item in edges_list}
 
     # nodes = list(quotient_g.nodes())
     # edges = list(quotient_g.edges())
