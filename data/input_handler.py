@@ -1,10 +1,11 @@
-from cyvcf2 import VCF
+# from cyvcf2 import VCF
 import re
 import pandas as pd
 import subprocess
 import os
 from utils.utils import wsl_available
 import shutil
+
 
 class InputHandler:
 

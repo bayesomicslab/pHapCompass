@@ -6,7 +6,7 @@ import os
 import subprocess
 import shutil
 import pandas as pd
-import networkit as nk
+# import networkit as nk
 
 
 def get_matching_reads_for_positions(pos, fragment_list):

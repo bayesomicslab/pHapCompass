@@ -61,6 +61,7 @@ class FragmentGraph:
             # add evidence for edge potentials
             for j in range(i):
                 str_genotypes = ''.join([str(gn) for gn in [genotypes[j], genotypes[i]]])
+                print(conf.global_likelihoods[n_positions])
                 out_comes = conf.global_likelihoods[n_positions][str_genotypes]
                 if not graph.has_edge(pos[j], pos[i]):
                     # phasings,weights = generate_phasings(ploidy)
