@@ -14,7 +14,7 @@ from algorithm.inference import *
 def main():
     # Parse command-line arguments
     parser = argparse.ArgumentParser(description="Haplotype Assembly and Phasing")
-    parser.add_argument("-d", "--data_path", type=str, required=False, help="Path to the input data")
+    parser.add_argument("-d", "--data_path", type=str, required=False, help="Path to the input data", default=None)
     parser.add_argument("-p", "--ploidy", type=int, required=True, help="Ploidy of the organism", default=3)
     parser.add_argument("-g", "--genotype_path", type=str, required=True, help="Path to the genotype data",
                         default='example/genotype.txt')
@@ -35,7 +35,7 @@ def main():
 
     config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
     
-    fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
+    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
     frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
     
     
@@ -93,7 +93,7 @@ def main():
     print('Chordal Graph constructed.')
     plot_graph(qg)
 
-    factor_graph = Factorgraph(args.ploidy, args.error_rate, args.epsilon).construct(qg, fragment_list)
+    factor_graph = Factorgraph(input_handler.ploidy, input_handler.error_rate, input_handler.epsilon).construct(qg, fragment_list)
 
     beliefs = factor_graph_inference(factor_graph)
 

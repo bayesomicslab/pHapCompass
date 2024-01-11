@@ -1,4 +1,4 @@
-# from cyvcf2 import VCF
+from cyvcf2 import VCF
 import re
 import pandas as pd
 import subprocess
@@ -16,12 +16,12 @@ class InputHandler:
         self.alleles = [int(a) for a in args.alleles] if args.alleles is not None else self.compute_alleles()
         self.genotype = self.parse_genotype()
         self.vcf_path = args.vcf_path
-        # self.vcf_df = self.load_vcf(self.vcf_path)
+        self.vcf_df = self.load_vcf(self.vcf_path)
         self.root_dir = args.root_dir
         self.output_path = args.output_path
         self.bam_path = args.bam_path if args.bam_path is not None else None
-        # self.data_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
-        self.data_path = args.data_path if args.data_path is not None else self.bam2fragmentfile()
+        self.data_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
+        # self.data_path = args.data_path if args.data_path is not None else self.bam2fragmentfile()
         # data_from_bam = self.bam2fragmentfile()
         # self.data_path = data_from_bam
         # self.data_path = args.data_path if args.data_path is not None else self.bam2fragmentfile()
@@ -101,6 +101,9 @@ class InputHandler:
         '''
         # TODO: call the C++ code to extract fragment file
         prefix=""
+
+        os.makedirs(output_dir, exist_ok=True)
+
         out_filename = os.path.join(output_dir, "bamfrags.txt")
         print('before')
         if wsl_available():
@@ -108,17 +111,23 @@ class InputHandler:
             print('before2')
             root_dir = subprocess.check_output(["wsl", "wslpath", "-a", root_dir]).strip().decode()
             out_filename = subprocess.check_output(["wsl", "wslpath", "-a", out_filename]).strip().decode()
+            command = [prefix, os.path.join("extract-poly-src/build/extractHAIRS"), "--bam", bam_filename,
+                   "--vcf", vcf_filename, "--out", out_filename]
+        else:
+            command = [os.path.join("extract-poly-src/build/extractHAIRS"), "--bam", bam_filename,
+                   "--vcf", vcf_filename, "--out", out_filename]
+            
         print('root_dir:', root_dir)
         print('prefix:', prefix)
         print('out_filename:', out_filename)
         print('bam_filename:', bam_filename)
         print('vcf_filename:', vcf_filename)
-        #
-        # run_command = ['sh', os.path.join(root_dir, "extract_poly/build", 'test.sh')]
-        # print(' '.join(run_command))
-        # subprocess.run(run_command)
         
-        # subprocess.check_call(run_command)
+        #run_command = ['sh', os.path.join(root_dir, 'extract_poly','build', 'test.sh')]
+        #print(' '.join(run_command))
+        #subprocess.run(run_command)
+        
+        #subprocess.check_call(run_command)
         # print("ls command on output:")
         # subprocess.run(['ls', os.path.join(root_dir, "extract_poly/build/")])
         # print('ls done')
@@ -137,8 +146,7 @@ class InputHandler:
         # print("mkdir on output:")
         # subprocess.run(['mkdir', os.path.join(root_dir, output_dir, 'test2')])
 
-        command = [prefix, os.path.join(root_dir, "extract_poly/build/extractHAIRS"), "--bam", bam_filename,
-                   "--vcf", vcf_filename, "--out", out_filename]
+        
         print("Executing command:", ' '.join(command))
         subprocess.check_call(command)
         # subprocess.run(['ls', '/home/FCAM/mhosseini/HaplOrbit/output/'])
@@ -154,7 +162,7 @@ class InputHandler:
         # subprocess.check_call(
         #         [prefix, root_dir+"/../extract-poly-src/build/extractHAIRS", "--bam", bam_filename, "--vcf",
         #         vcf_filename, "--out", out_filename])
-        os.makedirs(os.path.dirname(out_filename), exist_ok=True)
+        
 
         try:
             subprocess.check_call(command)
