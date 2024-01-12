@@ -93,7 +93,7 @@ def main():
     print('Chordal Graph constructed.')
     # plot_graph(qg)
 
-    factor_graph = Factorgraph(input_handler.ploidy, input_handler.error_rate, input_handler.epsilon).construct(qg, fragment_list)
+    factor_graph = Factorgraph(config.ploidy, config.error_rate, config.epsilon).construct(qg, fragment_list)
 
     beliefs = factor_graph_inference(factor_graph)
 
