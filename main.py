@@ -91,7 +91,7 @@ def main():
     
     qg = chordal_contraction_networkit(quotient_g, fragment_list, input_handler, config)
     print('Chordal Graph constructed.')
-    plot_graph(qg)
+    # plot_graph(qg)
 
     factor_graph = Factorgraph(input_handler.ploidy, input_handler.error_rate, input_handler.epsilon).construct(qg, fragment_list)
 
