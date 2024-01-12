@@ -42,11 +42,11 @@ def main():
     # fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     # frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
 
-    plot_graph(frag_graph)
+    # plot_graph(frag_graph)
     print('Fragment Graph constructed.')
 
     quotient_g = QuotientGraph(frag_graph).construct(fragment_list, input_handler, config)
-    plot_graph(quotient_g)
+    # plot_graph(quotient_g)
 
     # quotient_g.nodes(data=True)
     # quotient_g.edges(data=True)
