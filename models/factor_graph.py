@@ -17,7 +17,7 @@ class Factorgraph:
         
         factor_graph = FactorGraph()
         for node, attr in chordal_nodes:
-            # print(node[0])
+            print(node, attr)
             factor_graph.add_node(str(node))
             node_likelihoods = [val if val != 0 else self.epsilon for val in attr['weight'].values()]
             disf = DiscreteFactor(variables=[str(node)], cardinality=[len(node_likelihoods)], values=node_likelihoods)
