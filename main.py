@@ -89,11 +89,11 @@ def main():
 
     print('Quotient Graph constructed.')
     
-    qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
+    # qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
     print('Chordal Graph constructed.')
     # plot_graph(qg)
 
-    factor_graph = Factorgraph(config.ploidy, config.error_rate, config.epsilon).construct(qg, fragment_list)
+    factor_graph = Factorgraph(config.ploidy, config.error_rate, config.epsilon).construct(quotient_g, fragment_list)
 
     beliefs = factor_graph_inference(factor_graph)
 

@@ -1,4 +1,4 @@
-from pgmpy.inference import BeliefPropagation, VariableElimination
+from pgmpy.inference import VariableElimination, BeliefPropagation
 import random
 from pgmpy.sampling import GibbsSampling
 from pgmpy.models import MarkovNetwork

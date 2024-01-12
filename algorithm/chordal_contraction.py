@@ -95,9 +95,7 @@ def contract_one_edge(quotient_g, picked_edge, inpt_handler, config, fragment_li
     # new_graph.remove_edge(picked_edge[0], picked_edge[1])
     new_graph.remove_node(picked_edge[0])
     new_graph.remove_node(picked_edge[1])
-    
-    # plot_graph(new_graph)
-    
+
     new_node_name = '-'.join(str(n) for n in sorted(list(set([int(i) for i in picked_edge[0].split('-')] +
                                                              [int(i) for i in picked_edge[1].split('-')]))))
     
