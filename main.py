@@ -89,7 +89,7 @@ def main():
 
     print('Quotient Graph constructed.')
     
-    qg = chordal_contraction_networkit(quotient_g, fragment_list, input_handler, config)
+    qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
     print('Chordal Graph constructed.')
     # plot_graph(qg)
     qg = quotient_g.copy()
