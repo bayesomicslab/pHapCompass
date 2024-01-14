@@ -131,9 +131,9 @@ def contract_one_edge(quotient_g, picked_edge, inpt_handler, config, fragment_li
                 weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
                                                                                  list(range(len(indc))),
                                                                                  config.error_rate)
-                s10 = time.time()
-                print('                             ---> time for compute likelihood:', ed, s10 - s9)
-                s9 = s10
+                # s10 = time.time()
+                # print('                             ---> time for compute likelihood:', ed, s10 - s9)
+                # s9 = s10
                 
         entr = entropy(list(weights.values()), base=10)
         new_graph.add_edge(ed[0], ed[1], weight=weights, entropy=entr)
