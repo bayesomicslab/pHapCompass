@@ -50,17 +50,17 @@ def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
 def chordal_contraction_networkit(quotient_g, fragment_list, inpt_handler, config):
     # quotient_g is a networkx graph
     qg_nx = quotient_g.copy()
-    start0 = time.time()
+    # start0 = time.time()
     while not nx.is_chordal(qg_nx):
-        s1 = time.time()
-        print('not chordal ---> time for checking:', s1 - start0)
+        # s1 = time.time()
+        # print('not chordal ---> time for checking:', s1 - start0)
         qg, reverse_map = nx2nk(qg_nx)
-        s2 = time.time()
-        print('            ---> time for converting nx2nk:', s2 - s1)
+        # s2 = time.time()
+        # print('            ---> time for converting nx2nk:', s2 - s1)
         # qg is neworkit
         cliques_larger_than_2 = [cli for cli in networkit_find_cliques(qg) if len(cli) > 2]
-        s3 = time.time()
-        print('            ---> time for finding cliques:', s3 - s2)
+        # s3 = time.time()
+        # print('            ---> time for finding cliques:', s3 - s2)
         non_candicate_edges = []
         for cli in cliques_larger_than_2:
             non_candicate_edges += sorted(list(itertools.combinations(sorted(cli), 2)))
@@ -77,18 +77,17 @@ def chordal_contraction_networkit(quotient_g, fragment_list, inpt_handler, confi
             for ent_id in range(len(rev_entropies)):
                 rev_entropies[ent_id] = 1 / len(rev_entropies)
         picked_edge = random.choices(candidate_edges, weights=rev_entropies, k=1)
-
         picked_edge = [reverse_map[picked_edge[0][0]], reverse_map[picked_edge[0][1]]]
-        s4 = time.time()
-        print('            ---> time for pick a candidate edge:', s4 - s3)
+        # s4 = time.time()
+        # print('            ---> time for pick a candidate edge:', s4 - s3)
         qg_nx = contract_one_edge(qg_nx, picked_edge, inpt_handler, config, fragment_list)
-        s5 = time.time()
-        print('            ---> time for edge contraction:', s5 - s4)
+        # s5 = time.time()
+        # print('            ---> time for edge contraction:', s5 - s4)
     return qg_nx
 
 
 def contract_one_edge(quotient_g, picked_edge, inpt_handler, config, fragment_list):
-    s5 = time.time()
+    # s5 = time.time()
     new_graph = quotient_g.copy()
     node_neighbors = [nbr for nbr in list(quotient_g.adj[picked_edge[0]]) if nbr not in picked_edge] + \
                      [nbr for nbr in list(quotient_g.adj[picked_edge[1]]) if nbr not in picked_edge]
@@ -104,24 +103,24 @@ def contract_one_edge(quotient_g, picked_edge, inpt_handler, config, fragment_li
     new_graph.add_node(new_node_name, weight=removing_edge_attributes['weight'],
                        entropy=removing_edge_attributes['entropy'])
     adding_edges = [sorted([nod, new_node_name]) for nod in node_neighbors]
-    s6 = time.time()
-    print('                     ---> time removing 2 nodoes and adding 1 node:', s6 - s5)
-    print('                     ---> len of adding edges: ', len(adding_edges))
-    s7 = time.time()
+    # s6 = time.time()
+    # print('                     ---> time removing 2 nodoes and adding 1 node:', s6 - s5)
+    # print('                     ---> len of adding edges: ', len(adding_edges))
+    # s7 = time.time()
     for ed in adding_edges:
-        print('                         ---> starting adding edge:', ed)
+        # print('                         ---> starting adding edge:', ed)
     
         poss = sorted(list(set(ed[0].split('-') + ed[1].split('-'))))
         # poss_genotype = ''.join(['1' for i in poss])
         poss_genotype = inpt_handler.get_genotype_positions([int(p) for p in poss])
         all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=config.alleles)
-        s8 = time.time()
-
-        print('                         ---> time for generate_phasings for edge:', ed, s8-s7)
+        
+        # s8 = time.time()
+        # print('                         ---> time for generate_phasings for edge:', ed, s8-s7)
         
         matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_list)
-        s9 = time.time()
-        print('                         ---> time for get matching for edge:', ed, s9-s8)
+        # s9 = time.time()
+        # print('                         ---> time for get matching for edge:', ed, s9-s8)
         weights = {phas_2_str(phas): 0 for phas in all_phasings}
         for phas in all_phasings:
             for indc, this_po, obs in matches:
@@ -137,9 +136,9 @@ def contract_one_edge(quotient_g, picked_edge, inpt_handler, config, fragment_li
                 
         entr = entropy(list(weights.values()), base=10)
         new_graph.add_edge(ed[0], ed[1], weight=weights, entropy=entr)
-        s11 = time.time()
-        print('                         ---> finised adding edge:', ed, s11-s7)
-        s7 = s11
+        # s11 = time.time()
+        # print('                         ---> finised adding edge:', ed, s11-s7)
+        # s7 = s11
     return new_graph
 
 
