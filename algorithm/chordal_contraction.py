@@ -88,9 +88,11 @@ def chordal_contraction_networkit(quotient_g, fragment_list, inpt_handler, confi
 
 
 def contract_one_edge(quotient_g, picked_edge, inpt_handler, config, fragment_list):
+    s5 = time.time()
     new_graph = quotient_g.copy()
     node_neighbors = [nbr for nbr in list(quotient_g.adj[picked_edge[0]]) if nbr not in picked_edge] + \
                      [nbr for nbr in list(quotient_g.adj[picked_edge[1]]) if nbr not in picked_edge]
+    
     removing_edge_attributes = quotient_g[picked_edge[0]][picked_edge[1]]
     # new_graph.remove_edge(picked_edge[0], picked_edge[1])
     new_graph.remove_node(picked_edge[0])
@@ -101,14 +103,25 @@ def contract_one_edge(quotient_g, picked_edge, inpt_handler, config, fragment_li
     
     new_graph.add_node(new_node_name, weight=removing_edge_attributes['weight'],
                        entropy=removing_edge_attributes['entropy'])
-    
     adding_edges = [sorted([nod, new_node_name]) for nod in node_neighbors]
+    s6 = time.time()
+    print('                     ---> time removing 2 nodoes and adding 1 node:', s6 - s5)
+    print('                     ---> len of adding edges: ', len(adding_edges))
+    s7 = time.time()
     for ed in adding_edges:
+        print('                         ---> starting adding edge:', ed)
+    
         poss = sorted(list(set(ed[0].split('-') + ed[1].split('-'))))
         # poss_genotype = ''.join(['1' for i in poss])
         poss_genotype = inpt_handler.get_genotype_positions([int(p) for p in poss])
         all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=config.alleles)
+        s8 = time.time()
+
+        print('                         ---> time for generate_phasings for edge:', ed, s8-s7)
+        
         matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_list)
+        s9 = time.time()
+        print('                         ---> time for get matching for edge:', ed, s9-s8)
         weights = {phas_2_str(phas): 0 for phas in all_phasings}
         for phas in all_phasings:
             for indc, this_po, obs in matches:
@@ -118,9 +131,15 @@ def contract_one_edge(quotient_g, picked_edge, inpt_handler, config, fragment_li
                 weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
                                                                                  list(range(len(indc))),
                                                                                  config.error_rate)
+                s10 = time.time()
+                print('                             ---> time for compute likelihood:', ed, s10 - s9)
+                s9 = s10
+                
         entr = entropy(list(weights.values()), base=10)
         new_graph.add_edge(ed[0], ed[1], weight=weights, entropy=entr)
-    
+        s11 = time.time()
+        print('                         ---> finised adding edge:', ed, s11-s7)
+        s7 = s11
     return new_graph
 
 
