@@ -251,13 +251,14 @@ def find_matchings(nodes_part1, nodes_part2):
     
     return matchings
 
+@profile
 def generate_phasings_ploidy_long(ploidy, genotype, allel_set=[0, 1]):
     tree = create_pruned_quadtree_ploidy_long(ploidy, genotype, allel_set=allel_set)
     max_length_paths = get_max_length_paths_ploidy_long(tree, ploidy, genotype, allel_set=allel_set)
     phasing_np_list = counts_to_phasing_ploidy_long(max_length_paths, genotype, allel_set=allel_set)
     return phasing_np_list
 
-
+@profile
 def create_pruned_quadtree_ploidy_long(max_depth, genotype, allel_set=[0, 1]):
     allels = [str(a) for a in allel_set]
     root = QuadNode("root")
@@ -337,7 +338,7 @@ def create_pruned_quadtree_ploidy_long(max_depth, genotype, allel_set=[0, 1]):
     
     return root
 
-
+@profile
 def get_max_length_paths_ploidy_long(root, max_depth, genotype, allel_set=[0, 1]):
     # label_to_index = {"00": 0, "01": 1, "10": 2, "11": 3}
     allels = [str(a) for a in allel_set]
@@ -362,7 +363,7 @@ def get_max_length_paths_ploidy_long(root, max_depth, genotype, allel_set=[0, 1]
     
     return max_length_paths
 
-
+@profile
 def counts_to_phasing_ploidy_long(max_length_paths, genotype, allel_set=[0, 1]):
     allels = [str(a) for a in allel_set]
     allels_product = [''.join(ll) for ll in list(itertools.product(allels, repeat=len(genotype)))]
