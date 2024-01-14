@@ -46,7 +46,7 @@ def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
     
     return qg
 
-
+@profile
 def chordal_contraction_networkit(quotient_g, fragment_list, inpt_handler, config):
     # quotient_g is a networkx graph
     qg_nx = quotient_g.copy()
