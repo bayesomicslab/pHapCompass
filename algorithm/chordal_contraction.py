@@ -8,7 +8,6 @@ import networkx as nx
 import time
 
 
-
 def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
     # plot_graph(quotient_g)
     qg = quotient_g.copy()
@@ -46,7 +45,7 @@ def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
     
     return qg
 
-# @profile
+@profile
 def chordal_contraction_networkit(quotient_g, fragment_list, inpt_handler, config):
     # quotient_g is a networkx graph
     qg_nx = quotient_g.copy()
@@ -85,7 +84,7 @@ def chordal_contraction_networkit(quotient_g, fragment_list, inpt_handler, confi
         # print('            ---> time for edge contraction:', s5 - s4)
     return qg_nx
 
-# @profile
+@profile
 def contract_one_edge(quotient_g, picked_edge, inpt_handler, config, fragment_list):
     # s5 = time.time()
     new_graph = quotient_g.copy()
