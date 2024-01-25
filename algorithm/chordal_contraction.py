@@ -14,10 +14,10 @@ def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
     start0 = time.time()
     while not nx.is_chordal(qg):
         s1 = time.time()
-        print('not chordal ---> time for checking:', s1 - start0)
+        # print('not chordal ---> time for checking:', s1 - start0)
         cliques_larger_than_2 = [cli for cli in nx.find_cliques(qg) if len(cli) > 2]
         s3 = time.time()
-        print('            ---> time for finding cliques:', s3 - s1)
+        # print('            ---> time for finding cliques:', s3 - s1)
         non_candicate_edges = []
         for cli in cliques_larger_than_2:
             non_candicate_edges += sorted(list(itertools.combinations(sorted(cli), 2)))
@@ -34,18 +34,18 @@ def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
         picked_edge = random.choices(candidate_edges, weights=rev_entropies, k=1)
         picked_edge = [picked_edge[0][0], picked_edge[0][1]]
         s4 = time.time()
-        print('            ---> time for pick a candidate edge:', s4 - s3)
+        # print('            ---> time for pick a candidate edge:', s4 - s3)
         if picked_edge in [list(edg) for edg in list(qg.edges())]:
             qg = contract_one_edge(qg, picked_edge, inpt_handler, config, fragment_list)
         else:
             print(f"edge {picked_edge} not in graph")
         s5 = time.time()
-        print('            ---> time for edge contraction:', s5 - s4)
+        # print('            ---> time for edge contraction:', s5 - s4)
     # plot_graph(qg)
     
     return qg
 
-@profile
+# @profile
 def chordal_contraction_networkit(quotient_g, fragment_list, inpt_handler, config):
     # quotient_g is a networkx graph
     qg_nx = quotient_g.copy()
@@ -84,7 +84,7 @@ def chordal_contraction_networkit(quotient_g, fragment_list, inpt_handler, confi
         # print('            ---> time for edge contraction:', s5 - s4)
     return qg_nx
 
-@profile
+# @profile
 def contract_one_edge(quotient_g, picked_edge, inpt_handler, config, fragment_list):
     # s5 = time.time()
     new_graph = quotient_g.copy()

@@ -77,7 +77,7 @@ def query_paths_gibbs_max(fragment_list, qg, beliefs, n_samples):
 
     max_phase = [num for num, count in counts.items() if count == max_count][0]
     
-    obs_positions = [elem.split('-') for elem in list(samples.columns.values)]
+    obs_positions = [elem.split('-') for elem in list(samples.columns.values) if 'path' not in elem]
     positions = [item for sublist in obs_positions for item in sublist]
     positions = sorted(set([int(pos) for pos in positions]))
 

@@ -38,7 +38,6 @@ def main():
     fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
     frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
     
-    
     # fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     # frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
 
@@ -92,7 +91,7 @@ def main():
     qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
     print('Chordal Graph constructed.')
     # plot_graph(qg)
-    qg = quotient_g.copy()
+    # qg = quotient_g.copy()
     factor_graph = Factorgraph(config.ploidy, config.error_rate, config.epsilon).construct(qg, fragment_list)
 
     beliefs = factor_graph_inference(factor_graph)
@@ -102,6 +101,7 @@ def main():
     max_phase, positions = query_paths_gibbs_max(fragment_list, qg, beliefs, n_samples=1000)
     h_df = creat_vcf(max_phase, positions, config)
     print(h_df)
+    
     # va_inference = VariableElimination(factor_graph)
     # result = va_inference.query(variables=['1-2'])
     
