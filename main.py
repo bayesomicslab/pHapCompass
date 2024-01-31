@@ -46,7 +46,8 @@ def main():
 
     quotient_g = QuotientGraph(frag_graph).construct(fragment_list, input_handler, config)
     # plot_graph(quotient_g)
-
+    for edge in quotient_g.edges(data=True):
+        print(edge)
     # quotient_g.nodes(data=True)
     # quotient_g.edges(data=True)
 
@@ -56,7 +57,8 @@ def main():
     # import networkx as nx
     # import networkit as nk
     # nodes = ['1-2', '1-3', '2-3', '3-4', '4-5', '4-7', '5-6', '6-8', '7-8']
-    # edges = [('1-2', '1-3'), ('1-2', '2-3'), ('1-3', '2-3'), ('1-3', '3-4'), ('2-3', '3-4'), ('3-4', '4-5'), ('3-4', '4-7'), ('4-5', '4-7'), ('4-5', '5-6'), ('4-7', '7-8'), ('5-6', '6-8'), ('6-8', '7-8')]
+    # edges = [('1-2', '1-3'), ('1-2', '2-3'), ('1-3', '2-3'), ('1-3', '3-4'), ('2-3', '3-4'), ('3-4', '4-5'),
+    # ('3-4', '4-7'), ('4-5', '4-7'), ('4-5', '5-6'), ('4-7', '7-8'), ('5-6', '6-8'), ('6-8', '7-8')]
     # graphnx = nx.Graph()
     # graphnx.add_nodes_from(nodes)
     # graphnx.add_edges_from(edges)
@@ -67,8 +69,6 @@ def main():
     # cycles_g4_unique = [list(x) for x in set(tuple(x) for x in cycles_g4)]
     #
     # chordless_cycles = list(nx.chordless_cycles(tempnx))
-    #
-    #
     #
     #
     # nodes_dict = dict(quotient_g.nodes(data=True))
