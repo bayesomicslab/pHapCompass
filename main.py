@@ -124,7 +124,6 @@ def main():
     # va_inference = VariableElimination(factor_graph)
     # result = va_inference.query(variables=['1-2'])
     
-    
 
 if __name__ == "__main__":
     main()
