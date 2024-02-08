@@ -51,6 +51,26 @@ def main():
     # quotient_g.nodes(data=True)
     # quotient_g.edges(data=True)
 
+
+    G = nx.Graph()
+    entropies = np.random.uniform(0, 1, size=12)
+    G.add_weighted_edges_from([(1, 2, entropies[0]), (1, 5, entropies[1]), (2, 3, entropies[2]),
+                      (2, 6, entropies[3]), (3, 7, entropies[4]), (3, 4, entropies[5]),
+                      (4, 5, entropies[6]), (4, 8, entropies[7]), (5, 9, entropies[8]),
+                      (6, 7, entropies[9]), (7, 8, entropies[10]), (8, 9, entropies[11])])
+    plot_graph(G)
+    cycle_basic = nx.cycle_basis(G)
+    min_cycle_basic = nx.minimum_cycle_basis(G)
+    simple_min_cycle_basic = nx.simple_cycles(G)
+    for cb in cycle_basic:
+        if len(cb) > 3:
+            nx.is_chordal(cb)
+    
+    for sc in simple_min_cycle_basic:
+        print(sc)
+    
+    
+
     #
     #
     # interpreter = '/home/FCAM/mhosseini/anaconda3/envs/t2t/bin/python3'
@@ -81,8 +101,7 @@ def main():
     # new_g.add_nodes_from(nodes)
     # new_g.add_edges_from(edges)
     # graphnk, reverse_map = nx2nk(new_g)
-    #
-
+    
     # edges_w_data = list(quotient_g.edges(data=True))
     # dict(quotient_g.edges(data=True))
 
@@ -104,6 +123,7 @@ def main():
     
     # va_inference = VariableElimination(factor_graph)
     # result = va_inference.query(variables=['1-2'])
+    
     
 
 if __name__ == "__main__":
