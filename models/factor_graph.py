@@ -10,11 +10,13 @@ class Factorgraph:
         self.ploidy = ploidy
         self.error_rate = error_rate
         self.epsilon = epsilon
-       
+    
+    def check_model(self):
+        return True
+    
     def construct(self, chordal_g, fragment_list):
         chordal_nodes = chordal_g.nodes(data=True)
         chordal_edges = chordal_g.edges(data=True)
-        
         factor_graph = FactorGraph()
         for node, attr in chordal_nodes:
             print(node, attr)
@@ -23,7 +25,6 @@ class Factorgraph:
             disf = DiscreteFactor(variables=[str(node)], cardinality=[len(node_likelihoods)], values=node_likelihoods)
             factor_graph.add_factors(disf)
             factor_graph.add_edges_from([(str(node), disf)])
-        
         for u, v, attr in chordal_edges:
             # shared_sites = sorted([i for i in u.split('-') if i in v.split('-')])
             # shares = [(u.split('-').index(sha), v.split('-').index(sha), sha) for sha in shared_sites]
@@ -54,7 +55,8 @@ class Factorgraph:
             
             edge_likelihoods = [val if val != 0 else self.epsilon for val in edge_weights]
             edge_potential = DiscreteFactor(variables=[u, v],
-                                            cardinality=[len(chordal_nodes[u]['weight']), len(chordal_nodes[v]['weight'])],
+                                            cardinality=[len(chordal_nodes[u]['weight']),
+                                                         len(chordal_nodes[v]['weight'])],
                                             values=edge_likelihoods)
             # Add edge potentials to graph
             factor_graph.add_factors(edge_potential)
@@ -67,12 +69,9 @@ class Factorgraph:
             # print('=================================')
             for variable in factor.scope():
                 assert (variable, factor) in factor_graph.edges(), f"Missing edge for {factor} and {variable}"
-        
         print('All edges are included.')
-        
         for edge in factor_graph.edges():
             if isinstance(edge[1], DiscreteFactor):
                 assert edge[1] in factor_graph.factors, f"Missing factor for edge {edge}"
         print('All factors are included.')
-        
         return factor_graph

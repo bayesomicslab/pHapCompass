@@ -6,9 +6,13 @@ from algorithm.haplotype_assembly import HaplotypeAssembly
 from models.fragment_graph import FragmentGraph
 from models.quotient_graph import QuotientGraph
 from models.factor_graph import Factorgraph
-from algorithm.chordal_contraction import chordal_contraction_networkit, chordal_contraction
+from algorithm.chordal_contraction import chordal_contraction_cycle_base, chordal_contraction
 from utils.utils import *
 from algorithm.inference import *
+
+
+def test():
+    inp = 1
 
 
 def main():
@@ -41,38 +45,45 @@ def main():
     # fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     # frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
 
-    # plot_graph(frag_graph)
+    plot_graph(frag_graph)
     print('Fragment Graph constructed.')
 
     quotient_g = QuotientGraph(frag_graph).construct(fragment_list, input_handler, config)
-    # plot_graph(quotient_g)
-    for edge in quotient_g.edges(data=True):
-        print(edge)
+    plot_graph(quotient_g)
+    print('Quotient Graph constructed.')
+
+    # qg = chordal_contraction_cycle_base(quotient_g, fragment_list, input_handler, config)
+    qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
+    plot_graph(qg)
+    
+    print('Chordal Graph constructed.')
+    
+    plot_graph(qg)
+    
+    # for edge in quotient_g.edges(data=True):
+    #     print(edge)
     # quotient_g.nodes(data=True)
-    # quotient_g.edges(data=True)
-
-
-    G = nx.Graph()
-    entropies = np.random.uniform(0, 1, size=12)
-    G.add_weighted_edges_from([(1, 2, entropies[0]), (1, 5, entropies[1]), (2, 3, entropies[2]),
-                      (2, 6, entropies[3]), (3, 7, entropies[4]), (3, 4, entropies[5]),
-                      (4, 5, entropies[6]), (4, 8, entropies[7]), (5, 9, entropies[8]),
-                      (6, 7, entropies[9]), (7, 8, entropies[10]), (8, 9, entropies[11])])
-    plot_graph(G)
-    cycle_basic = nx.cycle_basis(G)
-    min_cycle_basic = nx.minimum_cycle_basis(G)
-    simple_min_cycle_basic = nx.simple_cycles(G)
-    for cb in cycle_basic:
-        if len(cb) > 3:
-            nx.is_chordal(cb)
-    
-    for sc in simple_min_cycle_basic:
-        print(sc)
-    
-    
-
     #
+    # G = nx.Graph()
     #
+    # entropies = np.random.uniform(0, 1, size=14)
+    # G.add_weighted_edges_from([('1', '2', {'original_order': ('1', '2'), 'endtropy': entropies[0]}),
+    #                            ('1', '5', {'original_order': ('1', '5'), 'endtropy': entropies[1]}),
+    #                            ('2', '3', {'original_order': ('2', '3'), 'endtropy': entropies[2]}),
+    #                            ('2', '6', {'original_order': ('2', '6'), 'endtropy': entropies[3]}),
+    #                            ('3', '7', {'original_order': ('3', '7'), 'endtropy': entropies[4]}),
+    #                            ('3', '4', {'original_order': ('3', '4'), 'endtropy': entropies[5]}),
+    #                            ('4', '5', {'original_order': ('4', '5'), 'endtropy': entropies[6]}),
+    #                            ('4', '8', {'original_order': ('4', '8'), 'endtropy': entropies[7]}),
+    #                            ('5', '9', {'original_order': ('5', '9'), 'endtropy': entropies[8]}),
+    #                            ('6', '7', {'original_order': ('6', '7'), 'endtropy': entropies[9]}),
+    #                            ('7', '8', {'original_order': ('7', '8'), 'endtropy': entropies[10]}),
+    #                            ('8', '9', {'original_order': ('8', '9'), 'endtropy': entropies[11]}),
+    #                            ('5', '10', {'original_order': ('5', '10'), 'endtropy': entropies[12]}),
+    #                            ('9', '10', {'original_order': ('9', '10'), 'endtropy': entropies[13]})])
+    # plot_graph(G)
+    # G.edges()
+
     # interpreter = '/home/FCAM/mhosseini/anaconda3/envs/t2t/bin/python3'
     # import networkx as nx
     # import networkit as nk
@@ -104,26 +115,29 @@ def main():
     
     # edges_w_data = list(quotient_g.edges(data=True))
     # dict(quotient_g.edges(data=True))
-
-    print('Quotient Graph constructed.')
     
-    qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
-    print('Chordal Graph constructed.')
     # plot_graph(qg)
     # qg = quotient_g.copy()
+    
     factor_graph = Factorgraph(config.ploidy, config.error_rate, config.epsilon).construct(qg, fragment_list)
+
+    # factor_graph.construct(qg, fragment_list)
+    #
+    # # factor_graph.construct(qg, fragment_list)
 
     beliefs = factor_graph_inference(factor_graph)
 
-    marginals, max_phasings = give_marginals(factor_graph, qg, beliefs)
+    # beliefs = BeliefPropagation(factor_graph)
 
-    max_phase, positions = query_paths_gibbs_max(fragment_list, qg, beliefs, n_samples=1000)
-    h_df = creat_vcf(max_phase, positions, config)
-    print(h_df)
+    # marginals, max_phasings = give_marginals(factor_graph, qg, beliefs)
+    #
+    # max_phase, positions = query_paths_gibbs_max(fragment_list, qg, beliefs, n_samples=1000)
+    # h_df = creat_vcf(max_phase, positions, config)
+    # print(h_df)
     
     # va_inference = VariableElimination(factor_graph)
     # result = va_inference.query(variables=['1-2'])
-    
+
 
 if __name__ == "__main__":
     main()

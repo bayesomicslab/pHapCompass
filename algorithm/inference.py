@@ -5,7 +5,7 @@ from pgmpy.models import MarkovNetwork
 from pgmpy.factors.discrete import DiscreteFactor
 from collections import Counter
 from utils.utils import *
-
+from pgmpy.models import FactorGraph
 
 def factor_graph_inference(factor_graph):
     beliefs = BeliefPropagation(factor_graph)
@@ -39,6 +39,7 @@ def path_sample_gibbs(path_graph, n_samples, qg):
     for col in sample.columns.values:
         sample_df_phases[col] = sample[col].apply(lambda x: list(qg.nodes[col]['weight'].keys())[x])
     return sample_df_phases
+
 
 def sample_gibbs(source, target, beliefs, qg, n_samples):
     paths = list(nx.all_shortest_paths(qg, source, target))
@@ -113,3 +114,34 @@ def get_first_last_positions(fragment_list, qg):
                 max_node = node
                 break
     return min_node, max_node, poss
+
+
+from pgmpy.models import FactorGraph
+from pgmpy.factors.discrete import DiscreteFactor
+from pgmpy.inference import BeliefPropagation
+
+# Create a factor graph
+factor_graph = FactorGraph()
+
+# Add variables (nodes)
+factor_graph.add_nodes_from(['A', 'B', 'C'])
+
+# Define single-variable factors (node potentials)
+factor_a = DiscreteFactor(['A'], cardinality=[2], values=[0.6, 0.4])
+factor_b = DiscreteFactor(['B'], cardinality=[2], values=[0.7, 0.3])
+factor_c = DiscreteFactor(['C'], cardinality=[2], values=[0.8, 0.2])
+
+# Add single-variable factors (edges to singleton factors)
+factor_graph.add_factors(factor_a, factor_b, factor_c)
+factor_graph.add_edges_from([('A', factor_a), ('B', factor_b), ('C', factor_c)])
+
+# Define multi-variable factors (edge potentials)
+factor_ab = DiscreteFactor(['A', 'B'], cardinality=[2, 2], values=[0.9, 0.1, 0.2, 0.8])
+factor_bc = DiscreteFactor(['B', 'C'], cardinality=[2, 2], values=[0.3, 0.7, 0.4, 0.6])
+
+# Add multi-variable factors (edges to pairwise factors)
+factor_graph.add_factors(factor_ab, factor_bc)
+factor_graph.add_edges_from([('A', factor_ab), ('B', factor_ab), ('B', factor_bc), ('C', factor_bc)])
+
+# Initialize Belief Propagation
+bp = BeliefPropagation(factor_graph)

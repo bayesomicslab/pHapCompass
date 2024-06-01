@@ -5,7 +5,7 @@ import subprocess
 import os
 from utils.utils import wsl_available
 import shutil
-
+import gzip
 
 class InputHandler:
 
@@ -147,7 +147,6 @@ class InputHandler:
         # print("mkdir on output:")
         # subprocess.run(['mkdir', os.path.join(root_dir, output_dir, 'test2')])
 
-        
         print("Executing command:", ' '.join(command))
         subprocess.check_call(command)
         # subprocess.run(['ls', '/home/FCAM/mhosseini/HaplOrbit/output/'])
@@ -155,15 +154,12 @@ class InputHandler:
         # subprocess.run(['mkdir', os.path.join(output_dir, 'test2')])
 
         # print("Executing command:", ' '.join(command))
-        
-
         # subprocess.check_call(
         #     [prefix, root_dir + "/extract-poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
         #      "--out", out_filename])
         # subprocess.check_call(
         #         [prefix, root_dir+"/../extract-poly-src/build/extractHAIRS", "--bam", bam_filename, "--vcf",
         #         vcf_filename, "--out", out_filename])
-        
 
         try:
             subprocess.check_call(command)
@@ -179,4 +175,20 @@ class InputHandler:
             out_filename = subprocess.check_output(["wsl", "wslpath", "-a", "-w", out_filename]).strip().decode()
     
         return out_filename
+
+
+    def read_vcf_file(self):
+        def get_vcf_names(vcf_path):
+            with gzip.open(vcf_path, "rt") as ifile:
+                  for line in ifile:
+                    if line.startswith("#CHROM"):
+                          vcf_names = [x for x in line.split('\n')[0].split('\t')]
+                          break
+            ifile.close()
+            return vcf_names
+
+        names = get_vcf_names(self.vcf_path)
+        df = pd.read_csv(self.vcf_path, compression='gzip', comment='#', chunksize=10000, delim_whitespace=True,
+                         header=None, names=names)
+        return df
 
