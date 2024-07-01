@@ -376,3 +376,5 @@ def nk2nx_simple(graphnk):
     tempnx = nx.Graph()
     tempnx.add_edges_from(edges)
     return tempnx
+
+
