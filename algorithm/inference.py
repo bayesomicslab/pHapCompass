@@ -12,6 +12,10 @@ def factor_graph_inference(factor_graph):
     beliefs = BeliefPropagation(factor_graph)
     return beliefs
 
+def var_elim(factor_graph):
+    ve = VariableElimination(factor_graph)
+    return ve
+
 
 def path_2_markov_network(spath, beliefs):
     path_graph = MarkovNetwork()

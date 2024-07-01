@@ -124,6 +124,13 @@ def main():
     
 
     beliefs = factor_graph_inference(factor_graph)
+    # print("")
+
+    # ve_map = var_elim(factor_graph)
+    # print("Variable Elimination----------------------------------------------")
+    # print("Max Prob Phasing: {} | Marginal: {}".format(ve_map.map_query(), ve_map.max_marginal()))
+
+    # print("")
 
     variables = [node for node in factor_graph.nodes() if not isinstance(node, DiscreteFactor)]
 
@@ -149,6 +156,7 @@ def main():
     result12 = beliefs.query(variables=[list(variables)[0]])
     print(result12)
     # marginals, max_phasings = give_marginals(factor_graph, qg, beliefs)
+
     #
     # max_phase, positions = query_paths_gibbs_max(fragment_list, qg, beliefs, n_samples=1000)
     # h_df = creat_vcf(max_phase, positions, config)
