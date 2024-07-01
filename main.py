@@ -121,14 +121,33 @@ def main():
     
     factor_graph = Factorgraph(config.ploidy, config.error_rate, config.epsilon).construct(qg, fragment_list)
 
-    # factor_graph.construct(qg, fragment_list)
-    #
-    # # factor_graph.construct(qg, fragment_list)
+    
 
     beliefs = factor_graph_inference(factor_graph)
 
+    variables = [node for node in factor_graph.nodes() if not isinstance(node, DiscreteFactor)]
+
+    # Step 3: Perform inference
+    for var in variables:
+        print(f"Belief for {var}:")
+        result = beliefs.query(variables=list(var))
+        for state_index, prob in enumerate(result.values):
+            print(f"Value {result.variables} = {state_index}: {prob}")
+
+
+    for var in variables:
+        print(f"Belief for {var}:")
+        print(result[var])
+
+    print(result)
+    for var in variables:
+        print(f"Belief for {var}:")
+        print(f"Values: {result[var].values}")
+        print(f"Variables: {result[var].variables}")
     # beliefs = BeliefPropagation(factor_graph)
 
+    result12 = beliefs.query(variables=[list(variables)[0]])
+    print(result12)
     # marginals, max_phasings = give_marginals(factor_graph, qg, beliefs)
     #
     # max_phase, positions = query_paths_gibbs_max(fragment_list, qg, beliefs, n_samples=1000)
@@ -137,7 +156,112 @@ def main():
     
     # va_inference = VariableElimination(factor_graph)
     # result = va_inference.query(variables=['1-2'])
+    
+    from hmmlearn import hmm
+    
+    # Define states and observations
+    states = ["Rainy", "Sunny"]
+    observations = ["Walk", "Shop", "Clean"]
+    n_states = len(states)
+    n_observations = len(observations)
+    
+    # Example emission probabilities
+    # The rows correspond to states, and the columns correspond to observations
+    emission_probabilities = np.array([
+        [0.1, 0.4, 0.5],  # Emission probabilities for "Rainy"
+        [0.6, 0.3, 0.1]   # Emission probabilities for "Sunny"
+    ])
+    
+    # Generate a random sequence of observations (for example purposes)
+    # Normally, you would use your actual observation sequence data
+    np.random.seed(42)
+    sequence_length = 100
+    X = np.random.choice(n_observations, sequence_length).reshape(-1, 1)
+    
+    # Initialize the HMM
+    model = hmm.MultinomialHMM(n_components=n_states, n_iter=100, random_state=42)
+    
+    # Set the emission probabilities
+    model.emissionprob_ = emission_probabilities
+    
+    # Fit the model to the observation sequence
+    model.fit(X)
+    
+    # Extract transition probabilities
+    transition_probabilities = model.transmat_
 
+    import torch
+    from torch import nn
+    import torch_treecrf
 
-if __name__ == "__main__":
-    main()
+    # Define the number of states and possible observations
+    num_states = 3  # Number of hidden states
+    num_observations = 3  # Number of observation symbols
+
+    # Example transition and emission probabilities (replace with actual data)
+    transition_probs = torch.tensor([[0.5, 0.2, 0.3],
+                                     [0.3, 0.5, 0.2],
+                                     [0.2, 0.3, 0.5]], dtype=torch.float)
+
+    emission_probs = torch.tensor([[0.6, 0.3, 0.1],
+                                   [0.2, 0.5, 0.3],
+                                   [0.1, 0.3, 0.6]], dtype=torch.float)
+
+    # Define the CRF model
+    class HMMCRF(nn.Module):
+        def __init__(self, num_states, num_observations):
+            super(HMMCRF, self).__init__()
+            self.num_states = num_states
+            self.num_observations = num_observations
+            self.crf = CRF(num_tags=num_states, batch_first=True)
+        
+            # Initialize the emission probabilities as a learnable parameter
+            self.emission_probs = nn.Parameter(emission_probs)
+    
+        def forward(self, observations):
+            # Convert observations to one-hot encoding
+            one_hot_observations = nn.functional.one_hot(observations, num_classes=self.num_observations).float()
+        
+            # Calculate emission scores
+            emission_scores = torch.matmul(one_hot_observations, self.emission_probs.t())
+        
+            # Use the CRF to get the most likely state sequence
+            best_path = self.crf.decode(emission_scores)
+            return best_path
+    
+        def log_likelihood(self, observations, states):
+            one_hot_observations = nn.functional.one_hot(observations, num_classes=self.num_observations).float()
+            emission_scores = torch.matmul(one_hot_observations, self.emission_probs.t())
+            log_likelihood = self.crf(emission_scores, states)
+            return log_likelihood
+
+    # Create example observation sequences and state sequences
+    observations = torch.tensor([[0, 1, 2], [2, 0, 1]], dtype=torch.long)  # Example observations
+    states = torch.tensor([[0, 1, 2], [2, 0, 1]], dtype=torch.long)  # Example true state sequences
+
+    # Initialize the HMM-CRF model
+    model = HMMCRF(num_states=num_states, num_observations=num_observations)
+
+    # Compute the most likely state sequences
+    with torch.no_grad():
+        best_paths = model(observations)
+        print("Best paths:", best_paths)
+
+    # Compute the log likelihood of the true state sequences
+    log_likelihood = model.log_likelihood(observations, states)
+    print("Log likelihood:", log_likelihood)
+
+    # Example training loop
+    optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
+    num_epochs = 100
+
+    for epoch in range(num_epochs):
+        optimizer.zero_grad()
+        loss = -model.log_likelihood(observations, states).mean()  # Negative log likelihood
+        loss.backward()
+        optimizer.step()
+    
+        if epoch % 10 == 0:
+            print(f"Epoch {epoch}, Loss: {loss.item()}")
+    
+

@@ -7,6 +7,7 @@ from collections import Counter
 from utils.utils import *
 from pgmpy.models import FactorGraph
 
+
 def factor_graph_inference(factor_graph):
     beliefs = BeliefPropagation(factor_graph)
     return beliefs
