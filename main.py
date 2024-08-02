@@ -121,7 +121,6 @@ def main():
     
     factor_graph = Factorgraph(config.ploidy, config.error_rate, config.epsilon).construct(qg, fragment_list)
 
-    
 
     beliefs = factor_graph_inference(factor_graph)
     # print("")
@@ -132,71 +131,71 @@ def main():
 
     # print("")
 
-    variables = [node for node in factor_graph.nodes() if not isinstance(node, DiscreteFactor)]
-
-    # Step 3: Perform inference
-    for var in variables:
-        print(f"Belief for {var}:")
-        result = beliefs.query(variables=list(var))
-        for state_index, prob in enumerate(result.values):
-            print(f"Value {result.variables} = {state_index}: {prob}")
-
-
-    for var in variables:
-        print(f"Belief for {var}:")
-        print(result[var])
-
-    print(result)
-    for var in variables:
-        print(f"Belief for {var}:")
-        print(f"Values: {result[var].values}")
-        print(f"Variables: {result[var].variables}")
-    # beliefs = BeliefPropagation(factor_graph)
-
-    result12 = beliefs.query(variables=[list(variables)[0]])
-    print(result12)
-    # marginals, max_phasings = give_marginals(factor_graph, qg, beliefs)
-
+    # variables = [node for node in factor_graph.nodes() if not isinstance(node, DiscreteFactor)]
     #
-    # max_phase, positions = query_paths_gibbs_max(fragment_list, qg, beliefs, n_samples=1000)
-    # h_df = creat_vcf(max_phase, positions, config)
-    # print(h_df)
-    
-    # va_inference = VariableElimination(factor_graph)
-    # result = va_inference.query(variables=['1-2'])
-    
-    from hmmlearn import hmm
-    
-    # Define states and observations
-    states = ["Rainy", "Sunny"]
-    observations = ["Walk", "Shop", "Clean"]
-    n_states = len(states)
-    n_observations = len(observations)
-    
-    # Example emission probabilities
-    # The rows correspond to states, and the columns correspond to observations
-    emission_probabilities = np.array([
-        [0.1, 0.4, 0.5],  # Emission probabilities for "Rainy"
-        [0.6, 0.3, 0.1]   # Emission probabilities for "Sunny"
-    ])
-    
-    # Generate a random sequence of observations (for example purposes)
-    # Normally, you would use your actual observation sequence data
-    np.random.seed(42)
-    sequence_length = 100
-    X = np.random.choice(n_observations, sequence_length).reshape(-1, 1)
-    
-    # Initialize the HMM
-    model = hmm.MultinomialHMM(n_components=n_states, n_iter=100, random_state=42)
-    
-    # Set the emission probabilities
-    model.emissionprob_ = emission_probabilities
-    
-    # Fit the model to the observation sequence
-    model.fit(X)
-    
+    # # Step 3: Perform inference
+    # for var in variables:
+    #     print(f"Belief for {var}:")
+    #     result = beliefs.query(variables=list(var))
+    #     for state_index, prob in enumerate(result.values):
+    #         print(f"Value {result.variables} = {state_index}: {prob}")
+    #
+    #
+    # for var in variables:
+    #     print(f"Belief for {var}:")
+    #     print(result[var])
+    #
+    # print(result)
+    # for var in variables:
+    #     print(f"Belief for {var}:")
+    #     print(f"Values: {result[var].values}")
+    #     print(f"Variables: {result[var].variables}")
+    # # beliefs = BeliefPropagation(factor_graph)
+    #
+    # result12 = beliefs.query(variables=[list(variables)[0]])
+    # print(result12)
+    # # marginals, max_phasings = give_marginals(factor_graph, qg, beliefs)
+    #
+    # #
+    # # max_phase, positions = query_paths_gibbs_max(fragment_list, qg, beliefs, n_samples=1000)
+    # # h_df = creat_vcf(max_phase, positions, config)
+    # # print(h_df)
+    #
+    # # va_inference = VariableElimination(factor_graph)
+    # # result = va_inference.query(variables=['1-2'])
+    #
+    # from hmmlearn import hmm
+    #
+    # # Define states and observations
+    # states = ["Rainy", "Sunny"]
+    # observations = ["Walk", "Shop", "Clean"]
+    # n_states = len(states)
+    # n_observations = len(observations)
+    #
+    # # Example emission probabilities
+    # # The rows correspond to states, and the columns correspond to observations
+    # emission_probabilities = np.array([
+    #     [0.1, 0.4, 0.5],  # Emission probabilities for "Rainy"
+    #     [0.6, 0.3, 0.1]   # Emission probabilities for "Sunny"
+    # ])
+    #
+    # # Generate a random sequence of observations (for example purposes)
+    # # Normally, you would use your actual observation sequence data
+    # np.random.seed(42)
+    # sequence_length = 100
+    # X = np.random.choice(n_observations, sequence_length).reshape(-1, 1)
+    #
+    # # Initialize the HMM
+    # model = hmm.MultinomialHMM(n_components=n_states, n_iter=100, random_state=42)
+    #
+    # # Set the emission probabilities
+    # model.emissionprob_ = emission_probabilities
+    #
+    # # Fit the model to the observation sequence
+    # model.fit(X)
+    #
     # Extract transition probabilities
-    transition_probabilities = model.transmat_
+    # transition_probabilities = model.transmat_
 
     
 
