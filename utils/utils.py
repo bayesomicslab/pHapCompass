@@ -30,8 +30,13 @@ def get_matching_reads_for_positions(pos, fragment_list):
     
     return matches
 
+
 def str_2_phas(phasings, ploidy):
     return [np.array([int(p) for p in [*phas]]).reshape(ploidy, -1) for phas in phasings]
+
+
+def str_2_phas_1(phasing, ploidy):
+    return np.array([int(p) for p in [*phasing]]).reshape(ploidy, -1)
 
 
 def phas_2_str(phas):
@@ -77,6 +82,7 @@ def convert_to_chordal(G):
             break
     return G
 
+
 def longest_common_substring(s1, s2):
     m, n = len(s1), len(s2)
     dp = [[0] * (n + 1) for _ in range(m + 1)]
@@ -95,6 +101,7 @@ def longest_common_substring(s1, s2):
 
     return s1[end_pos - length: end_pos]
 
+
 def merge_phasings_dict(u_phase, v_phase, v, shared_dict):
     shared_idx = shared_dict[f'{v}']['shared_idx'][0][1:]
     non_redundants = shared_dict[f'{v}']['non_redundant_sites']
@@ -103,6 +110,7 @@ def merge_phasings_dict(u_phase, v_phase, v, shared_dict):
     matx = np.hstack([u_sorted, v_sorted])
     nr_matx = matx[:, non_redundants]
     return nr_matx
+
 
 def merge_one_row2(samples, columns, row, shared_dict2):
     u = columns[0]

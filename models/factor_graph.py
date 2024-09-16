@@ -14,6 +14,7 @@ class Factorgraph:
     def check_model(self):
         return True
     
+    
     def construct(self, chordal_g, fragment_list):
         chordal_nodes = chordal_g.nodes(data=True)
         chordal_edges = chordal_g.edges(data=True)

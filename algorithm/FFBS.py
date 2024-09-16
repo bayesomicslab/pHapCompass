@@ -7,6 +7,9 @@ import torch.optim as optim
 import torch.nn.functional as F
 
 
+
+
+
 class HMM(nn.Module):
     def __init__(self, num_states, num_obs):
         super(HMM, self).__init__()

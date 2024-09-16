@@ -2,6 +2,345 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.distributions import Categorical
+import itertools
+import numpy as np
+
+
+def find_matchings(nodes_part1, nodes_part2):
+    # Sort both parts and remember the original indices.
+    sorted_part1 = sorted(enumerate(nodes_part1), key=lambda x: x[1])
+    sorted_part2 = sorted(enumerate(nodes_part2), key=lambda x: x[1])
+    
+    # Split nodes by type and collect their original indices.
+    def split_by_type(sorted_nodes):
+        grouped = {}
+        for idx, t in sorted_nodes:
+            if t not in grouped:
+                grouped[t] = []
+            grouped[t].append(idx)
+        return grouped
+    
+    grouped_part1 = split_by_type(sorted_part1)
+    grouped_part2 = split_by_type(sorted_part2)
+    if grouped_part1.keys() != grouped_part2.keys():
+        return []
+    if any([len((grouped_part1[i])) != len((grouped_part2[i])) for i in grouped_part1.keys()]):
+        return []
+    # Start with a single empty matching.
+    matchings = [[]]
+    for node_type, indices1 in grouped_part1.items():
+        indices2 = grouped_part2[node_type]
+        
+        # For each current matching, extend it with all possible permutations for the current type.
+        new_matchings = []
+        for perm in itertools.permutations(indices2, len(indices2)):
+            for current_matching in matchings:
+                # Add new matching to the results only if it doesn't conflict with the current matching.
+                if all((i1, i2) not in current_matching for i1, i2 in zip(indices1, perm)):
+                    new_matchings.append(current_matching + list(zip(indices1, perm)))
+        matchings = new_matchings
+    
+    return matchings
+
+
+def str_2_phas_1(phasing, ploidy):
+    return np.array([int(p) for p in [*phasing]]).reshape(ploidy, -1)
+
+
+def phas_2_str(phas):
+    return ''.join([str(ph) for ph in list(np.ravel(phas))])
+
+
+def find_phasings_matches(ff, sf, common_ff, common_sf):
+    templates = []
+    all_local = find_matchings(list(ff[:, -1]), list(sf[:, 0]))
+    for al in all_local:
+        ff_ordering = [ii[0] for ii in al]
+        sf_ordering = [ii[1] for ii in al]
+        assert any(ff[ff_ordering, common_ff] == sf[sf_ordering, common_sf])
+        temp = np.hstack([ff[ff_ordering, :], sf[sf_ordering, 1:]])
+        byte_set = {a.tobytes() for a in templates}
+        if temp.tobytes() not in byte_set:
+            templates.append(temp)
+    return templates
+
+
+def find_common_element_and_index(node1, node2):
+    # Split the node names into components (e.g., '1-2' -> ['1', '2'])
+    node1_parts = node1.split('-')
+    node2_parts = node2.split('-')
+    
+    # Find the common element between node1 and node2
+    common_element = None
+    for part in node1_parts:
+        if part in node2_parts:
+            common_element = part
+            break
+    
+    if common_element is None:
+        raise ValueError(f"No common element found between {node1} and {node2}")
+    
+    # Find the index of the common element in both nodes
+    common_ff = node1_parts.index(common_element)
+    common_sf = node2_parts.index(common_element)
+    
+    return common_ff, common_sf
+
+
+def permute_rows(a):
+    # Generate all permutations of the rows
+    perms = list(itertools.permutations(a))
+    
+    # Convert each permutation into a NumPy array and return as a list of matrices
+    permuted_matrices = [np.array(p) for p in perms]
+    
+    return permuted_matrices
+
+
+def compute_likelihood(observed, phasing, error_rate):
+    """This likelihood computation assumes the length of observation is the same as the length of phasing"""
+    y = np.tile(observed, (phasing.shape[0], 1))
+    diff = y - phasing
+    diff[diff != 0] = 1
+    comp_diff = 1 - diff
+    term1 = diff * error_rate
+    term2 = comp_diff * (1 - error_rate)
+    terms = term1 + term2
+    probs = np.prod(terms, axis=1)
+    likelihood = np.mean(probs)
+    return likelihood
+
+
+def compute_likelihood_generalized_plus(observed, phasing, obs_pos, phas_pos, error_rate):
+    """This likelihood computation can accept different length observed and phasing, but the length of obs_pos and
+    phas_pos should be the same. The likelihood is computed on the provided indices on both vectors"""
+    new_phasing = phasing[:, phas_pos]
+    new_observed = observed[obs_pos]
+    y = np.tile(new_observed, (new_phasing.shape[0], 1))
+    diff = y - new_phasing
+    diff[diff != 0] = 1
+    comp_diff = 1 - diff
+    term1 = diff * error_rate
+    term2 = comp_diff * (1 - error_rate)
+    terms = term1 + term2
+    probs = np.prod(terms, axis=1)
+    likelihood = np.mean(probs)
+    return likelihood
+
+
+def generate_binary_combinations(length):
+    return [list(x) for x in itertools.product([0, 1], repeat=length)]
+
+
+def generate_all_possible_emissions(unique_node_lengths):
+    all_emissions = []
+    for length in unique_node_lengths:
+        all_emissions.extend(generate_binary_combinations(length))
+    return all_emissions
+
+
+def generate_hmm_with_weights_and_emissions(qg, error_rate):
+    state_names = []  # To store the names of states in hmmg
+    state_index_map = {}  # Map state names to their index in the transition matrix
+    emission_index_map = {}  # To map emissions to their index for the matrix
+    unique_node_lengths = set()  # Track the unique lengths of node names
+    
+    # Step 1: Generate the state names and collect unique node lengths
+    for node, node_data in qg.nodes(data=True):
+        for state_key in node_data['weight'].keys():
+            state_name = f"{node}-{state_key}"
+            state_names.append(state_name)
+            node_length = len(node.split('-'))  # Get the length of the node part (excluding state_key)
+            unique_node_lengths.add(node_length)  # Track the unique lengths
+
+    # Convert unique_node_lengths to a sorted list (just in case)
+    unique_node_lengths = sorted(unique_node_lengths)
+
+    # Step 2: Generate all possible emissions (0-1 combinations) based on the actual unique node lengths
+    all_emissions = generate_all_possible_emissions(unique_node_lengths)
+    
+    # Map each emission to a unique index
+    for i, emission in enumerate(all_emissions):
+        emission_index_map[tuple(emission)] = i  # Map emissions to indices
+    
+    num_emissions = len(all_emissions)
+    num_states = len(state_names)
+    
+    # Step 3: Create the emission probability matrix (number of states x number of emissions), initialized with zeros
+    emission_prob_matrix = np.zeros((num_states, num_emissions))
+    
+    # Create an index for each state
+    for i, state_name in enumerate(state_names):
+        state_index_map[state_name] = i
+
+    # Step 4: Initialize transition matrix
+    transition_matrix = np.zeros((num_states, num_states))  # Start with a zero matrix
+
+    # Step 5: Define transitions between neighboring nodes with weights
+    for node1, node2 in qg.edges():
+        # Get the states of node1
+        for state_key1 in qg.nodes[node1]['weight'].keys():
+            state1 = f"{node1}-{state_key1}"
+            state1_idx = state_index_map[state1]
+            # Get the states of node2
+            for state_key2 in qg.nodes[node2]['weight'].keys():
+                state2 = f"{node2}-{state_key2}"
+                state2_idx = state_index_map[state2]
+                
+                # Step 6: Compute the transition weight based on phasings
+                ff = str_2_phas_1(state_key1, 3)
+                sf = str_2_phas_1(state_key2, 3)
+                
+                common_ff, common_sf = find_common_element_and_index(node1, node2)
+                
+                phasings = find_phasings_matches(ff, sf, common_ff, common_sf)
+                all_phasings_str = []
+                for phas in phasings:
+                    all_phasings = permute_rows(phas)
+                    phasings_str = [phas_2_str(phasss) for phasss in all_phasings]
+                    all_phasings_str += phasings_str
+                # print('matched phasings', phasings_str)
+
+                # 4. Calculate the transition weight by summing the values of matching keys
+                transition_weight = 0
+                for phasing_key in all_phasings_str:
+                    if phasing_key in qg[node1][node2]['weight']:
+                        transition_weight += qg[node1][node2]['weight'][phasing_key]
+                
+                transition_matrix[state1_idx][state2_idx] = transition_weight
+
+    # Step 7: Normalize the transition matrix row-wise, skipping zero-sum rows
+    for i in range(num_states):
+        row_sum = transition_matrix[i].sum()
+        if row_sum > 0:
+            transition_matrix[i] /= row_sum
+        else:
+            transition_matrix[i] = np.zeros(num_states)
+
+    # Step 8: Calculate emissions for each state and populate the emission probability matrix
+    for state in state_names:
+        node_part, state_key = state.rsplit('-', 1)  # Split the state into node part and key
+        node_elements = node_part.split('-')  # For example, '1-2' -> ['1', '2']
+        node_length = len(node_elements)  # Determine the number of elements in the node
+
+        # Generate all possible combinations of 0 and 1 based on the node length
+        possible_emissions = generate_binary_combinations(node_length)
+
+        # Compute the likelihood for each emission using compute_likelihood
+        phasing = str_2_phas_1(state_key, 3)  # Compute phasing for the state key
+        state_idx = state_index_map[state]  # Get the index for the state in the matrix
+
+        # Set emission probabilities for combinations with the same length as node_elements
+        for emission in possible_emissions:
+            likelihood = compute_likelihood(np.array(emission), phasing, error_rate)
+            emission_idx = emission_index_map[tuple(emission)]  # Get the index for the emission
+            emission_prob_matrix[state_idx][emission_idx] = likelihood
+
+    return state_names, transition_matrix, emission_prob_matrix, emission_index_map
+
+
+def generate_hmm_with_weights(qg, error_rate=0.001):
+    state_names = []  # To store the names of states in hmmg
+    state_index_map = {}  # Map state names to their index in the transition matrix
+    emissions_map = {}  # To store emissions for each state
+    unique_node_lengths = set()  # Track the unique lengths of node names
+
+    # Step 1: Generate the state names
+    for node, node_data in qg.nodes(data=True):
+        for state_key in node_data['weight'].keys():
+            state_name = f"{node}-{state_key}"
+            state_names.append(state_name)
+    
+    # Create an index for each state
+    for i, state_name in enumerate(state_names):
+        state_index_map[state_name] = i
+
+    # Step 2: Initialize transition matrix
+    num_states = len(state_names)
+    transition_matrix = np.zeros((num_states, num_states))  # Start with a zero matrix
+
+    # Step 3: Define transitions between neighboring nodes with weights
+    for node1, node2 in qg.edges():
+        # Get the states of node1
+        for state_key1 in qg.nodes[node1]['weight'].keys():
+            state1 = f"{node1}-{state_key1}"
+            state1_idx = state_index_map[state1]
+            # Get the states of node2
+            for state_key2 in qg.nodes[node2]['weight'].keys():
+                state2 = f"{node2}-{state_key2}"
+                state2_idx = state_index_map[state2]
+                # print(state1, state2)
+                # Step 4: Compute the transition weight based on phasings
+                # 1. Convert the state keys to phasings
+                ff = str_2_phas_1(state_key1, 3)
+                sf = str_2_phas_1(state_key2, 3)
+                
+                # 2. Find the common index (e.g., common_ff and common_sf)
+                common_ff, common_sf = find_common_element_and_index(node1, node2)
+                # print('common indices:', common_ff, common_sf)
+
+                # 3. Get the matching phasings
+                phasings = find_phasings_matches(ff, sf, common_ff, common_sf)
+                all_phasings_str = []
+                for phas in phasings:
+                    all_phasings = permute_rows(phas)
+                    phasings_str = [phas_2_str(phasss) for phasss in all_phasings]
+                    all_phasings_str += phasings_str
+                # print('matched phasings', phasings_str)
+
+                # 4. Calculate the transition weight by summing the values of matching keys
+                transition_weight = 0
+                for phasing_key in all_phasings_str:
+                    if phasing_key in qg[node1][node2]['weight']:
+                        transition_weight += qg[node1][node2]['weight'][phasing_key]
+                    # else:
+
+                # print('edge weights:', qg[node1][node2]['weight'])
+                # print('transition prob.', transition_weight)
+                # 5. Set the transition weight in the matrix
+                transition_matrix[state1_idx][state2_idx] = transition_weight
+    
+    # transition_matrix = transition_matrix / transition_matrix.sum(axis=1, keepdims=True)
+    # Step 5: Normalize the transition matrix row-wise, skipping zero-sum rows
+    for i in range(num_states):
+        row_sum = transition_matrix[i].sum()
+        if row_sum > 0:
+            transition_matrix[i] /= row_sum
+        else:
+            # Optionally, set a uniform distribution for zero-sum rows
+            transition_matrix[i] = np.zeros(num_states)  # or set to uniform probabilities
+            # Uncomment the following line if you prefer uniform probabilities instead of zeros
+            # transition_matrix[i] = np.full(num_states, 1/num_states)
+
+    # Step 6: Calculate emissions for each state
+    for state in state_names:
+        node_part, state_key = state.rsplit('-', 1)  # Split the state into node part and key
+        node_elements = node_part.split('-')  # For example, '1-2' -> ['1', '2']
+        node_length = len(node_elements)  # Determine the number of elements in the node
+
+        # Step 7: Generate all possible combinations of 0 and 1 based on node length
+        possible_emissions = generate_binary_combinations(node_length)
+
+        # Step 8: Compute the likelihood for each emission using compute_likelihood
+        phasing = str_2_phas_1(state_key, 3)  # Compute phasing for the state key
+        emission_probs = []
+        for emission in possible_emissions:
+            likelihood = compute_likelihood(np.array(emission), phasing, error_rate)
+            emission_probs.append((emission, likelihood))
+
+        # Step 9: Handle length mismatches (set emissions for longer lengths to zero)
+        if node_length < len(state_key):
+            extra_combinations = generate_binary_combinations(len(state_key))
+            for extra_emission in extra_combinations:
+                if extra_emission not in possible_emissions:
+                    emission_probs.append((extra_emission, 0))  # Set to zero
+
+        # Store emissions and their probabilities for this state
+        emissions_map[state] = emission_probs
+
+
+    return state_names, transition_matrix, emissions_map
+
 
 class HMM(nn.Module):
     """Implementation of Hidden Markov Model with forward algorithm and 
@@ -84,10 +423,20 @@ emission_potentials = torch.randn(batch_size, seq_len, num_states)
 # Random sequence lengths (between 1 and seq_len)
 seq_lens = torch.randint(1, seq_len + 1, (batch_size,))
 
+
+
+state_names, transition_matrix, emission_prob_matrix, emission_index_map = generate_hmm_with_weights_and_emissions(qg, error_rate)
+
+transition_potentials = torch.tensor(transition_matrix.unsqueez, dtype=torch.float32)
+emission_potentials = torch.tensor(emission_prob_matrix, dtype=torch.float32)
+emission_prob_tensor = torch.tensor(emission_prob_matrix).unsqueeze(0)
+
+seq_lens = 10
+
 print("Sampled sequences from FFBS:")
 # Generate samples using FFBS (rsample function)
 for rr in range(10):
-    sample = hmm.rsample(transition_potentials, emission_potentials, seq_lens)
+    sample = hmm.rsample(transition_potentials, emission_prob_tensor, seq_lens)
     # print("Sampled sequence from FFBS:")
     print(sample)
 # samples = hmm.rsample(transition_potentials, emission_potentials, seq_lens)

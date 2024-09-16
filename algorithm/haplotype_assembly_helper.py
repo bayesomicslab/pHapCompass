@@ -105,7 +105,6 @@ def get_max_length_paths_ploidy(root, max_depth, allel_set=[0, 1]):
     return max_length_paths
 
 
-
 def compute_likelihood(observed, phasing, error_rate):
     """This likelihood computation assumes the length of observation is the same as the length of phasing"""
     y = np.tile(observed, (phasing.shape[0], 1))
@@ -154,7 +153,6 @@ def compute_likelihood_generalized_plus(observed, phasing, obs_pos, phas_pos, er
     return likelihood
 
 
-
 def counts_to_phasing_ploidy(max_length_paths, allel_set=[0, 1]):
     allels = [str(a) for a in allel_set]
     allels_product = [''.join(ll) for ll in list(itertools.product(allels, allels))]
@@ -175,6 +173,21 @@ def generate_phasings_ploidy(ploidy, genotype, allel_set=[0, 1]):
     return phasing_np_list
 
 
+
+def find_phasings_matches(ff, sf, common_ff, common_sf):
+    templates = []
+    all_local = find_matchings(list(ff[:, -1]), list(sf[:, 0]))
+    for al in all_local:
+        ff_ordering = [ii[0] for ii in al]
+        sf_ordering = [ii[1] for ii in al]
+        assert any(ff[ff_ordering, common_ff] == sf[sf_ordering, common_sf])
+        temp = np.hstack([ff[ff_ordering, :], sf[sf_ordering, 1:]])
+        byte_set = {a.tobytes() for a in templates}
+        if temp.tobytes() not in byte_set:
+            print(temp)
+            templates.append(temp)
+    return templates
+
 def combine_2list_phasings(first_phasings, second_phasings):
     final_phasings = []
     for ff in first_phasings:
@@ -183,12 +196,14 @@ def combine_2list_phasings(first_phasings, second_phasings):
             templates = []
             all_local = find_matchings(list(ff[:, -1]), list(sf[:, 0]))
             for al in all_local:
+                print(al)
                 ff_ordering = [ii[0] for ii in al]
                 sf_ordering = [ii[1] for ii in al]
                 assert any(ff[ff_ordering, -1] == sf[sf_ordering, 0])
                 temp = np.hstack([ff[ff_ordering, :], sf[sf_ordering, 1:]])
                 byte_set = {a.tobytes() for a in templates}
                 if temp.tobytes() not in byte_set:
+                    print(temp)
                     templates.append(temp)
             final_phasings += templates
             # print('----------------------------')

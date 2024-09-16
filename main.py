@@ -1,4 +1,6 @@
+import os
 import argparse
+import sys
 import networkx as nx
 from data.input_handler import InputHandler
 from data.configuration import Configuration
@@ -34,6 +36,25 @@ def main():
 
     args = parser.parse_args()
 
+
+    class Args:
+        def __init__(self):
+            self.vcf_path = 'example/62_ID0.vcf'
+            self.data_path = 'example/test.txt'
+            self.bam_path = 'example/example.bam'
+            self.genotype_path = 'example/genotype.txt'
+            self.ploidy = 3
+            self.error_rate = 0.001
+            self.epsilon = 0.0001
+            self.output_path = 'output'
+            self.root_dir = 'D:/UCONN/HaplOrbit'
+            self.alleles = [0, 1]
+
+    # Create the mock args object
+    args = Args()
+
+
+
     # Initialize classes with parsed arguments
     input_handler = InputHandler(args)
 
@@ -54,12 +75,176 @@ def main():
 
     # qg = chordal_contraction_cycle_base(quotient_g, fragment_list, input_handler, config)
     qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
-    plot_graph(qg)
-    
+    plot_graph(qg)    
     print('Chordal Graph constructed.')
+
+    # for nn in qg.nodes(data=True):
+    #     print(nn)
+
+
+
+    import numpy as np
+    import itertools
+
+
+def find_matchings(nodes_part1, nodes_part2):
+    # Sort both parts and remember the original indices.
+    sorted_part1 = sorted(enumerate(nodes_part1), key=lambda x: x[1])
+    sorted_part2 = sorted(enumerate(nodes_part2), key=lambda x: x[1])
     
-    plot_graph(qg)
+    # Split nodes by type and collect their original indices.
+    def split_by_type(sorted_nodes):
+        grouped = {}
+        for idx, t in sorted_nodes:
+            if t not in grouped:
+                grouped[t] = []
+            grouped[t].append(idx)
+        return grouped
     
+    grouped_part1 = split_by_type(sorted_part1)
+    grouped_part2 = split_by_type(sorted_part2)
+    if grouped_part1.keys() != grouped_part2.keys():
+        return []
+    if any([len((grouped_part1[i])) != len((grouped_part2[i])) for i in grouped_part1.keys()]):
+        return []
+    # Start with a single empty matching.
+    matchings = [[]]
+    for node_type, indices1 in grouped_part1.items():
+        indices2 = grouped_part2[node_type]
+        
+        # For each current matching, extend it with all possible permutations for the current type.
+        new_matchings = []
+        for perm in itertools.permutations(indices2, len(indices2)):
+            for current_matching in matchings:
+                # Add new matching to the results only if it doesn't conflict with the current matching.
+                if all((i1, i2) not in current_matching for i1, i2 in zip(indices1, perm)):
+                    new_matchings.append(current_matching + list(zip(indices1, perm)))
+        matchings = new_matchings
+    
+    return matchings
+
+
+def str_2_phas_1(phasing, ploidy):
+    return np.array([int(p) for p in [*phasing]]).reshape(ploidy, -1)
+
+
+def phas_2_str(phas):
+    return ''.join([str(ph) for ph in list(np.ravel(phas))])
+
+
+def find_phasings_matches(ff, sf, common_ff, common_sf):
+    templates = []
+    all_local = find_matchings(list(ff[:, -1]), list(sf[:, 0]))
+    for al in all_local:
+        ff_ordering = [ii[0] for ii in al]
+        sf_ordering = [ii[1] for ii in al]
+        assert any(ff[ff_ordering, common_ff] == sf[sf_ordering, common_sf])
+        temp = np.hstack([ff[ff_ordering, :], sf[sf_ordering, 1:]])
+        byte_set = {a.tobytes() for a in templates}
+        if temp.tobytes() not in byte_set:
+            templates.append(temp)
+    return templates
+
+# Function to find the common element and its index between two nodes
+def find_common_element_and_index(node1, node2):
+    # Split the node names into components (e.g., '1-2' -> ['1', '2'])
+    node1_parts = node1.split('-')
+    node2_parts = node2.split('-')
+    
+    # Find the common element between node1 and node2
+    common_element = None
+    for part in node1_parts:
+        if part in node2_parts:
+            common_element = part
+            break
+    
+    if common_element is None:
+        raise ValueError(f"No common element found between {node1} and {node2}")
+    
+    # Find the index of the common element in both nodes
+    common_ff = node1_parts.index(common_element)
+    common_sf = node2_parts.index(common_element)
+    
+    return common_ff, common_sf
+
+
+# Function to generate state names and transition matrix with weighted transitions
+def generate_hmm_with_weights(qg):
+    state_names = []  # To store the names of states in hmmg
+    state_index_map = {}  # Map state names to their index in the transition matrix
+    
+    # Step 1: Generate the state names
+    for node, node_data in qg.nodes(data=True):
+        for state_key in node_data['weight'].keys():
+            state_name = f"{node}-{state_key}"
+            state_names.append(state_name)
+    
+    # Create an index for each state
+    for i, state_name in enumerate(state_names):
+        state_index_map[state_name] = i
+
+    # Step 2: Initialize transition matrix
+    num_states = len(state_names)
+    transition_matrix = np.zeros((num_states, num_states))  # Start with a zero matrix
+
+    # Step 3: Define transitions between neighboring nodes with weights
+    for node1, node2 in qg.edges():
+        # Get the states of node1
+        for state_key1 in qg.nodes[node1]['weight'].keys():
+            state1 = f"{node1}-{state_key1}"
+            state1_idx = state_index_map[state1]
+            # Get the states of node2
+            for state_key2 in qg.nodes[node2]['weight'].keys():
+                state2 = f"{node2}-{state_key2}"
+                state2_idx = state_index_map[state2]
+                print(state1, state2)
+                # Step 4: Compute the transition weight based on phasings
+                # 1. Convert the state keys to phasings
+                ff = str_2_phas_1(state_key1, 3)
+                sf = str_2_phas_1(state_key2, 3)
+                
+                # 2. Find the common index (e.g., common_ff and common_sf)
+                common_ff, common_sf = find_common_element_and_index(node1, node2)
+                print('common indices:', common_ff, common_sf)
+
+                # 3. Get the matching phasings
+                phasings = find_phasings_matches(ff, sf, common_ff, common_sf)
+                phasings_str = [phas_2_str(phas) for phas in phasings]
+                print('matched phasings', phasings_str)
+
+                # 4. Calculate the transition weight by summing the values of matching keys
+                transition_weight = 0
+                for phasing_key in phasings_str:
+                    if phasing_key in qg[node1][node2]['weight']:
+                        transition_weight += qg[node1][node2]['weight'][phasing_key]
+                print('edge weights:', qg[node1][node2]['weight'])
+                print('transition prob.', transition_weight)
+                # 5. Set the transition weight in the matrix
+                transition_matrix[state1_idx][state2_idx] = transition_weight
+    
+    # Step 5: Normalize the transition matrix row-wise to make it a stochastic matrix
+    # transition_matrix = transition_matrix / transition_matrix.sum(axis=1, keepdims=True)
+    # Step 5: Normalize the transition matrix row-wise, skipping zero-sum rows
+    for i in range(num_states):
+        row_sum = transition_matrix[i].sum()
+        if row_sum > 0:
+            transition_matrix[i] /= row_sum
+        else:
+            # Optionally, set a uniform distribution for zero-sum rows
+            transition_matrix[i] = np.zeros(num_states)  # or set to uniform probabilities
+            # Uncomment the following line if you prefer uniform probabilities instead of zeros
+            # transition_matrix[i] = np.full(num_states, 1/num_states)
+
+    return state_names, transition_matrix
+
+    state_names, transition_matrix = generate_hmm_with_weights(qg)
+
+
+
+    for edge in qg.edges(data=True):
+        print(edge)
+
+
     # for edge in quotient_g.edges(data=True):
     #     print(edge)
     # quotient_g.nodes(data=True)
@@ -120,6 +305,14 @@ def main():
     # qg = quotient_g.copy()
     
     factor_graph = Factorgraph(config.ploidy, config.error_rate, config.epsilon).construct(qg, fragment_list)
+
+
+    for nn in factor_graph.nodes(data=True):
+        print(nn)
+    
+    for edge in factor_graph.edges(data=True):
+        print(edge)
+
 
 
     beliefs = factor_graph_inference(factor_graph)
