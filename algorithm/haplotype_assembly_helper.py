@@ -173,7 +173,6 @@ def generate_phasings_ploidy(ploidy, genotype, allel_set=[0, 1]):
     return phasing_np_list
 
 
-
 def find_phasings_matches(ff, sf, common_ff, common_sf):
     templates = []
     all_local = find_matchings(list(ff[:, -1]), list(sf[:, 0]))
@@ -187,6 +186,7 @@ def find_phasings_matches(ff, sf, common_ff, common_sf):
             print(temp)
             templates.append(temp)
     return templates
+
 
 def combine_2list_phasings(first_phasings, second_phasings):
     final_phasings = []
