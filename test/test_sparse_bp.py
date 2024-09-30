@@ -155,6 +155,19 @@ def example_2():
     print("PGMpy Implementation MAP ----------------------------------")
     print(bp.map_query(variables=nodes))
 
+    return
+
+import networkx as nx
+import matplotlib.pyplot as plt
+
+def graph_coloring():
+    G = nx.complete_graph(12)
+    color_dict = nx.greedy_color(G)
+    nx.draw(G, node_color=[x for x in color_dict.values()])
+    plt.draw()
+    plt.show()
+    return color_dict
+
 if __name__ == "__main__":
-    example_2()
+    print(graph_coloring())
     print("done")
