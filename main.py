@@ -13,8 +13,7 @@ from utils.utils import *
 from algorithm.inference import *
 from test.FFBS import generate_hmm_with_weights_and_emissions
 
-def test():
-    inp = 1
+
 
 
 def main():
@@ -78,7 +77,7 @@ def main():
     plot_graph(qg)    
     print('Chordal Graph constructed.')
 
-
+    error_rate = 0.001
     state_names, transition_matrix, emission_prob_matrix, emission_index_map = generate_hmm_with_weights_and_emissions(qg, error_rate)
 
 
