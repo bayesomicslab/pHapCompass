@@ -94,6 +94,7 @@ class InputHandler:
         return pd.DataFrame(data)
 
 
+
     def convertBAM(self, bam_filename, vcf_filename, output_dir, root_dir):
         '''
         Converts a BAM or SAM file into a fragment file
@@ -106,16 +107,16 @@ class InputHandler:
         os.makedirs(output_dir, exist_ok=True)
 
         out_filename = os.path.join(output_dir, "bamfrags.txt")
-        print('before')
+        # print('before')
         if wsl_available():
             prefix = "wsl"
-            print('before2')
+            # print('before2')
             root_dir = subprocess.check_output(["wsl", "wslpath", "-a", root_dir]).strip().decode()
             out_filename = subprocess.check_output(["wsl", "wslpath", "-a", out_filename]).strip().decode()
             command = [prefix, os.path.join("extract-poly-src/build/extractHAIRS"), "--bam", bam_filename,
                    "--vcf", vcf_filename, "--out", out_filename]
         else:
-            command = [os.path.join("extract-poly-src/build/extractHAIRS"), "--bam", bam_filename,
+            command = ['/home/mok23003/BML/extract_poly/build/extractHAIRS', "--bam", bam_filename,
                    "--vcf", vcf_filename, "--out", out_filename]
             
         print('root_dir:', root_dir)
@@ -124,42 +125,8 @@ class InputHandler:
         print('bam_filename:', bam_filename)
         print('vcf_filename:', vcf_filename)
         
-        #run_command = ['sh', os.path.join(root_dir, 'extract_poly','build', 'test.sh')]
-        #print(' '.join(run_command))
-        #subprocess.run(run_command)
-        
-        #subprocess.check_call(run_command)
-        # print("ls command on output:")
-        # subprocess.run(['ls', os.path.join(root_dir, "extract_poly/build/")])
-        # print('ls done')
-        # # print(root_dir+"/extract-poly-src/build/extractHAIRS")
-        # # readlink_com = 'readlink -f' + ' ' + os.path.join(root_dir, "extract_poly/build/extractHAIRS")
-        # readlink_com = 'readlink -f' + ' ' + vcf_filename
-        #
-        # print('readlink command:', readlink_com)
-        # subprocess.run(['readlink', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
-        # print('done')
-        # subprocess.check_call(['readlink', '-f', os.path.join(root_dir, "extract_poly/build/extractHAIRS")])
-        #
-        # print("ls command on output:")
-        # subprocess.run(['ls', os.path.join(root_dir, output_dir)])
-        
-        # print("mkdir on output:")
-        # subprocess.run(['mkdir', os.path.join(root_dir, output_dir, 'test2')])
-
         print("Executing command:", ' '.join(command))
         subprocess.check_call(command)
-        # subprocess.run(['ls', '/home/FCAM/mhosseini/HaplOrbit/output/'])
-        # subprocess.run(['cat', '/home/FCAM/mhosseini/HaplOrbit/output/test.txt'])
-        # subprocess.run(['mkdir', os.path.join(output_dir, 'test2')])
-
-        # print("Executing command:", ' '.join(command))
-        # subprocess.check_call(
-        #     [prefix, root_dir + "/extract-poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
-        #      "--out", out_filename])
-        # subprocess.check_call(
-        #         [prefix, root_dir+"/../extract-poly-src/build/extractHAIRS", "--bam", bam_filename, "--vcf",
-        #         vcf_filename, "--out", out_filename])
 
         try:
             subprocess.check_call(command)
@@ -168,9 +135,7 @@ class InputHandler:
         except Exception as e:
             print("An unexpected error occurred:", e)
             
-        # subprocess.check_call(
-        #         [prefix, root_dir+"/extract-poly/build/extractHAIRS", "--bam", bam_filename, "--vcf", vcf_filename,
-        #          "--out", out_filename])
+
         if wsl_available():
             out_filename = subprocess.check_output(["wsl", "wslpath", "-a", "-w", out_filename]).strip().decode()
     

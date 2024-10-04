@@ -44,15 +44,12 @@ def find_matchings(nodes_part1, nodes_part2):
     return matchings
 
 
-
 def str_2_phas_1(phasing, ploidy):
     return np.array([int(p) for p in [*phasing]]).reshape(ploidy, -1)
 
 
-
 def phas_2_str(phas):
     return ''.join([str(ph) for ph in list(np.ravel(phas))])
-
 
 
 def find_phasings_matches(ff, sf, common_ff, common_sf):
@@ -67,7 +64,6 @@ def find_phasings_matches(ff, sf, common_ff, common_sf):
         if temp.tobytes() not in byte_set:
             templates.append(temp)
     return templates
-
 
 
 def find_common_element_and_index(node1, node2):
@@ -92,7 +88,6 @@ def find_common_element_and_index(node1, node2):
     return common_ff, common_sf
 
 
-
 def permute_rows(a):
     # Generate all permutations of the rows
     perms = list(itertools.permutations(a))
@@ -101,7 +96,6 @@ def permute_rows(a):
     permuted_matrices = [np.array(p) for p in perms]
     
     return permuted_matrices
-
 
 
 def compute_likelihood(observed, phasing, error_rate):
@@ -116,7 +110,6 @@ def compute_likelihood(observed, phasing, error_rate):
     probs = np.prod(terms, axis=1)
     likelihood = np.mean(probs)
     return likelihood
-
 
 
 def compute_likelihood_generalized_plus(observed, phasing, obs_pos, phas_pos, error_rate):
@@ -136,10 +129,8 @@ def compute_likelihood_generalized_plus(observed, phasing, obs_pos, phas_pos, er
     return likelihood
 
 
-
 def generate_binary_combinations(length):
     return [list(x) for x in itertools.product([0, 1], repeat=length)]
-
 
 
 def generate_all_possible_emissions(unique_node_lengths):
@@ -147,7 +138,6 @@ def generate_all_possible_emissions(unique_node_lengths):
     for length in unique_node_lengths:
         all_emissions.extend(generate_binary_combinations(length))
     return all_emissions
-
 
 
 def generate_hmm_with_weights_and_emissions(qg, error_rate):
@@ -248,7 +238,6 @@ def generate_hmm_with_weights_and_emissions(qg, error_rate):
             emission_prob_matrix[state_idx][emission_idx] = likelihood
 
     return state_names, transition_matrix, emission_prob_matrix, emission_index_map
-
 
 
 def generate_hmm_with_weights_and_emissions2(qg, error_rate):
@@ -368,7 +357,6 @@ def generate_hmm_with_weights_and_emissions2(qg, error_rate):
     return state_names, transition_matrix, emission_prob_matrix, emission_index_map
 
 
-
 def sort_tuples_by_number(tuples):
     sorted_tuples = []
     for t in tuples:
@@ -383,7 +371,6 @@ def sort_tuples_by_number(tuples):
             sorted_tuples.append((t[1], t[0]))
     
     return sorted_tuples
-
 
 
 def generate_hmm_with_weights(qg, error_rate=0.001):
@@ -495,7 +482,6 @@ def generate_hmm_with_weights(qg, error_rate=0.001):
     return state_names, transition_matrix, emissions_map
 
 
-
 def combine_potentials(self, transition, emission):
     """Mix the transition and emission scores
 
@@ -566,8 +552,8 @@ def rsample(self, transition_potentials, emission_potentials, seq_lens,
     relaxed_sample_rev = torch.zeros(batch_size, max_len, num_state).to(device)
     sample_prob = torch.zeros(batch_size, max_len).to(device)
     sample_rev = torch.zeros(batch_size, max_len).type(torch.long).to(device)
-    alpha_rev = tmu.reverse_sequence(alpha, seq_lens).to(device)
-    log_potentials_rev = tmu.reverse_sequence(log_potentials, seq_lens).to(device)
+    alpha_rev = reverse_sequence(alpha, seq_lens).to(device)
+    log_potentials_rev = reverse_sequence(log_potentials, seq_lens).to(device)
     
     # Algo 2 line 3, log space
     # w.shape=[batch, num_state]
@@ -581,7 +567,7 @@ def rsample(self, transition_potentials, emission_potentials, seq_lens,
     #   switching = 0.
     
     # Algo 2 line 4
-    relaxed_sample_rev[:, 0] = tmu.reparameterize_gumbel(w, tau)
+    relaxed_sample_rev[:, 0] = reparameterize_gumbel(w, tau)
     # Algo 2 line 5
     sample_rev[:, 0] = relaxed_sample_rev[:, 0].argmax(dim=-1)
     sample_prob[:, 0] = tmu.batch_index_select(p, sample_rev[:, 0]).flatten()
@@ -629,7 +615,6 @@ def rsample(self, transition_potentials, emission_potentials, seq_lens,
     return ret
 
 
-
 class HMM(nn.Module):
     """Implementation of Hidden Markov Model with forward algorithm and 
     backward sampling."""
@@ -654,6 +639,21 @@ class HMM(nn.Module):
         num_state = emission.size(2)
         log_potentials = transition.view(1, num_state, num_state).expand(batch_size, num_state, num_state)
         return log_potentials
+
+
+    def forward_sum_phasing(self, transition_potentials, emission_potentials, seq_lens):
+        # max phasings for nodes 
+        # n nodes 
+        # positions are the number of nodes (# layers in NN)
+        # max number of phasings for the nodes (e.g. k + m)
+        num_state_node = 4
+        positions = 7
+        alpha = torch.zeros(positions, num_state_node).to(emission_potentials.device)
+        alpha[0, :] = emission_potentials[0, 0, :]
+        for t in range(1, positions):
+            # Compute alpha_t for each time step
+            alpha[t, :] = torch.logsumexp(alpha[t - 1, :].unsqueeze(2) + transition_potentials, dim=1) + emission_potentials[:, t, :]
+
 
     def forward_sum(self, transition_potentials, emission_potentials, seq_lens):
         """Forward algorithm for HMM to compute log probability."""
@@ -703,14 +703,14 @@ num_states = 2
 seq_len = 10
 batch_size = 1
 
-# Random transition potentials: size=[num_states, num_states]
-transition_potentials = torch.randn(num_states, num_states)
+# # Random transition potentials: size=[num_states, num_states]
+# transition_potentials = torch.randn(num_states, num_states)
 
-# Random emission potentials: size=[batch_size, seq_len, num_states]
-emission_potentials = torch.randn(batch_size, seq_len, num_states)
+# # Random emission potentials: size=[batch_size, seq_len, num_states]
+# emission_potentials = torch.randn(batch_size, seq_len, num_states)
 
-# Random sequence lengths (between 1 and seq_len)
-seq_lens = torch.randint(1, seq_len + 1, (batch_size,))
+# # Random sequence lengths (between 1 and seq_len)
+# seq_lens = torch.randint(1, seq_len + 1, (batch_size,))
 
 
 
@@ -724,7 +724,14 @@ emission_prob_matrix_new = np.expand_dims(emission_prob_matrix, axis=0)
 
 
 emission_potentials = torch.tensor(emission_prob_matrix_new, dtype=torch.float32)
+
+
 # emission_prob_tensor = torch.tensor(emission_prob_matrix).unsqueeze(0)
+
+
+
+
+
 
 seq_lens = 10
 
@@ -743,59 +750,50 @@ for rr in range(10):
 # print("Sampled sequences from FFBS:")
 # print(samples)
 
+# import numpy as np
 
-
-
-
-
-
-
-
-
-import numpy as np
-
-def forward_sampling(transition_probs, initial_probs, T):
-    """
-    Perform forward sampling to generate a sequence of hidden states.
+# def forward_sampling(transition_probs, initial_probs, T):
+#     """
+#     Perform forward sampling to generate a sequence of hidden states.
     
-    Parameters:
-    - transition_probs: (N, N) transition matrix, where N is the number of hidden states.
-    - initial_probs: (N,) initial state distribution.
-    - T: Length of the sequence to sample.
+#     Parameters:
+#     - transition_probs: (N, N) transition matrix, where N is the number of hidden states.
+#     - initial_probs: (N,) initial state distribution.
+#     - T: Length of the sequence to sample.
     
-    Returns:
-    - hidden_states: (T,) array of sampled hidden states.
-    """
-    N = transition_probs.shape[0]
-    hidden_states = np.zeros(T, dtype=int)
+#     Returns:
+#     - hidden_states: (T,) array of sampled hidden states.
+#     """
+#     N = transition_probs.shape[0]
+#     hidden_states = np.zeros(T, dtype=int)
 
-    # Step 1: Sample the first hidden state from the initial distribution
-    hidden_states[0] = np.random.choice(N, p=initial_probs)
+#     # Step 1: Sample the first hidden state from the initial distribution
+#     hidden_states[0] = np.random.choice(N, p=initial_probs)
 
-    # Step 2: Sample the remaining states based on the transition probabilities
-    for t in range(1, T):
-        previous_state = hidden_states[t - 1]
-        hidden_states[t] = np.random.choice(N, p=transition_probs[previous_state])
+#     # Step 2: Sample the remaining states based on the transition probabilities
+#     for t in range(1, T):
+#         previous_state = hidden_states[t - 1]
+#         hidden_states[t] = np.random.choice(N, p=transition_probs[previous_state])
     
-    return hidden_states
+#     return hidden_states
 
 
-def ffbs_hmm_sampling(transition_probs, initial_probs, T):
-    """
-    Perform FFBS to sample a sequence of hidden states from an HMM.
+# def ffbs_hmm_sampling(transition_probs, initial_probs, T):
+#     """
+#     Perform FFBS to sample a sequence of hidden states from an HMM.
     
-    Parameters:
-    - transition_probs: (N, N) transition matrix.
-    - initial_probs: (N,) initial state distribution.
-    - T: Length of the hidden state sequence to sample.
+#     Parameters:
+#     - transition_probs: (N, N) transition matrix.
+#     - initial_probs: (N,) initial state distribution.
+#     - T: Length of the hidden state sequence to sample.
     
-    Returns:
-    - sampled_states: (T,) array of sampled hidden states.
-    """
-    # Perform forward sampling to generate a hidden state sequence
-    sampled_states = forward_sampling(transition_probs, initial_probs, T)
+#     Returns:
+#     - sampled_states: (T,) array of sampled hidden states.
+#     """
+#     # Perform forward sampling to generate a hidden state sequence
+#     sampled_states = forward_sampling(transition_probs, initial_probs, T)
     
-    return sampled_states
+#     return sampled_states
 
 
 # Example usage

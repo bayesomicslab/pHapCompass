@@ -574,6 +574,8 @@ qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
 plot_graph(qg)    
 print('Chordal Graph constructed.')
 
+
+
 error_rate = 0.001
 k = 2
 m = 2
@@ -582,3 +584,5 @@ state_names, transition_matrix, emission_prob_matrix, emission_index_map = gener
 pi = np.array([1/2 , 1/2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
 T = 10
 ffbs_no_observations(transition_matrix, emission_prob_matrix, pi, T)
+
+

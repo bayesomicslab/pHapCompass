@@ -77,8 +77,11 @@ def main():
     plot_graph(qg)    
     print('Chordal Graph constructed.')
 
+
+
+
     error_rate = 0.001
-    state_names, transition_matrix, emission_prob_matrix, emission_index_map = generate_hmm_with_weights_and_emissions(qg, error_rate)
+    # state_names, transition_matrix, emission_prob_matrix, emission_index_map = generate_hmm_with_weights_and_emissions2(qg, error_rate)
 
 
     # for nn in qg.nodes(data=True):
