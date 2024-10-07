@@ -6,6 +6,10 @@ import os
 from utils.utils import wsl_available
 import shutil
 import gzip
+import vcfpy
+from cyvcf2 import VCF
+import numpy as np
+
 
 class InputHandler:
 
@@ -32,18 +36,27 @@ class InputHandler:
         al = set(list(range(self.ploidy)))
         return al
     
+    # def parse_genotype(self):
+    #     with open(self.genotype_path, 'r') as f:
+    #         genotype = f.readlines()
+    #     genotype = genotype[0]
+    #     return genotype
+    
     def parse_genotype(self):
-        with open(self.genotype_path, 'r') as f:
-            genotype = f.readlines()
-        genotype = genotype[0]
+        gen_df = pd.read_csv(self.genotype_path, sep='\t', names=[str(i) for i in range(self.ploidy)]).reset_index(drop=True)
+        # gen_df = pd.read_csv(hap_ref_path, sep='\t', names=[str(i) for i in range(3)]).reset_index(drop=True)
+        gen_np = np.sum(gen_df.to_numpy(), axis=1)
+        genotype = ''.join([str(g) for g in list(gen_np)])
         return genotype
+    
+
     
     def get_genotype_positions(self, positions):
         return ''.join([self.genotype[p] for p in positions])
+    
 
     def bam2fragmentfile(self):
         # self.vcf_df = self.load_vcf(self.vcf_path)
-        
         self.data_path = self.convertBAM(self.bam_path, self.vcf_path, self.output_path, self.root_dir)
         # self.G, self.fragments = loadFragments(self.data_path, self.vcf_df, self.ploidy)
         return self.data_path
@@ -52,23 +65,24 @@ class InputHandler:
         # Implement input validation logic
         pass
 
-    def load_vcf(self, vcf_filename):
+    
+    def loadVCF(self, vcf_filename):
         '''
-        credit: Derek Aguiar
         Loads in a fragment file created by extract-poly
         :param vcf_filename: The file path to the VCF file
         :return:
         '''
         data = []
         csq_fields = ["impact", "aa.pos", "aa.mut", "nuc.pos", "codon.change"]
-            
-        # TODO: test this code on various VCF inputs (multiallelic, insertions, deletions, multiple samples)
-        for rec in VCF(vcf_filename):
+        # vcf_reader = vcf.Reader(open(vcf_filename))
+        # vcf_reader = vcfpy.Reader.from_path(vcf_filename)
+        regex = re.compile("/|\|")
+        for rec in VCF(vcf_filename): # or VCF('some.bcf')
             t = {}
             t["POS"] = rec.POS
             t["REF"] = rec.REF
             t["ALT"] = rec.ALT[0]  # Since VCF has only 1 ALT per position
-            for k, v in rec.INFO:
+            for k, v in rec.INFO.items():
                 if k == "CSQ":
                     for i, j in zip(v[0].split("|"), csq_fields):
                         if ".pos" in j:
@@ -76,23 +90,16 @@ class InputHandler:
                         t["INFO.CSQ." + j] = i
                 else:
                     t["INFO." + k] = v
-            for f in rec.FORMAT:
-                if f == "GT":
-                    for geno in rec.genotypes:
-                        assert geno[-1]==False # assumes unphased TODO: allow for phased inputs
-                        for idx, gt in enumerate(geno[:-1]):
-                            t["GT" + str(idx)] = int(gt) 
-                else:
-                    if len(rec.format(f)) ==1:
-                        t[f] = rec.format(f)[0]
+            for s in rec.samples:
+                for f in rec.FORMAT.split(":"):
+                    if f == "GT":
+                        # assumes unphased TODO: allow for phased inputs
+                        for idx, gt in enumerate(regex.split(s[f])):
+                            t["GT" + str(idx)] = int(gt)
                     else:
-                        for idx,sample_val in enumerate(rec.format(f)):
-                            t["s." + f + "."  + str(idx)] = sample_val
-        
+                        t["s." + f] = s[f]
             data.append(t)
-    
         return pd.DataFrame(data)
-
 
 
     def convertBAM(self, bam_filename, vcf_filename, output_dir, root_dir):
@@ -114,18 +121,17 @@ class InputHandler:
             root_dir = subprocess.check_output(["wsl", "wslpath", "-a", root_dir]).strip().decode()
             out_filename = subprocess.check_output(["wsl", "wslpath", "-a", out_filename]).strip().decode()
             command = [prefix, os.path.join("extract-poly-src/build/extractHAIRS"), "--bam", bam_filename,
-                   "--vcf", vcf_filename, "--out", out_filename]
+                    "--vcf", vcf_filename, "--out", out_filename]
         else:
             command = ['/home/mok23003/BML/extract_poly/build/extractHAIRS', "--bam", bam_filename,
-                   "--vcf", vcf_filename, "--out", out_filename]
+                    "--vcf", vcf_filename, "--out", out_filename]
             
-        print('root_dir:', root_dir)
-        print('prefix:', prefix)
+        # print('root_dir:', root_dir)
+        # print('prefix:', prefix)
         print('out_filename:', out_filename)
-        print('bam_filename:', bam_filename)
-        print('vcf_filename:', vcf_filename)
-        
-        print("Executing command:", ' '.join(command))
+        # print('bam_filename:', bam_filename)
+        # print('vcf_filename:', vcf_filename)
+        # print("Executing command:", ' '.join(command))
         subprocess.check_call(command)
 
         try:
@@ -138,22 +144,17 @@ class InputHandler:
 
         if wsl_available():
             out_filename = subprocess.check_output(["wsl", "wslpath", "-a", "-w", out_filename]).strip().decode()
-    
+
         return out_filename
 
 
-    def read_vcf_file(self):
-        def get_vcf_names(vcf_path):
-            with gzip.open(vcf_path, "rt") as ifile:
-                  for line in ifile:
+    def read_vcf_file(self, vcf_path):
+        with gzip.open(vcf_path, "rt") as ifile:
+                for line in ifile:
                     if line.startswith("#CHROM"):
-                          vcf_names = [x for x in line.split('\n')[0].split('\t')]
-                          break
-            ifile.close()
-            return vcf_names
+                        vcf_names = [x for x in line.split('\n')[0].split('\t')]
+                        break
+        ifile.close()
+        return vcf_names
 
-        names = get_vcf_names(self.vcf_path)
-        df = pd.read_csv(self.vcf_path, compression='gzip', comment='#', chunksize=10000, delim_whitespace=True,
-                         header=None, names=names)
-        return df
-
+    

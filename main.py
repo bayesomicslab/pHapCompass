@@ -39,9 +39,9 @@ def main():
     class Args:
         def __init__(self):
             self.vcf_path = 'example/62_ID0.vcf'
-            self.data_path = 'example/test.txt'
+            self.data_path = '/home/mok23003/BML/HaplOrbit/example/Contig1_k3/c2/ART_0.frag.txt'
             self.bam_path = 'example/example.bam'
-            self.genotype_path = 'example/genotype.txt'
+            self.genotype_path = '/home/mok23003/BML/HaplOrbit/example/Contig1_k3/real_haps_contig1_k3.txt'
             self.ploidy = 3
             self.error_rate = 0.001
             self.epsilon = 0.0001
@@ -51,8 +51,6 @@ def main():
 
     # Create the mock args object
     args = Args()
-
-
 
     # Initialize classes with parsed arguments
     input_handler = InputHandler(args)

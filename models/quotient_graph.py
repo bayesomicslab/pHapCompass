@@ -56,7 +56,6 @@ class QuotientGraph:
                             weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
                                                                                              list(range(len(indc))),
                                                                                              config.error_rate)
-                
                     entr = entropy(list(weights.values()), base=10)
                     output_graph.add_edge(ed[0], ed[1], weight=weights, entropy=entr)
         return output_graph

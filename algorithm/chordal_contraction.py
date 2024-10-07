@@ -333,6 +333,8 @@ def chordal_contraction_cycle_base(quotient_g, fragment_list, inpt_handler, conf
     return new_graph
 
 
+
+
 #
 # def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
 #     # plot_graph(quotient_g)

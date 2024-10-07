@@ -22,6 +22,7 @@ class FragmentGraph:
         # G = nk.Graph(vcf_df.shape[0], weighted=True, directed=False)
         graph = nx.Graph()
         fragment_list = []
+        # for fragment in open(self.data_path, 'r'):
         for fragment in open(self.data_path, 'r'):
             # print(fragment)
             # read index when there are pairs, readname, start pos (in variants), allele sequence, alleles
@@ -41,6 +42,7 @@ class FragmentGraph:
     
         return graph, fragment_list
     
+
     def update_fragment_graph(self, graph, pos, alle, inp_hand, conf):
         n_allels = 2
         n_positions = 2
@@ -90,6 +92,7 @@ class FragmentGraph:
                         conf.global_likelihoods[n_positions][str_genotypes][wei][str_observation]
                         
         # return G
+
 
     def add_node(self, node):
         # Logic to add a node

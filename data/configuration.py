@@ -61,6 +61,7 @@ class Configuration:
     
         return global_phasings, global_likelihoods2
 
+
     def initialization(self):
         max_genotype = self.ploidy * max(list(self.alleles))
         all_genotypes = [str(gg) for gg in list(range(max_genotype + 1))]
