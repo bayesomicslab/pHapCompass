@@ -58,24 +58,35 @@ def main():
     config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
     
     fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
-    frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
+
+    # frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
+    # frag_graph, fragment_list = fragment_model.construct2(input_handler, config)
+    fragment_model.construct2(input_handler, config)
     
     # fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     # frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
 
-    plot_graph(frag_graph)
+    # plot_graph(frag_graph)
     print('Fragment Graph constructed.')
 
-    quotient_g = QuotientGraph(frag_graph).construct(fragment_list, input_handler, config)
+    # quotient_g = QuotientGraph(fragment_model.graph).construct(fragment_model.fragment_list, input_handler, config)
+    quotient_g = QuotientGraph(fragment_model)
     plot_graph(quotient_g)
     print('Quotient Graph constructed.')
 
-    # qg = chordal_contraction_cycle_base(quotient_g, fragment_list, input_handler, config)
-    qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
+    import pickle
+    with open("/home/mok23003/BML/HaplOrbit/example/quotient_g.pkl", "wb") as f:
+        pickle.dump(quotient_g, f)
+
+
+    with open("/home/mok23003/BML/HaplOrbit/example/quotient_g.pkl", "rb") as f:
+        qqgg = pickle.load(f)
+
+
+    qg = chordal_contraction_cycle_base(quotient_g, fragment_list, input_handler, config)
+    # qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
     plot_graph(qg)    
     print('Chordal Graph constructed.')
-
-
 
 
     error_rate = 0.001
