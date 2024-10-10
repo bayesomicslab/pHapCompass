@@ -385,3 +385,7 @@ def nk2nx_simple(graphnk):
     tempnx.add_edges_from(edges)
     return tempnx
 
+
+def convert_to_int_list(s):
+    """Function to convert a string like '5-12' to a list of integers [5, 12]"""
+    return [int(x) for x in s.split('-')]

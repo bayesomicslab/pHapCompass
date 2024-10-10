@@ -6,6 +6,8 @@ from scipy.stats import entropy
 import random
 import networkx as nx
 import time
+import graph_tool.all as gt
+
 
 
 def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):

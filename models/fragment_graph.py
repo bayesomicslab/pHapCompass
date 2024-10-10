@@ -85,9 +85,14 @@ class FragmentGraph:
                 self.update_fragment_graph2(positions, alleles, inp_hand, conf)
                 self.fragment_list.append(positions)
                 self.fragment_list.append(alleles)
-
+                
+        self.graph.ep['e_weights'] = self.e_weights
+        self.graph.ep['e_label'] = self.e_label
+        self.graph.vp['e_weights'] = self.v_weights
+        self.graph.vp['v_label'] = self.v_label
         # print_graph(graph, v_label, v_weights, e_label, e_weights)
         # return graph, fragment_list
+
 
 
 
@@ -221,8 +226,6 @@ class FragmentGraph:
                         # conf.global_likelihoods[n_positions][str_genotypes][wei][str_observation]
                         
         # return G
-
-
 
 
     def add_node(self, node):

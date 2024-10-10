@@ -71,6 +71,7 @@ def main():
 
     # quotient_g = QuotientGraph(fragment_model.graph).construct(fragment_model.fragment_list, input_handler, config)
     quotient_g = QuotientGraph(fragment_model)
+    quotient_g.construct3(input_handler, config)
     plot_graph(quotient_g)
     print('Quotient Graph constructed.')
 
@@ -84,6 +85,7 @@ def main():
 
 
     qg = chordal_contraction_cycle_base(quotient_g, fragment_list, input_handler, config)
+    
     # qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
     plot_graph(qg)    
     print('Chordal Graph constructed.')
