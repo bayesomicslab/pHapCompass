@@ -50,6 +50,7 @@ coverage.xml
 .hypothesis/
 .pytest_cache/
 cover/
+survey_outputs.ipynb
 
 # Translations
 *.mo

@@ -168,6 +168,16 @@ def graph_coloring():
     plt.show()
     return color_dict
 
+def torch_test():
+    available = t.cuda.is_available()
+    count = t.cuda.device_count()
+    curr = t.cuda.current_device()
+    name = t.cuda.get_device_name(curr)
+    print(f"Cuda is available: {available}")
+    print(f"Device count: {count}")
+    print(f"Current device: {name}")
+    return
+
 if __name__ == "__main__":
-    print(graph_coloring())
+    example_2()
     print("done")
