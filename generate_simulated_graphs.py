@@ -17,7 +17,8 @@ from multiprocessing import Pool
 
 def generate_quotient_graph_make_input():
     inputs = []
-    contigs = ['Contig1_k3']
+    contigs = ['Contig1_k3', 'Contig2_k3', 'Contig3_k3']
+    # contigs = ['Contig2_k3']
     simulated_data_path = '/home/mok23003/BML/HaplOrbit/simulated_data'
     graph_path = '/home/mok23003/BML/HaplOrbit/simulated_data_graphs/'
     for cont in contigs:
@@ -28,25 +29,39 @@ def generate_quotient_graph_make_input():
             this_fragment_coverage_path = os.path.join(graph_path, 'fragment_graphs', cont, coverage)
             this_quotient_coverage_path = os.path.join(graph_path, 'quotient_graphs', cont, coverage)
             this_reverse_maps_path = os.path.join(graph_path, 'reverse_maps', cont, coverage)
-
+            
             if not os.path.exists(this_quotient_coverage_path):
                 os.makedirs(this_quotient_coverage_path)
             if not os.path.exists(this_fragment_coverage_path):
                 os.makedirs(this_fragment_coverage_path)
             if not os.path.exists(this_reverse_maps_path):
                 os.makedirs(this_reverse_maps_path)
+            contig_num = int(cont.split('_')[0].split('Contig')[1])
+            ploidy = int(cont.split('_')[1].split('k')[1])
+            genotype_path = os.path.join(simulated_data_path, cont, 'real_haps_contig' + str(contig_num) + '_k' + str(ploidy) +'.txt')
+
+            existing_files_qg_e = [ff for ff in os.listdir(os.path.join(this_reverse_maps_path)) if 'qg_e_label' in ff]
+            existing_files_qg_v = [ff for ff in os.listdir(os.path.join(this_reverse_maps_path)) if 'qg_v_label' in ff]
+            existing_files_fg_e = [ff for ff in os.listdir(os.path.join(this_reverse_maps_path)) if 'fg_e_label' in ff]
+            existing_files_fg_v = [ff for ff in os.listdir(os.path.join(this_reverse_maps_path)) if 'fg_v_label' in ff]
+            existing_fg = [ff for ff in os.listdir(this_fragment_coverage_path) if '.gt.gz' in ff]
+            existing_qg = [ff for ff in os.listdir(this_quotient_coverage_path) if '.gt.gz' in ff]
+
 
             frag_files = [f for f in os.listdir(this_frag_path) if '.frag.txt' in f]
-        
+
             for frag_file in frag_files:
-                # frag_file_path = os.path.join(this_frag_path, frag_file)
-                inputs.append([this_frag_path, this_fragment_coverage_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file])
+                filename = frag_file.split('.')[0]
+                if 'qg_e_label_' + filename + '.pkl' not in existing_files_qg_e or 'qg_v_label_' + filename + '.pkl' not in existing_files_qg_v or \
+                'fg_e_label_' + filename + '.pkl' not in existing_files_fg_e or 'fg_v_label_' + filename + '.pkl' not in existing_files_fg_v or \
+                filename + '.gt.gz' not in existing_fg or filename + '.gt.gz' not in existing_qg:
+                    inputs.append([this_frag_path, this_fragment_coverage_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path])
 
     return inputs
 
 
 def generate_quotient_graph(inp):
-    this_frag_path, this_fragment_coverage_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file = inp
+    this_frag_path, this_fragment_coverage_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path = inp
     file_name = frag_file.split('.')[0]
     print('Working on', os.path.join(this_frag_path, frag_file))
     fragment_v_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_v_label_' + file_name + '.pkl')
@@ -59,9 +74,10 @@ def generate_quotient_graph(inp):
         def __init__(self):
             self.vcf_path = 'example/62_ID0.vcf'
             self.data_path = os.path.join(this_frag_path, frag_file)
+            # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
             self.bam_path = 'example/example.bam'
-            self.genotype_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/real_haps_contig1_k3.txt'
-            self.ploidy = 3
+            self.genotype_path = genotype_path
+            self.ploidy = ploidy
             self.error_rate = 0.001
             self.epsilon = 0.0001
             self.output_path = 'output'
@@ -113,10 +129,16 @@ def generate_quotient_graph(inp):
     print('[Done]', os.path.join(this_frag_path, frag_file))
 
 
+
+
+
+
 def generate_graphs():
     inputs = generate_quotient_graph_make_input()
     print('Number of inputs:', len(inputs))
-    pool = Pool(10)
+    # for inp in inputs:
+    #     generate_quotient_graph(inp)
+    pool = Pool(30)
     pool.map(generate_quotient_graph, inputs)
 
 

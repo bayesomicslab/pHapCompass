@@ -82,3 +82,35 @@ sampled_states_over_epochs = train_hmm_ffbs(hmm, observations)
 # Print the sampled states for the first few epochs
 for epoch, states in enumerate(sampled_states_over_epochs[:5]):
     print(f'Epoch {epoch + 1}, Sampled States: {states}')
+
+
+
+
+
+def combine_potentials(self, transition, emission):
+    """Mix the transition and emission scores
+
+    Args:
+      transition: 
+      emission_potentials: torch.Tensor(float), 
+        size=[batch, max_len, num_state]
+
+    Returns:
+      scores: size=[batch, len, num_state, num_state]
+        scores := log phi(batch, x_t, y_{t-1}, y_t)
+    """
+    batch_size = emission.size(0)
+    seq_len = emission.size(1)
+    num_state = emission.size(2)
+
+    # scores[batch, t, C, C] = log_potential(t, from y_{t-1}, to y_t)
+    if(len(transition.size()) == 2):
+      log_potentials = transition.view(1, 1, num_state, num_state)\
+        .expand(batch_size, seq_len, num_state, num_state) + \
+        emission.view(batch_size, seq_len, 1, num_state)\
+        .expand(batch_size, seq_len, num_state, num_state)
+    else: 
+      log_potentials = transition + \
+        emission.view(batch_size, seq_len, 1, num_state)\
+        .expand(batch_size, seq_len, num_state, num_state)
+    return log_potentials

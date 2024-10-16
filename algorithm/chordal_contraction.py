@@ -237,6 +237,60 @@ def get_cycles_basis_info(G):
     return cycle_basis_orig, index_to_cycles, edge_to_cycles, forbidden_edges
 
 
+def get_cycles_basis_info_graph_tool(non_mst_graph, mst_graph, quotient_graph):
+    cycle_basis_edges = []
+    for e in non_mst_graph.edges():
+        
+        cycle = find_cycle(mst_graph, quotient_graph, e)
+        cycle_basis_edges.append(cycle)
+    
+    ready_cycles = [cyc for cyc in cycle_basis_edges if len(cyc) <= 3]
+    ready_edges = [[e for e in cyb] for cyb in ready_cycles]
+    forbidden_edges = [x for xs in ready_edges for x in xs]
+
+    cycles_edges = [[e for e in cyb] for cyb in cycle_basis_edges]
+    index_to_cycles = {i: cycle for i, cycle in enumerate(cycles_edges)}
+    edge_to_cycles = {e: [] for e in quotient_graph.edges()}
+    for cycle_index, cycle in index_to_cycles.items():
+        [edge_to_cycles[ed].append(cycle_index) for ed in cycle]
+    return cycle_basis_edges, index_to_cycles, edge_to_cycles, forbidden_edges
+
+
+
+def find_cycle(mst_graph, quotient_graph, e):
+    """Finds a cycle in the graph after adding the given edge to the spanning tree"""
+    # Add the edge to the MST
+    source, target = int(e.source()), int(e.target())
+    # mst_tree = gt.Graph(gt.GraphView(graph, efilt=mst_view))
+    # Traverse the tree to find the path between source and target (forming a cycle)
+    # mst_tree = gt.shortest_path(mst_view, graph.vertex(source), graph.vertex(target))[0]
+
+    tree_graph = gt.Graph(mst_graph)
+
+    half_cyc = gt.shortest_path(tree_graph, quotient_graph.vertex(source), quotient_graph.vertex(target))[1]
+    
+    # The cycle is the path from source to target in the MST + the edge being added
+    cycle =half_cyc + [e]
+    return cycle
+
+
+
+
+def get_minimum_spanning_tree(quotient_graph):
+    quotient_graph.clear_filters()
+    e_entropy = quotient_graph.new_edge_property("double")
+    for e in quotient_graph.edges():
+        e_entropy[e] = quotient_graph.ep['e_weights'][e]['entropy']
+    quotient_graph.ep['e_entropy'] = e_entropy
+    tree = gt.min_spanning_tree(quotient_graph, weights=e_entropy)
+    
+    mst_graph = gt.GraphView(quotient_graph, efilt=tree)
+    non_mst_graph = gt.GraphView(quotient_graph, efilt=lambda e: not tree[e])
+
+
+    return mst_graph, non_mst_graph, tree
+
+
 def get_edge_name(a, b):
     mi = min(a, b)
     ma = max(a, b)
@@ -335,35 +389,3 @@ def chordal_contraction_cycle_base(quotient_g, fragment_list, inpt_handler, conf
     return new_graph
 
 
-
-
-#
-# def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
-#     # plot_graph(quotient_g)
-#     qg = quotient_g.copy()
-#     while not nx.is_chordal(qg):
-#         cliques_larger_than_2 = [cli for cli in nx.find_cliques(qg) if len(cli) > 2]
-#
-#         non_candicate_edges = []
-#         for cli in cliques_larger_than_2:
-#             non_candicate_edges += sorted(list(itertools.combinations(sorted(cli), 2)))
-#         non_candicate_edges = list(set(non_candicate_edges))
-#         # nx.is_chordal(quotient_g)
-#         # cycles = nx.chordless_cycles(quotient_g)
-#         candidate_edges = [edg for edg in list(qg.edges()) if edg not in non_candicate_edges]
-#         entropies = np.array([qg[edg[0]][edg[1]]['entropy'] for edg in candidate_edges])
-#         entropies[np.isnan(entropies)] = 0
-#         rev_entropies = [1 - e if 1 > e else 0 for e in entropies]
-#         if np.sum(rev_entropies) == 0:
-#             for ent_id in range(len(rev_entropies)):
-#                 rev_entropies[ent_id] = 1 / len(rev_entropies)
-#         picked_edge = random.choices(candidate_edges, weights=rev_entropies, k=1)
-#         picked_edge = [picked_edge[0][0], picked_edge[0][1]]
-#         if picked_edge in [list(edg) for edg in list(qg.edges())]:
-#             qg = contract_one_edge(qg, picked_edge, inpt_handler, config, fragment_list)
-#         else:
-#             print(f"edge {picked_edge} not in graph")
-#     # plot_graph(qg)
-#
-#     return qg
-#

@@ -35,41 +35,6 @@ def sort_tuples_by_number(tuples):
     return sorted_tuples
 
 
-def find_matchings(nodes_part1, nodes_part2):
-    # Sort both parts and remember the original indices.
-    sorted_part1 = sorted(enumerate(nodes_part1), key=lambda x: x[1])
-    sorted_part2 = sorted(enumerate(nodes_part2), key=lambda x: x[1])
-    
-    # Split nodes by type and collect their original indices.
-    def split_by_type(sorted_nodes):
-        grouped = {}
-        for idx, t in sorted_nodes:
-            if t not in grouped:
-                grouped[t] = []
-            grouped[t].append(idx)
-        return grouped
-    
-    grouped_part1 = split_by_type(sorted_part1)
-    grouped_part2 = split_by_type(sorted_part2)
-    if grouped_part1.keys() != grouped_part2.keys():
-        return []
-    if any([len((grouped_part1[i])) != len((grouped_part2[i])) for i in grouped_part1.keys()]):
-        return []
-    # Start with a single empty matching.
-    matchings = [[]]
-    for node_type, indices1 in grouped_part1.items():
-        indices2 = grouped_part2[node_type]
-        
-        # For each current matching, extend it with all possible permutations for the current type.
-        new_matchings = []
-        for perm in itertools.permutations(indices2, len(indices2)):
-            for current_matching in matchings:
-                # Add new matching to the results only if it doesn't conflict with the current matching.
-                if all((i1, i2) not in current_matching for i1, i2 in zip(indices1, perm)):
-                    new_matchings.append(current_matching + list(zip(indices1, perm)))
-        matchings = new_matchings
-    
-    return matchings
 
 
 def str_2_phas_1(phasing, ploidy):
@@ -80,40 +45,8 @@ def phas_2_str(phas):
     return ''.join([str(ph) for ph in list(np.ravel(phas))])
 
 
-def find_phasings_matches(ff, sf, common_ff, common_sf):
-    templates = []
-    all_local = find_matchings(list(ff[:, -1]), list(sf[:, 0]))
-    for al in all_local:
-        ff_ordering = [ii[0] for ii in al]
-        sf_ordering = [ii[1] for ii in al]
-        assert any(ff[ff_ordering, common_ff] == sf[sf_ordering, common_sf])
-        temp = np.hstack([ff[ff_ordering, :], sf[sf_ordering, 1:]])
-        byte_set = {a.tobytes() for a in templates}
-        if temp.tobytes() not in byte_set:
-            templates.append(temp)
-    return templates
 
 
-def find_common_element_and_index(node1, node2):
-    # Split the node names into components (e.g., '1-2' -> ['1', '2'])
-    node1_parts = node1.split('-')
-    node2_parts = node2.split('-')
-    
-    # Find the common element between node1 and node2
-    common_element = None
-    for part in node1_parts:
-        if part in node2_parts:
-            common_element = part
-            break
-    
-    if common_element is None:
-        raise ValueError(f"No common element found between {node1} and {node2}")
-    
-    # Find the index of the common element in both nodes
-    common_ff = node1_parts.index(common_element)
-    common_sf = node2_parts.index(common_element)
-    
-    return common_ff, common_sf
 
 
 def permute_rows(a):

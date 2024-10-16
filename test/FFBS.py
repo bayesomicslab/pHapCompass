@@ -54,7 +54,7 @@ def phas_2_str(phas):
 
 def find_phasings_matches(ff, sf, common_ff, common_sf):
     templates = []
-    all_local = find_matchings(list(ff[:, -1]), list(sf[:, 0]))
+    all_local = find_matchings(list(ff[:, common_ff]), list(sf[:, common_sf]))
     for al in all_local:
         ff_ordering = [ii[0] for ii in al]
         sf_ordering = [ii[1] for ii in al]

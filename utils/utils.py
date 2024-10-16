@@ -7,6 +7,8 @@ import subprocess
 import shutil
 import pandas as pd
 # import networkit as nk
+import pickle
+import graph_tool.all as gt
 
 
 def get_matching_reads_for_positions(pos, fragment_list):
@@ -372,7 +374,7 @@ def networkit_find_cliques(graphnk):
 #         visited[node] = True  # Ensure each cycle is only found once
 #     return cycles
 #
-def find_simple_cycles2(graph):
+def find_simple_cycles2(graphnk):
     edges = list(graphnk.iterEdges())
     nodes = list(graphnk.iterNodes())
     tempnx = nx.Graph()
@@ -389,3 +391,155 @@ def nk2nx_simple(graphnk):
 def convert_to_int_list(s):
     """Function to convert a string like '5-12' to a list of integers [5, 12]"""
     return [int(x) for x in s.split('-')]
+
+
+def read_fragment_graph(main_path, contig, coverage, frag_file):
+    fragment_graph_path = os.path.join(main_path, 'fragment_graphs', contig, coverage)
+    reversed_map_path = os.path.join(main_path, 'reverse_maps', contig, coverage)
+
+    file_name = frag_file.split('.')[0]
+
+    frag_graph_path = os.path.join(fragment_graph_path, file_name + '.gt.gz')
+
+    fragment_v_label_revered_path = os.path.join(reversed_map_path, 'fg_v_label_' + file_name + '.pkl')
+    fragment_e_label_revered_path = os.path.join(reversed_map_path, 'fg_e_label_' + file_name + '.pkl')
+
+    with open(fragment_v_label_revered_path, "rb") as f:
+        v_label_reversed = pickle.load(f)
+
+    with open(fragment_e_label_revered_path, "rb") as f:
+        e_label_reversed = pickle.load(f)
+    
+    g_loaded = gt.load_graph(frag_graph_path)
+    return g_loaded, v_label_reversed, e_label_reversed
+
+
+def read_quotient_graph(main_path, contig, coverage, frag_file):
+    quotient_graph_path = os.path.join(main_path, 'quotient_graphs', contig, coverage)
+    reversed_map_path = os.path.join(main_path, 'reverse_maps', contig, coverage)
+
+    file_name = frag_file.split('.')[0]
+
+    quotient_v_label_revered_path = os.path.join(reversed_map_path, 'qg_v_label_' + file_name + '.pkl')
+    quotient_e_label_revered_path = os.path.join(reversed_map_path, 'qg_e_label_' + file_name + '.pkl')
+
+    quot_graph_path = os.path.join(quotient_graph_path, file_name + '.gt.gz')
+
+    with open(quotient_v_label_revered_path, "rb") as f:
+        v_label_reversed = pickle.load(f)
+
+    with open(quotient_e_label_revered_path, "rb") as f:
+        e_label_reversed = pickle.load(f)
+
+    g_loaded = gt.load_graph(quot_graph_path)
+    return g_loaded, v_label_reversed, e_label_reversed
+
+
+
+def find_common_element_and_index(node1, node2):
+    # Split the node names into components (e.g., '1-2' -> ['1', '2'])
+    node1_parts = node1.split('-')
+    node2_parts = node2.split('-')
+    
+    # Find the common element between node1 and node2
+    common_element = None
+    for part in node1_parts:
+        if part in node2_parts:
+            common_element = part
+            break
+    
+    if common_element is None:
+        raise ValueError(f"No common element found between {node1} and {node2}")
+    
+    # Find the index of the common element in both nodes
+    common_ff = node1_parts.index(common_element)
+    common_sf = node2_parts.index(common_element)
+    
+    return common_ff, common_sf
+
+
+
+def find_phasings_matches(ff, sf, common_ff, common_sf, source_label, target_label):
+    # Correct
+    templates = []
+    all_local = find_matchings(list(ff[:, common_ff]), list(sf[:, common_sf]))
+    for al in all_local:
+        ff_ordering = [ii[0] for ii in al]
+        sf_ordering = [ii[1] for ii in al]
+        assert any(ff[ff_ordering, common_ff] == sf[sf_ordering, common_sf])
+        ordered_ff = ff[ff_ordering, :]
+        ordered_sf = sf[sf_ordering, :]
+        temp = hstack_with_order(ordered_ff, ordered_sf, source_label, target_label)
+
+        # temp = np.hstack([ff[ff_ordering, :], sf[sf_ordering, 1:]])
+        byte_set = {a.tobytes() for a in templates}
+        if temp.tobytes() not in byte_set:
+            templates.append(temp)
+    return templates
+
+def hstack_with_order(source_matrix, target_matrix, source_label, target_label):
+    """
+    Combines columns from source and target matrices based on the given labels.
+
+    Parameters:
+    - source_matrix: np.ndarray, source matrix with columns mapped by source_label
+    - target_matrix: np.ndarray, target matrix with columns mapped by target_label
+    - source_label: str, label with numbers associated with source_matrix columns
+    - target_label: str, label with numbers associated with target_matrix columns
+
+    Returns:
+    - np.ndarray, combined matrix with columns arranged based on sorted unique labels
+    """
+
+    # Parse the labels and extract unique, sorted numbers
+    source_keys = list(map(int, source_label.split('-')))
+    target_keys = list(map(int, target_label.split('-')))
+    all_keys = sorted(set(source_keys + target_keys))
+
+    # Create dictionaries for source and target matrix columns
+    source_dict = {key: source_matrix[:, i] for i, key in enumerate(source_keys)}
+    target_dict = {key: target_matrix[:, i] for i, key in enumerate(target_keys)}
+
+    # Merge the two dictionaries: prefer source_dict values if keys overlap
+    combined_dict = {**target_dict, **source_dict}
+
+    # Retrieve the columns based on the sorted keys
+    combined_matrix = np.column_stack([combined_dict[key] for key in all_keys])
+
+    return combined_matrix
+
+def find_matchings(nodes_part1, nodes_part2):
+    # Sort both parts and remember the original indices.
+    sorted_part1 = sorted(enumerate(nodes_part1), key=lambda x: x[1])
+    sorted_part2 = sorted(enumerate(nodes_part2), key=lambda x: x[1])
+    
+    # Split nodes by type and collect their original indices.
+    def split_by_type(sorted_nodes):
+        grouped = {}
+        for idx, t in sorted_nodes:
+            if t not in grouped:
+                grouped[t] = []
+            grouped[t].append(idx)
+        return grouped
+    
+    grouped_part1 = split_by_type(sorted_part1)
+    grouped_part2 = split_by_type(sorted_part2)
+    if grouped_part1.keys() != grouped_part2.keys():
+        return []
+    if any([len((grouped_part1[i])) != len((grouped_part2[i])) for i in grouped_part1.keys()]):
+        return []
+    # Start with a single empty matching.
+    matchings = [[]]
+    for node_type, indices1 in grouped_part1.items():
+        indices2 = grouped_part2[node_type]
+        
+        # For each current matching, extend it with all possible permutations for the current type.
+        new_matchings = []
+        for perm in itertools.permutations(indices2, len(indices2)):
+            for current_matching in matchings:
+                # Add new matching to the results only if it doesn't conflict with the current matching.
+                if all((i1, i2) not in current_matching for i1, i2 in zip(indices1, perm)):
+                    new_matchings.append(current_matching + list(zip(indices1, perm)))
+        matchings = new_matchings
+    
+    return matchings
