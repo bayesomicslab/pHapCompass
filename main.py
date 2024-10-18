@@ -11,7 +11,7 @@ from models.factor_graph import Factorgraph
 from algorithm.chordal_contraction import chordal_contraction_cycle_base, chordal_contraction
 from utils.utils import *
 from algorithm.inference import *
-from chordal_contraction import *
+from algorithm.chordal_contraction import *
 # from test.FFBS import generate_hmm_with_weights_and_emissions
 
 
@@ -76,56 +76,38 @@ def main():
     print('Quotient Graph constructed.')
 
 
-    qg = chordal_contraction_cycle_base(quotient_g, fragment_list, input_handler, config)
-
-    # qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
-    plot_graph(qg)    
+    qg = chordal_contraction_graph_tool(quotient_graph, input_handler, config, fragment_model)
     print('Chordal Graph constructed.')
 
 
 
 
 
+class Args:
+    def __init__(self):
+        self.vcf_path = 'example/62_ID0.vcf'
+        self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_0.frag.txt'
+        self.bam_path = 'example/example.bam'
+        self.genotype_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/real_haps_contig1_k3.txt'
+        self.ploidy = 3
+        self.error_rate = 0.001
+        self.epsilon = 0.0001
+        self.output_path = 'output'
+        self.root_dir = 'D:/UCONN/HaplOrbit'
+        self.alleles = [0, 1]
 
-    error_rate = 0.001
-    # state_names, transition_matrix, emission_prob_matrix, emission_index_map = generate_hmm_with_weights_and_emissions2(qg, error_rate)
+# Create the mock args object
+args = Args()
 
+# Initialize classes with parsed arguments
+input_handler = InputHandler(args)
 
-    # for nn in qg.nodes(data=True):
-    #     print(nn)
-    # Save the graph in graph-tool binary format (preserves all properties)
-#     quotient_g.graph.save("/home/mok23003/BML/HaplOrbit/example/Contig1_k3/graphs/c2/ART_0_quotient.gt")
+config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
 
-#     # Save the graph in GraphML format (to preserve properties for external tools)
-#     quotient_g.graph.save("/home/mok23003/BML/HaplOrbit/example/Contig1_k3/graphs/c2/ART_0_quotient.graphml", fmt="xml")
-    
-#     v_label_loaded = g_loaded.vertex_properties["v_label"]  # Corrected name for vertex label
-#     e_weights_loaded = g_loaded.edge_properties["e_weights"]  # Corrected name for edge weights
-#     e_label_loaded = g_loaded.edge_properties["e_label"]  # Corrected name for edge label
-
-#     # Print the vertex labels
-#     print("Vertex Labels:")
-#     for v in g_loaded.vertices():
-#         print(f"Vertex {int(v)}: Label = {v_label_loaded[v]}")
-
-#     # Print the edge labels and weights
-#     print("\nEdge Labels and Weights:")
-#     for e in g_loaded.edges():
-#         print(f"Edge {int(e.source())} -> {int(e.target())}: Label = {e_label_loaded[e]}, Weight = {e_weights_loaded[e]}")
-
-
-def is_chordless(g, cycle_vertices):
-    n = len(cycle_vertices)
-    
-    # A cycle is chordless if there are no edges between non-adjacent vertices in the cycle
-    for i in range(n):
-        for j in range(i + 2, n):
-            # print(i, j)
-            if j != (i + 1) % n:  # Ensure we're not comparing consecutive vertices in the cycle
-                # Check if there is an edge between non-adjacent vertices in the cycle
-                if g.edge(cycle_vertices[i], cycle_vertices[j]) is not None:
-                    return False  # Found a chord, so it's not chordless
-    return True
+# frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
+# frag_graph, fragment_list = fragment_model.construct2(input_handler, config)
+fragment_model.construct2(input_handler, config)
 
 
 main_path = '/home/mok23003/BML/HaplOrbit/old_simulated_data_graphs'
@@ -137,267 +119,157 @@ frag_file = 'ART_0.frag.txt'
 
 quotient_graph, v_label_reversed, e_label_reversed = read_quotient_graph(main_path, contig, coverage, frag_file)
 
-new_graph = quotient_graph.copy()
-# simple_cycles = gt.all_circuits(new_graph)
-e_weights = new_graph.edge_properties["e_weights"]
-mst_graph, non_mst_graph, tree = get_minimum_spanning_tree(new_graph)
-# cycle_basis_edges = []
-for e in non_mst_graph.edges():
 
-    ep = new_graph.new_edge_property("bool")
-    ep.a = True
-    ep[e] = False
-    new_graph.set_edge_filter(ep)
-    half_cyc = gt.shortest_path(new_graph, e.source(), e.target())
-    cycle_e = half_cyc[1] + [e]
-    cycle_v = half_cyc[0]
+def chordal_contraction_graph_tool2(quotient_graph, input_handler, config, fragment_model):
+    new_graph = quotient_graph.copy()
+    e_weights = new_graph.edge_properties["e_weights"]
+    new_graph.clear_filters()
+    e_entropy = new_graph.new_edge_property("double")
 
+    # Loop over edges and assign entropy from the e_weights property
+    for e in new_graph.edges():
+        e_entropy[e] = e_weights[e]['entropy']
 
+    new_graph.ep['e_entropy'] = e_entropy
 
-    cycle_e, cycle_v = find_cycle(mst_graph, new_graph, e)
-    # cycle_basis_edges.append(cycle)
-    print(len(cycle_e)) 
+    chordless_cycles = get_chordless_cycles(new_graph)
 
-    if is_chordless(new_graph, cycle_v) or len(cycle_e) < 4:
-        print('Chordless')
+    to_be_removed_nodes = []
 
+    e_weights = new_graph.edge_properties["e_weights"]
+    e_entropy = new_graph.new_edge_property("double")
 
+    # Loop over edges and assign entropy from the e_weights property 
+    for e in new_graph.edges():
+        e_entropy[e] = e_weights[e]['entropy']
 
+    new_graph.ep['e_entropy'] = e_entropy
 
-edge_to_exclude = g.edge(1, 3)
-
-# Create an edge property map to filter edges
-ep = g.new_edge_property("bool")  # A boolean property map for edges
-
-# Set all edges to True (keep them)
-ep.a = True
-
-# Set the specific edge to False (exclude it)
-ep[edge_to_exclude] = False
-
-# Apply the edge filter to the graph
-g.set_edge_filter(ep)
-
-# Now the edge (1, 3) is excluded (but not deleted)
-
-# Example: Check the edges that remain in the graph
-g.set_edge_filter(None)
-
-
-
-
-
-
-
-
-
-
-
-
-adjacency = gt.adjacency(new_graph)
-dim = adjacency.shape[0]
-
-def chordless_cycles(adjacency, dim):
-    # Iterate over pairs of vertices (i, j)
-    for i in range(dim - 2):
-        for j in range(i + 1, dim - 1):
-            # Check if there is an edge between i and j
-            if adjacency[i][j] == 0:
-                continue
-
-            candidates = []  # Store potential cycles
-
-            # Explore vertices k > j to form cycles with (i, j)
-            for k in range(j + 1, dim):
-                if adjacency[i][k] == 0:
-                    continue
-
-                if adjacency[j][k] == 1:
-                    # Print the 3-cycle (i, j, k)
-                    print(f"{i + 1} {j + 1} {k + 1}")
-                    continue
-
-                # Store candidates for further exploration
-                candidates.append([j, i, k])
-
-            # Explore candidates for larger chordless cycles
-            while candidates:
-                v = candidates.pop(0)  # Get the current candidate cycle
-                k = v[-1]  # Last vertex in the candidate cycle
-
-                # Explore new vertices m to extend the cycle
-                for m in range(i + 1, dim):
-                    if m in v:
-                        continue  # Avoid duplicate vertices in the cycle
-                    if adjacency[m][k] == 0:
-                        continue  # Ensure m and k are connected
-
-                    # Check for a chord (an edge between any non-adjacent vertices)
-                    chord = False
-                    for n in range(1, len(v) - 1):
-                        if adjacency[m][v[n]] == 1:
-                            chord = True
-                            break
-
-                    if chord:
-                        continue  # Skip if a chord is found
-
-                    if adjacency[m][j] == 1:
-                        # Print the complete cycle
-                        print(" ".join(str(x + 1) for x in v) + f" {m + 1}")
-                        continue
-
-                    # Extend the current candidate cycle with vertex m
-                    new_cycle = v + [m]
-                    candidates.append(new_cycle)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-for cyc in simple_cycles:
-    print(len(cyc))    
-    if is_chordless(new_graph, cyc):
-        stop
-        sorted_edges = sorted(cyc, key=lambda e: e_weights[e]['entropy'])
-        contracting_edges = sorted_edges[:-3]
-        for ce in contracting_edges:
-            # print(e_weights[ce]['entropy'])
-            source_vertex = ce.source()
-            target_vertex = ce.target()
-
-            # Get all edges incident to the source and target vertices
-            incident_edges = set(source_vertex.all_edges()).union(set(target_vertex.all_edges()))
-
-            # Optionally, remove the original edge from the list
-            incident_edges.discard(ce)
-
-            for eee in incident_edges:
-                print(new_graph.edge_properties["e_label"][eee])
-                print(new_graph.vertex_properties["v_label"][target_vertex])
-
-
-
-            new_node_name = new_graph.edge_properties["e_label"][ce]
-
-            # new_node_name = '-'.join([str(nnn) for nnn in sorted(list(set([int(nn) for nn in \
-            # new_graph.vertex_properties["v_label"][source_vertex].split('-')] + \
-            # [int(nn) for nn in new_graph.vertex_properties["v_label"][target_vertex].split('-')])))])
-
-            ce_wei = new_graph.edge_properties["e_weights"][ce]
+    for cyc_id, cyc in enumerate(chordless_cycles):
+        print(cyc_id)
+        edges = [new_graph.edge(cyc[-1], cyc[0])]
+        for i in range(len(cyc) - 1):
+            edges += [new_graph.edge(cyc[i], cyc[i+1])]
+        edges = [x for x in edges if x is not None]
+        while len(edges) > 3:
+            min_edge = min(edges, key=lambda e: new_graph.ep['e_entropy'][e])
+            source_label = new_graph.vp['v_label'][min_edge.source()]
+            target_label = new_graph.vp['v_label'][min_edge.target()]
             
-            v1 = new_graph.add_vertex()
-            new_graph.vertex_properties["v_label"][v1] = new_node_name
-            new_graph.vertex_properties["e_weights"][v1] = ce_wei
+            # new node positions
+            poss = sorted(set([int(nn) for nn in source_label.split('-')] + [int(nn) for nn in target_label.split('-')]))
+            # new vertex properties:
+            new_vertex_name = '-'.join([str(nnn) for nnn in poss])
+            vertex_weights = new_graph.ep['e_weights'][min_edge]
             
-            for ie in list(incident_edges):
+            new_graph.vertex_properties["v_weights"][min_edge.source()] = vertex_weights
+            new_graph.vertex_properties["v_label"][min_edge.source()] = new_vertex_name
+
+            source_nbrs = [n for n in min_edge.source().all_neighbors() if n != min_edge.target()]
+            target_nbrs = [n for n in min_edge.target().all_neighbors() if n != min_edge.source()]
+            common_nbrs = set(source_nbrs).intersection(set(target_nbrs))
+
+            for n in common_nbrs:
+                v_label = new_graph.vertex_properties["v_label"][n]
+                e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+                print(len(e_poss))
+                new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+
+
+                poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
+                all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
+                matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
+                weights = {phas_2_str(phas): 0 for phas in all_phasings}
+                for phas in all_phasings:
+                    for indc, this_po, obs in matches:
+                        # print(indc, this_po, obs)
+                        # for obs in all_obs:
+                        #     obs_np = np.array([int(po) for po in obs])
+                        #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
+                        weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+                                                                                            list(range(len(indc))),
+                                                                                            config.error_rate)
+                entr = entropy(list(weights.values()), base=10)
+                # weight =  {"weight": weights, "entropy": entr}
+
+                # update the weights on the source and 
+                # e_weights[edge] = {"weight": weights, "entropy": entr}
+                e1 = new_graph.edge(min_edge.source(), n)
+                e2 = new_graph.edge(min_edge.target(), n)
                 
-                neighbor = list(set([ie.source(), ie.target()]) - set([source_vertex, target_vertex]))[0]
-                neighbor_label = new_graph.vertex_properties["v_label"][neighbor]
-                poss = sorted(set([int(nn) for nn in new_node_name.split('-')] + [int(nn) for nn in neighbor_label.split('-')]))
+                new_graph.edge_properties["e_weights"][e1] = {"weight": weights, "entropy": entr}
+                new_graph.edge_properties["e_label"][e1] = new_edge_name
+                new_graph.edge_properties['e_entropy'][e1] = entr
+                new_graph.remove_edge(e2)
+
+            for n in set(source_nbrs)-common_nbrs:
+                v_label = new_graph.vertex_properties["v_label"][n]
+                e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+                print(len(e_poss))
+                new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+                poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
+                all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
+                matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
+                weights = {phas_2_str(phas): 0 for phas in all_phasings}
+                for phas in all_phasings:
+                    for indc, this_po, obs in matches:
+                        # print(indc, this_po, obs)
+                        # for obs in all_obs:
+                        #     obs_np = np.array([int(po) for po in obs])
+                        #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
+                        weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+                                                                                            list(range(len(indc))),
+                                                                                            config.error_rate)
+                entr = entropy(list(weights.values()), base=10)
 
 
-
-
-
-
-for c_id, ccyc in index_to_cycles.items():
-    for ccc in ccyc:
-        print(new_graph.edge_properties["e_label"][ccc])
-
-    if len(ccyc) > 3:
-        sorted_edges = sorted(ccyc, key=lambda e: e_weights[e]['entropy'])
-        contracting_edges = sorted_edges[:-3]
-        for ce in contracting_edges:
-            # print(e_weights[ce]['entropy'])
-            source_vertex = ce.source()
-            target_vertex = ce.target()
-
-            # Get all edges incident to the source and target vertices
-            incident_edges = set(source_vertex.all_edges()).union(set(target_vertex.all_edges()))
-
-            # Optionally, remove the original edge from the list
-            incident_edges.discard(ce)
-
-            for eee in incident_edges:
-                print(new_graph.edge_properties["e_label"][eee])
-                print(new_graph.vertex_properties["v_label"][target_vertex])
-
-
-
-            new_node_name = new_graph.edge_properties["e_label"][ce]
-
-            # new_node_name = '-'.join([str(nnn) for nnn in sorted(list(set([int(nn) for nn in \
-            # new_graph.vertex_properties["v_label"][source_vertex].split('-')] + \
-            # [int(nn) for nn in new_graph.vertex_properties["v_label"][target_vertex].split('-')])))])
-
-            ce_wei = new_graph.edge_properties["e_weights"][ce]
+                e1 = new_graph.edge(min_edge.source(), n)
+                # e2 = new_graph.edge(min_edge.target(), n)
+                new_graph.edge_properties["e_weights"][e1] = {"weight": weights, "entropy": entr}
+                new_graph.edge_properties["e_label"][e1] = new_edge_name
+                new_graph.edge_properties['e_entropy'][e1] = entr
+                # new_graph.edge_properties["e_weights"][e2]
             
-            v1 = new_graph.add_vertex()
-            new_graph.vertex_properties["v_label"][v1] = new_node_name
-            new_graph.vertex_properties["e_weights"][v1] = ce_wei
+            for n in set(target_nbrs)-common_nbrs:
+                v_label = new_graph.vertex_properties["v_label"][n]
+                e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+                print(len(e_poss))
+                new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+                poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
+                all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
+                matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
+                weights = {phas_2_str(phas): 0 for phas in all_phasings}
+                for phas in all_phasings:
+                    for indc, this_po, obs in matches:
+                        # print(indc, this_po, obs)
+                        # for obs in all_obs:
+                        #     obs_np = np.array([int(po) for po in obs])
+                        #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
+                        weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+                                                                                            list(range(len(indc))),
+                                                                                            config.error_rate)
+                entr = entropy(list(weights.values()), base=10)
+                e2 = new_graph.edge(min_edge.target(), n)
+                new_graph.remove_edge(e2)
+                e1 = new_graph.add_edge(min_edge.source(), n)
+                new_graph.edge_properties["e_weights"][e1] = {"weight": weights, "entropy": entr}
+                new_graph.edge_properties["e_label"][e1] = new_edge_name
+                new_graph.edge_properties['e_entropy'][e1] = entr
             
-            for ie in list(incident_edges):
-                
-                neighbor = list(set([ie.source(), ie.target()]) - set([source_vertex, target_vertex]))[0]
-                neighbor_label = new_graph.vertex_properties["v_label"][neighbor]
-                poss = sorted(set([int(nn) for nn in new_node_name.split('-')] + [int(nn) for nn in neighbor_label.split('-')]))
-                
+            to_be_removed_nodes += [min_edge.target()]
+            new_graph.remove_edge(min_edge)
+            edges.remove(min_edge)
+
+    new_graph.remove_vertex(to_be_removed_nodes)
+    return new_graph
+    
 
 
 
 
-# quotient_graph, v_label_reversed, e_label_reversed = quotient_g, quotient_g.v_label_reversed, edges_map_quotient
-# e_label = quotient_graph.edge_properties["e_label"]  # Edge property,
-# e_weights = quotient_graph.edge_properties["e_weights"]  # Edge property, 
-
-# e_weights[e_label_reversed['5-6-7']]
-
-
-# quotient_graph.vertex_properties["v_label"]  # Vertex property,
-
-
-# for v in quotient_graph.vertices():
-#     print(quotient_graph.vertex_properties["v_label"][v])
 
 
 
-
-# quotient_graph.edge_properties["e_label"][spath_edges[0]]
-# quotient_graph.edge_properties["e_label"][spath_edges[1]]
-
-# len_seq = len(spath_edges) + 1
-
-# for v in spath_vertices:
-#     print(quotient_graph.vertex_properties["v_label"][v])
-
-# for ee in spath_edges:
-#     print(quotient_graph.edge_properties["e_label"][ee])
 
 for vvv in quotient_graph.vertex_properties["v_label"]:
     print(vvv)
@@ -631,53 +503,3 @@ def chordal_graph_tools(quotient_graph):
                     poss = sorted(set([int(nn) for nn in new_node_name.split('-')] + [int(nn) for nn in neighbor_label.split('-')]))
                     
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-e_label = quotient_graph.edge_properties["e_label"]
-v_label = quotient_graph.vertex_properties["v_label"]
-
-
-vertex_filter = quotient_graph.new_vertex_property("bool")
-for v in quotient_graph.vertices():
-    vertex_filter[v] = False
-
-# Step 2: Selectively enable only certain vertices
-
-# For example, enable only v1, v2, and v3
-# vertex_filter[source_vertex] = True
-# vertex_filter[target_vertex] = True
-# vertex_filter[neighbor] = True
-# for cc in ccyc:
-#     vertex_filter[cc.source()] = True
-#     vertex_filter[cc.target()] = True
-
-for vv in mst_tree_vertices:
-    vertex_filter[vv] = True
-
-
-quotient_graph.set_vertex_filter(vertex_filter)
-
-# Step 3: Draw the filtered graph
-gt.graph_draw(quotient_graph, vertex_text=v_label, vertex_size=10, edge_font_size=10, edge_text=e_label, output_size=(500, 500))
-quotient_graph.clear_filters()

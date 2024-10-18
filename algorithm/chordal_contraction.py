@@ -7,7 +7,7 @@ import random
 import networkx as nx
 import time
 import graph_tool.all as gt
-
+from chordal_contraction import *
 
 
 def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
@@ -256,24 +256,22 @@ def get_cycles_basis_info_graph_tool(non_mst_graph, mst_graph, quotient_graph):
     return cycle_basis_edges, index_to_cycles, edge_to_cycles, forbidden_edges
 
 
-
 def find_cycle(mst_graph, quotient_graph, e):
     """Finds a cycle in the graph after adding the given edge to the spanning tree"""
     # Add the edge to the MST
-    source, target = int(e.source()), int(e.target())
+    # source, target = int(e.source()), int(e.target())
+    source, target = e.source(),e.target()
     # mst_tree = gt.Graph(gt.GraphView(graph, efilt=mst_view))
     # Traverse the tree to find the path between source and target (forming a cycle)
     # mst_tree = gt.shortest_path(mst_view, graph.vertex(source), graph.vertex(target))[0]
 
-    tree_graph = gt.Graph(mst_graph)
+    # tree_graph = gt.Graph(mst_graph)
 
-    half_cyc = gt.shortest_path(tree_graph, quotient_graph.vertex(source), quotient_graph.vertex(target))[1]
+    half_cyc = gt.shortest_path(mst_graph, source, target)
     
     # The cycle is the path from source to target in the MST + the edge being added
-    cycle =half_cyc + [e]
-    return cycle
-
-
+    cycle_e = half_cyc[1] + [e]
+    return cycle_e, half_cyc[0]
 
 
 def get_minimum_spanning_tree(quotient_graph):
@@ -388,4 +386,272 @@ def chordal_contraction_cycle_base(quotient_g, fragment_list, inpt_handler, conf
             # plot_graph(new_graph)
     return new_graph
 
+
+def is_chordal(graph):
+    """
+    Check if the given graph is chordal using Lexicographical Breadth-First Search (Lex-BFS).
+
+    Parameters:
+    
+    graph: A graph_tool Graph object.
+
+    Returns:
+    
+    True if the graph is chordal, False otherwise."""
+    labels = {}
+    for v in graph.vertices():
+        labels[v] = []
+
+    ordering = []
+    unnumbered = set(graph.vertices())
+
+    n = graph.num_vertices()
+    for i in range(n, 0, -1):
+        # Select the unnumbered vertex with the largest label lexicographically
+        max_label_vertex = None
+        max_label = None
+        for v in unnumbered:
+            label = labels[v]
+            if max_label is None or label > max_label:
+                max_label = label
+                max_label_vertex = v
+
+        v = max_label_vertex
+        ordering.append(v)
+        unnumbered.remove(v)
+
+        # Update labels of unnumbered neighbors
+        for u in v.all_neighbors():
+            if u in unnumbered:
+                labels[u].append(i)
+
+    # Reverse the ordering to get the perfect elimination ordering (PEO)
+    ordering.reverse()
+    position = {v: idx for idx, v in enumerate(ordering)}
+    for idx, v in enumerate(ordering):
+        nbrs = [u for u in v.all_neighbors() if position[u] > idx]
+        if not nbrs:
+            continue
+        # Find the neighbor with the smallest position (earliest in PEO)
+        w = min(nbrs, key=lambda u: position[u])
+        for u in nbrs:
+            if u != w and not graph.edge(u, w) and not graph.edge(w, u):
+                # The neighbors do not form a clique
+                return False
+    return True
+
+
+def get_chordless_cycles(subgraph_copy):
+    """
+    Check if the given graph is chordal using Lexicographical Breadth-First Search (Lex-BFS).
+
+    Parameters:
+    
+    graph: A graph_tool Graph object.
+
+    Returns:
+    
+    True if the graph is chordal, False otherwise."""
+    chordless_cycles = []
+    labels = {}
+    for v in subgraph_copy.vertices():
+        labels[v] = []
+
+    ordering = []
+    unnumbered = set(subgraph_copy.vertices())
+
+    n = subgraph_copy.num_vertices()
+    for i in range(n, 0, -1):
+        # Select the unnumbered vertex with the largest label lexicographically
+        max_label_vertex = None
+        max_label = None
+        for v in unnumbered:
+            label = labels[v]
+            if max_label is None or label > max_label:
+                max_label = label
+                max_label_vertex = v
+
+        v = max_label_vertex
+        ordering.append(v)
+        unnumbered.remove(v)
+
+        # Update labels of unnumbered neighbors
+        for u in v.all_neighbors():
+            if u in unnumbered:
+                labels[u].append(i)
+
+    # Reverse the ordering to get the perfect elimination ordering (PEO)
+    ordering.reverse()
+    position = {v: idx for idx, v in enumerate(ordering)}
+    for idx, v in enumerate(ordering):
+        # Check if the neighbors of v that appear later in the PEO form a clique
+        
+        nbrs = [u for u in v.all_neighbors() if position[u] > idx]
+        if not nbrs:
+            continue
+        # Find the neighbor with the smallest position (earliest in PEO)
+        w = min(nbrs, key=lambda u: position[u])
+        # print('min neighbor:', w, 'neighbors:', nbrs)
+        for u in nbrs:
+            if u != w and not subgraph_copy.edge(u, w) and not subgraph_copy.edge(w, u):
+                # The neighbors do not form a clique
+                # print('ordering:', v, 'neighbor', u, 'min neighbor',w)
+                # gt.shortest_path(subgraph_copy, u, w)
+                v_filter = subgraph_copy.new_vertex_property("bool", val=True)
+    
+                # Exclude the specified node by setting its filter to False
+                v_filter[subgraph_copy.vertex(v)] = False
+                # subgraph_2 = gt.GraphView(subgraph_copy, vfilt=v_filter)
+    
+                # Find the shortest path in the filtered graph
+                path_v = gt.shortest_path(subgraph_copy, source=w, target=u)[0]
+                # path_edges = path_edges[::-1]
+                path_v = path_v + [v]
+                # print(path_v)
+                chordless_cycles.append(path_v)
+                subgraph_copy.set_vertex_filter(None)
+                
+
+    return chordless_cycles
+
+
+def chordal_contraction_graph_tool(quotient_graph, input_handler, config, fragment_model):
+    new_graph = quotient_graph.copy()
+    e_weights = new_graph.edge_properties["e_weights"]
+    new_graph.clear_filters()
+    e_entropy = new_graph.new_edge_property("double")
+
+    # Loop over edges and assign entropy from the e_weights property
+    for e in new_graph.edges():
+        e_entropy[e] = e_weights[e]['entropy']
+
+    new_graph.ep['e_entropy'] = e_entropy
+
+    chordless_cycles = get_chordless_cycles(new_graph)
+
+    to_be_removed_nodes = []
+
+    e_weights = new_graph.edge_properties["e_weights"]
+    e_entropy = new_graph.new_edge_property("double")
+
+    # Loop over edges and assign entropy from the e_weights property
+    for e in new_graph.edges():
+        e_entropy[e] = e_weights[e]['entropy']
+
+    new_graph.ep['e_entropy'] = e_entropy
+
+    for cyc_id, cyc in enumerate(chordless_cycles):
+        print(cyc_id)
+        edges = [new_graph.edge(cyc[-1], cyc[0])]
+        for i in range(len(cyc) - 1):
+            edges += [new_graph.edge(cyc[i], cyc[i+1])]
+        edges = [x for x in edges if x is not None]
+        while len(edges) > 3:
+            min_edge = min(edges, key=lambda e: new_graph.ep['e_entropy'][e])
+            source_label = new_graph.vp['v_label'][min_edge.source()]
+            target_label = new_graph.vp['v_label'][min_edge.target()]
+            
+            # new node positions
+            poss = sorted(set([int(nn) for nn in source_label.split('-')] + [int(nn) for nn in target_label.split('-')]))
+            # new vertex properties:
+            new_vertex_name = '-'.join([str(nnn) for nnn in poss])
+            vertex_weights = new_graph.ep['e_weights'][min_edge]
+            
+            new_graph.vertex_properties["v_weights"][min_edge.source()] = vertex_weights
+            new_graph.vertex_properties["v_label"][min_edge.source()] = new_vertex_name
+
+            source_nbrs = [n for n in min_edge.source().all_neighbors() if n != min_edge.target()]
+            target_nbrs = [n for n in min_edge.target().all_neighbors() if n != min_edge.source()]
+            common_nbrs = set(source_nbrs).intersection(set(target_nbrs))
+
+            for n in common_nbrs:
+                v_label = new_graph.vertex_properties["v_label"][n]
+                e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+                print(len(e_poss))
+                new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+                poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
+                all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
+                matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
+                weights = {phas_2_str(phas): 0 for phas in all_phasings}
+                for phas in all_phasings:
+                    for indc, this_po, obs in matches:
+                        # print(indc, this_po, obs)
+                        # for obs in all_obs:
+                        #     obs_np = np.array([int(po) for po in obs])
+                        #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
+                        weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+                                                                                            list(range(len(indc))),
+                                                                                            config.error_rate)
+                entr = entropy(list(weights.values()), base=10)
+
+                # update the weights on the source and 
+                # e_weights[edge] = {"weight": weights, "entropy": entr}
+                e1 = new_graph.edge(min_edge.source(), n)
+                e2 = new_graph.edge(min_edge.target(), n)
+                
+                new_graph.edge_properties["e_weights"][e1] = {"weight": weights, "entropy": entr}
+                new_graph.edge_properties["e_label"][e1] = new_edge_name
+                new_graph.edge_properties['e_entropy'][e1] = entr
+                new_graph.remove_edge(e2)
+
+            for n in set(source_nbrs)-common_nbrs:
+                v_label = new_graph.vertex_properties["v_label"][n]
+                e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+                print(len(e_poss))
+                new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+                poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
+                all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
+                matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
+                weights = {phas_2_str(phas): 0 for phas in all_phasings}
+                for phas in all_phasings:
+                    for indc, this_po, obs in matches:
+                        # print(indc, this_po, obs)
+                        # for obs in all_obs:
+                        #     obs_np = np.array([int(po) for po in obs])
+                        #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
+                        weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+                                                                                            list(range(len(indc))),
+                                                                                            config.error_rate)
+                entr = entropy(list(weights.values()), base=10)
+
+                e1 = new_graph.edge(min_edge.source(), n)
+                # e2 = new_graph.edge(min_edge.target(), n)
+                new_graph.edge_properties["e_weights"][e1] = {"weight": weights, "entropy": entr}
+                new_graph.edge_properties["e_label"][e1] = new_edge_name
+                new_graph.edge_properties['e_entropy'][e1] = entr
+                # new_graph.edge_properties["e_weights"][e2]
+            
+            for n in set(target_nbrs)-common_nbrs:
+                v_label = new_graph.vertex_properties["v_label"][n]
+                e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+                print(len(e_poss))
+                new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+                poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
+                all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
+                matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
+                weights = {phas_2_str(phas): 0 for phas in all_phasings}
+                for phas in all_phasings:
+                    for indc, this_po, obs in matches:
+                        # print(indc, this_po, obs)
+                        # for obs in all_obs:
+                        #     obs_np = np.array([int(po) for po in obs])
+                        #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
+                        weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+                                                                                            list(range(len(indc))),
+                                                                                            config.error_rate)
+                entr = entropy(list(weights.values()), base=10)
+                e2 = new_graph.edge(min_edge.target(), n)
+                new_graph.remove_edge(e2)
+                e1 = new_graph.add_edge(min_edge.source(), n)
+                new_graph.edge_properties["e_weights"][e1] = {"weight": weights, "entropy": entr}
+                new_graph.edge_properties["e_label"][e1] = new_edge_name
+                new_graph.edge_properties['e_entropy'][e1] = entr
+            
+            to_be_removed_nodes += [min_edge.target()]
+            new_graph.remove_edge(min_edge)
+            edges.remove(min_edge)
+            
+    new_graph.remove_vertex(to_be_removed_nodes)
+    return new_graph
+    
 

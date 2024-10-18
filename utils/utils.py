@@ -543,3 +543,50 @@ def find_matchings(nodes_part1, nodes_part2):
         matchings = new_matchings
     
     return matchings
+
+
+def shortest_path_excluding_node(graph, source, target, exclude_node):
+    # Create a vertex filter property map (all True initially)
+    v_filter = graph.new_vertex_property("bool", val=True)
+    
+    # Exclude the specified node by setting its filter to False
+    v_filter[graph.vertex(exclude_node)] = False
+    
+    # Create a filtered view of the graph
+    subgraph_2 = gt.GraphView(graph, vfilt=v_filter)
+    
+    # Find the shortest path in the filtered graph
+    path_vertices, path_edges = gt.shortest_path(subgraph_2, source=source, target=target)
+
+    # Convert vertices and edges to lists for readability
+    # path_v_list = [int(v) for v in path_vertices]
+    # path_e_list = [(int(e.source()), int(e.target())) for e in path_edges]
+    # path_e_list = path_edges + [source, target]
+    # Clear the filter after use (restore original graph state)
+    graph.set_vertex_filter(None)
+
+    return path_edges
+
+
+
+
+def plot_subgraph_graph_tool(new_graph, included_vertices):
+    v_filter = new_graph.new_vertex_property("bool")
+
+    # Set the filter to True for vertices you want to keep
+    for v in new_graph.vertices():
+        if int(v) in included_vertices:
+            v_filter[v] = True
+
+    # Create a graph view using the vertex filter
+    subgraph = gt.GraphView(new_graph, vfilt=v_filter)
+
+    # Optionally: Convert the graph view into a new standalone graph
+    # subgraph_copy = gt.Graph(subgraph, prune=True)
+
+    e_labels = subgraph.edge_properties["e_label"]
+    v_labels = subgraph.vertex_properties["v_label"]
+    # gt.graph_draw(subgraph, output_size=(500, 500), vertex_text=subgraph.vertex_index, edge_text=e_labels, vertex_font_size=16,  
+    # edge_font_size=12)
+    gt.graph_draw(subgraph, output_size=(500, 500), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=14,  
+    edge_font_size=12)
