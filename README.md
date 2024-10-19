@@ -1,2 +1,2 @@
-# HaplOrbit
-Haplotype assembly and phasing unification
+# pHapCompass
+A probabilistic polyploid Haplotype assembler 
