@@ -1,5 +1,7 @@
 import numpy as np
 import itertools
+from utils.utils import *
+from scipy.stats import entropy
 
 
 class QuadNode:
@@ -392,3 +394,32 @@ def counts_to_phasing_ploidy_long(max_length_paths, genotype, allel_set=[0, 1]):
     phasings = [list(itertools.chain.from_iterable(a)) for a in aa]
     phasing_np = [np.vstack([np.array([int(ph) for ph in phase]) for phase in phasing]) for phasing in phasings]
     return phasing_np
+
+
+def compute_edge_weight(new_vertex_name, v_label, source_phasings, target_phasings, fragment_model, config):
+
+    possitions = sorted(set([int(nn) for nn in new_vertex_name.split('-')] + [int(nn) for nn in v_label.split('-')]))
+    common_ff, common_sf = find_common_element_and_index(new_vertex_name, v_label)
+    all_phasings =[]
+    for ffstr in source_phasings:
+        for sfstr in target_phasings:
+            
+            matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, config.ploidy), str_2_phas_1(sfstr, config.ploidy), 
+                                                     common_ff, common_sf, new_vertex_name, v_label)
+            
+            sorted_phasings = []
+            for mtx in matched_phasings:
+                sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
+                sorted_phasings.append(sorted_matrix)
+            matched_phasings_str = [phas_2_str(pm) for pm in sorted_phasings]
+            all_phasings += matched_phasings_str
+    matches = get_matching_reads_for_positions(possitions, fragment_model.fragment_list)
+    weights = {phas_2_str(phas): 0 for phas in all_phasings}
+    for phas in all_phasings:
+        for indc, this_po, obs in matches:
+            weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+                                                                                list(range(len(indc))),
+                                                                                config.error_rate)
+    entr = entropy(list(weights.values()), base=10)
+    final_weight = {"weight": weights, "entropy": entr}
+    return final_weight

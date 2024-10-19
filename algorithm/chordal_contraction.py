@@ -7,7 +7,6 @@ import random
 import networkx as nx
 import time
 import graph_tool.all as gt
-from chordal_contraction import *
 
 
 def chordal_contraction(quotient_g, fragment_list, inpt_handler, config):
@@ -654,4 +653,3 @@ def chordal_contraction_graph_tool(quotient_graph, input_handler, config, fragme
     new_graph.remove_vertex(to_be_removed_nodes)
     return new_graph
     
-

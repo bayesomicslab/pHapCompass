@@ -9,6 +9,7 @@ import pandas as pd
 # import networkit as nk
 import pickle
 import graph_tool.all as gt
+from scipy.stats import entropy
 
 
 def get_matching_reads_for_positions(pos, fragment_list):
@@ -590,3 +591,79 @@ def plot_subgraph_graph_tool(new_graph, included_vertices):
     # edge_font_size=12)
     gt.graph_draw(subgraph, output_size=(500, 500), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=14,  
     edge_font_size=12)
+
+
+def compute_phasings_and_weights(e_poss, input_handler, config, fragment_model):
+    poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
+    all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
+    matches = get_matching_reads_for_positions([int(i) for i in e_poss], fragment_model.fragment_list)
+    weights = {phas_2_str(phas): 0 for phas in all_phasings}
+    for phas in all_phasings:
+        for indc, this_po, obs in matches:
+            # print(indc, this_po, obs)
+            # for obs in all_obs:
+            #     obs_np = np.array([int(po) for po in obs])
+            #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
+            weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+                                                                                list(range(len(indc))),
+                                                                                config.error_rate)
+    entr = entropy(list(weights.values()), base=10)
+    weight =  {"weight": weights, "entropy": entr}
+    return weight
+
+
+def generate_phasings_ploidy_local():
+        source = edge.source()
+        target = edge.target()
+        source_weights = quotient_graph.vertex_properties["v_weights"][source]['weight']
+        target_weights = quotient_graph.vertex_properties["v_weights"][target]['weight']
+        source_label = quotient_graph.vertex_properties["v_label"][source]
+        target_label = quotient_graph.vertex_properties["v_label"][target]
+        # e_label = quotient_graph.edge_properties["e_label"][edge]
+        e_label = '--'.join(sorted([source_label, target_label]))
+        e_weights = quotient_graph.edge_properties["e_weights"][edge]['weight']
+
+        
+        common_ff, common_sf = find_common_element_and_index(source_label, target_label)
+        source_phasings = list(source_weights.keys())
+        target_phasings = list(target_weights.keys())
+        # transitions_dict = {'source': source_phasings, 'target': target_phasings}
+        transitions_mtx = np.zeros((len(source_phasings), len(target_phasings)))
+        for i, ffstr in enumerate(source_phasings):
+            for j, sfstr in enumerate(target_phasings):
+                
+                matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, 3), str_2_phas_1(sfstr, 3), common_ff, common_sf, source_label, target_label)
+                sorted_phasings = []
+                for mtx in matched_phasings:
+                    sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
+                    sorted_phasings.append(sorted_matrix)
+                matched_phasings_str = [phas_2_str(pm) for pm in sorted_phasings] 
+                this_weight = np.sum([e_weights[pm] for pm in matched_phasings_str if pm in e_weights.keys()])
+                transitions_mtx[i, j] = this_weight
+
+
+def compute_edge_weight(new_vertex_name, v_label, source_phasings, target_phasings, fragment_model, config):
+    possitions = sorted(set([int(nn) for nn in new_vertex_name.split('-')] + [int(nn) for nn in v_label.split('-')]))
+    common_ff, common_sf = find_common_element_and_index(new_vertex_name, v_label)
+    all_phasings =[]
+    for ffstr in source_phasings:
+        for sfstr in target_phasings:
+            
+            matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, 3), str_2_phas_1(sfstr, 3), common_ff, common_sf, new_vertex_name, v_label)
+            
+            sorted_phasings = []
+            for mtx in matched_phasings:
+                sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
+                sorted_phasings.append(sorted_matrix)
+            matched_phasings_str = [phas_2_str(pm) for pm in sorted_phasings]
+            all_phasings += matched_phasings_str
+    matches = get_matching_reads_for_positions(possitions, fragment_model.fragment_list)
+    weights = {phas_2_str(phas): 0 for phas in all_phasings}
+    for phas in all_phasings:
+        for indc, this_po, obs in matches:
+            weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+                                                                                list(range(len(indc))),
+                                                                                config.error_rate)
+    entr = entropy(list(weights.values()), base=10)
+    final_weight = {"weight": weights, "entropy": entr}
+    return final_weight
