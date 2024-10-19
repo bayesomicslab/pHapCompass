@@ -234,7 +234,6 @@ def chordal_contraction_graph_tool2(quotient_graph, input_handler, config, fragm
     
 
 
-
 def chordal_contraction_graph_tool_approx(quotient_graph, input_handler, config, fragment_model):
     new_graph = quotient_graph.copy()
     e_weights = new_graph.edge_properties["e_weights"]
