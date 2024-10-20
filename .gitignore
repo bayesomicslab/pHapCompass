@@ -51,6 +51,9 @@ coverage.xml
 .pytest_cache/
 cover/
 survey_outputs.ipynb
+example/AR
+example/ART_0.pkl.gz
+
 
 # Translations
 *.mo

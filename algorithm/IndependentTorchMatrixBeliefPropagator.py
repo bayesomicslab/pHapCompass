@@ -154,9 +154,15 @@ class IndependentMarkovNet():
 
 class IndependentTorchMatrixBeliefPropagator(mrftools.TorchMatrixBeliefPropagator):
     def __init__(self, markov_net, is_cuda, var_on, color_dict):
-        super().__init__(self, markov_net, is_cuda, var_on)
+        super().__init__(markov_net, is_cuda, var_on)
         self.color_dict = color_dict
-        self.rev_colors = {v: k for k, v in color_dict.items()}
+        # self.rev_colors = {v: k for k, v in color_dict.items()}
+        self.rev_colors = {}
+        for v in self.mn.variables:
+            if color_dict[v] in self.rev_colors:
+                self.rev_colors[color_dict[v]] = self.rev_colors[color_dict[v]].append(v)
+            else:
+                self.rev_colors[color_dict[v]] = [v]
         self.ind_mn = IndependentMarkovNet(self.mn)
         
         self.ind_mn.create_matrices(self.rev_colors)
