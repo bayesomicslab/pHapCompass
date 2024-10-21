@@ -137,7 +137,7 @@ def compute_likelihood_generalized(observed, phasing, used_pos, error_rate):
     likelihood = np.mean(probs)
     return likelihood
 
-
+# @profile
 def compute_likelihood_generalized_plus(observed, phasing, obs_pos, phas_pos, error_rate):
     """This likelihood computation can accept different length observed and phasing, but the length of obs_pos and
     phas_pos should be the same. The likelihood is computed on the provided indices on both vectors"""
@@ -396,7 +396,7 @@ def counts_to_phasing_ploidy_long(max_length_paths, genotype, allel_set=[0, 1]):
     return phasing_np
 
 
-def compute_edge_weight(new_vertex_name, v_label, source_phasings, target_phasings, fragment_model, config):
+# def compute_edge_weight(new_vertex_name, v_label, source_phasings, target_phasings, fragment_model, config):
 
     possitions = sorted(set([int(nn) for nn in new_vertex_name.split('-')] + [int(nn) for nn in v_label.split('-')]))
     common_ff, common_sf = find_common_element_and_index(new_vertex_name, v_label)

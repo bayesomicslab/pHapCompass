@@ -2,6 +2,7 @@ import os
 import argparse
 import sys
 import networkx as nx
+import torch
 from data.input_handler import InputHandler
 from data.configuration import Configuration
 from algorithm.haplotype_assembly import HaplotypeAssembly
@@ -13,7 +14,6 @@ from utils.utils import *
 from algorithm.inference import *
 from algorithm.chordal_contraction import *
 # from test.FFBS import generate_hmm_with_weights_and_emissions
-
 
 
 
@@ -232,7 +232,6 @@ def chordal_contraction_graph_tool2(quotient_graph, input_handler, config, fragm
     new_graph.remove_vertex(to_be_removed_nodes)
     return new_graph
     
-
 
 def chordal_contraction_graph_tool_approx(quotient_graph, input_handler, config, fragment_model):
     new_graph = quotient_graph.copy()
