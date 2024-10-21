@@ -15,21 +15,23 @@ import pickle
 from multiprocessing import Pool
 
 
+
 def generate_quotient_graph_make_input():
     inputs = []
-    contigs = ['Contig1_k3', 'Contig2_k3', 'Contig3_k3']
-    # contigs = ['Contig2_k3']
-    simulated_data_path = '/home/mok23003/BML/HaplOrbit/simulated_data'
-    graph_path = '/home/mok23003/BML/HaplOrbit/simulated_data_graphs/'
+    # contigs = ['Contig1_k3', 'Contig2_k3', 'Contig3_k3']
+    # contigs = ['Contig1_k3']
+    contigs = ['Contig1_k4', 'Contig1_k5', 'Contig1_k6']
+    simulated_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data'
+    graph_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_graphs/'
     for cont in contigs:
         fragment_files_path = os.path.join(simulated_data_path, cont)
         coverges = sorted([d for d in os.listdir(fragment_files_path) if os.path.isdir(os.path.join(fragment_files_path, d))])
+        coverges = ['c6']
         for coverage in coverges:
             this_frag_path = os.path.join(fragment_files_path, coverage)
             this_fragment_coverage_path = os.path.join(graph_path, 'fragment_graphs', cont, coverage)
             this_quotient_coverage_path = os.path.join(graph_path, 'quotient_graphs', cont, coverage)
             this_reverse_maps_path = os.path.join(graph_path, 'reverse_maps', cont, coverage)
-            
             if not os.path.exists(this_quotient_coverage_path):
                 os.makedirs(this_quotient_coverage_path)
             if not os.path.exists(this_fragment_coverage_path):
@@ -127,9 +129,6 @@ def generate_quotient_graph(inp):
         pickle.dump(edges_map_quotient, f)
 
     print('[Done]', os.path.join(this_frag_path, frag_file))
-
-
-
 
 
 

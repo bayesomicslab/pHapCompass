@@ -1,7 +1,7 @@
 import networkx as nx
 import itertools
 import numpy as np
-from utils.utils import phas_2_str, get_matching_reads_for_positions, convert_to_int_list
+from utils.utils import phas_2_str, get_matching_reads_for_positions, convert_to_int_list, sort_strings
 from algorithm.haplotype_assembly_helper import generate_phasings_ploidy_long, compute_likelihood_generalized_plus
 from scipy.stats import entropy
 import graph_tool.all as gt
@@ -108,7 +108,11 @@ class QuotientGraph:
             edges_to_add = list(itertools.combinations(node_list, 2))
             for ed in edges_to_add:
                 poss = sorted(list(set(ed[0].split('-') + ed[1].split('-'))))
-                edge_label = '-'. join([str(elem) for elem in sorted([int(p) for p in poss])])
+                # edge_label = '-'. join([str(elem) for elem in sorted([int(p) for p in poss])])
+                sorted_labels = sort_strings([ed[0], ed[1]])
+                edge_label = '--'.join(sorted_labels)
+
+
                 if ed not in self.e_label_reversed.keys():
                 # if ed not in output_graph.edges():
                     # poss = sorted(list(set(ed[0].split('-') + ed[1].split('-'))))

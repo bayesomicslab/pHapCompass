@@ -667,3 +667,9 @@ def compute_edge_weight(new_vertex_name, v_label, source_phasings, target_phasin
     entr = entropy(list(weights.values()), base=10)
     final_weight = {"weight": weights, "entropy": entr}
     return final_weight
+
+
+def sort_strings(strings):
+    # Sort the list of strings using the custom comparison logic
+    return sorted(strings, key=lambda x: list(map(int, x.split('-'))))
+
