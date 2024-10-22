@@ -21,11 +21,11 @@ def create_markov_net(q_graph, transitions):
 
     for s, t in q_graph.iter_edges():
         edge = (s, t)
-        s_size = len(q_graph.vp['e_weights'][s]['weight'].values())
-        # s_label = q_graph.vp['v_label'][s]
-        t_size = len(q_graph.vp['e_weights'][t]['weight'].values())
-        # t_label = q_graph.vp['v_label'][t]
-        e_label = q_graph.ep['e_label'][edge]
+        # s_size = len(q_graph.vp['e_weights'][s]['weight'].values())
+        s_label = q_graph.vp['v_label'][s]
+        # t_size = len(q_graph.vp['e_weights'][t]['weight'].values())
+        t_label = q_graph.vp['v_label'][t]
+        e_label = '--'.join(sorted([s_label, t_label]))        
         weight_matrix = transitions[e_label]['transitions']
         markov_net.set_edge_factor((s, t), torch.from_numpy(weight_matrix))
 
@@ -33,7 +33,45 @@ def create_markov_net(q_graph, transitions):
 
     return markov_net
 
-def sample_phasings(q_graph, markov_net):
+def to_edge(source, target):
+    return
+
+def build_phasing(node_assignment_dict):
+    return
+
+def single_sample_phasings(q_graph, bp):
+    # build spanning tree
+    tree_map = gt.random_spanning_tree(q_graph)
+
+    # sample edge indices according to spanning tree
+
+    # build phasings
+    return
+
+def node_search(tree_map, prev_node, curr_node, node_assignments, bp):
+    prev_node_state = node_assignments[prev_node]
+    marginal = bp.pair_beliefs[(prev_node, curr_node)]
+    curr_node_state = np.argmax(marginal[prev_node_state])
+    node_assignments[curr_node]=curr_node_state
+    for neighbor in curr_node.all_neighbors():
+        if neighbor == prev_node:
+            pass
+        if tree_map[to_edge(curr_node, neighbor)]:
+            node_search(tree_map=tree_map, prev_node=curr_node, curr_node=neighbor, node_assignments=node_assignments, bp=bp)
+    return
+
+def max_phasings(q_graph, bp):
+    tree_map = gt.random_spanning_tree(q_graph)
+    node_assignments = {}
+    starting_node = 0
+    node_belief = bp.var_beliefs[starting_node]
+    node_assignments[starting_node]=node_belief
+    for neighbor in starting_node.all_neighbors():
+        if tree_map[to_edge(starting_node, neighbor)]:
+            node_search(tree_map=tree_map, prev_node=starting_node, curr_node=neighbor, node_assignments=node_assignments, bp=bp)
+    
+    build_phasing(node_assignments)
+
     return
 
 def torch_belief_propagation(markov_network, is_cuda=True):
