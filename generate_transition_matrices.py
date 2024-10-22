@@ -8,7 +8,8 @@ from multiprocessing import Pool
 
 def generate_transition_matrix_make_input():
     inputs = []
-    contigs = ['Contig1_k3']
+    # contigs = ['Contig1_k3']
+    contigs = ['Contig1_k4', 'Contig1_k5', 'Contig1_k6']
     # contigs = ['Contig2_k3']
     # simulated_data_path = '/home/mok23003/BML/HaplOrbit/simulated_data'
     # main_path = '/home/mok23003/BML/HaplOrbit/simulated_data_graphs/'
@@ -85,7 +86,8 @@ def generate_transition_matrices(inp):
         transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
         
         edge_weights_dict[e_label] = {'transitions': transitions_mtx, 'source_label': source_label, 'target_label': target_label}
-        print(e_label, transitions_mtx)
+        # print(e_label, transitions_mtx.ravel())
+        # print('-------------------------------------------------------------------------')
 
     # with open(transition_path, "wb") as f:
     #     pickle.dump(edge_weights_dict, f)

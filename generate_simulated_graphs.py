@@ -19,14 +19,15 @@ from multiprocessing import Pool
 def generate_quotient_graph_make_input():
     inputs = []
     # contigs = ['Contig1_k3', 'Contig2_k3', 'Contig3_k3']
+    contigs = ['Contig2_k3', 'Contig3_k3']
     # contigs = ['Contig1_k3']
-    contigs = ['Contig1_k4', 'Contig1_k5', 'Contig1_k6']
+    # contigs = ['Contig1_k4', 'Contig1_k5', 'Contig1_k6']
     simulated_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data'
     graph_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_graphs/'
     for cont in contigs:
         fragment_files_path = os.path.join(simulated_data_path, cont)
         coverges = sorted([d for d in os.listdir(fragment_files_path) if os.path.isdir(os.path.join(fragment_files_path, d))])
-        coverges = ['c6']
+        # coverges = ['c6']
         for coverage in coverges:
             this_frag_path = os.path.join(fragment_files_path, coverage)
             this_fragment_coverage_path = os.path.join(graph_path, 'fragment_graphs', cont, coverage)
