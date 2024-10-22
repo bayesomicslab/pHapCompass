@@ -10,8 +10,9 @@ import pandas as pd
 import pickle
 import graph_tool.all as gt
 from scipy.stats import entropy
+from algorithm.haplotype_assembly_helper import compute_likelihood_generalized_plus
 
-
+# @profile
 def get_matching_reads_for_positions(pos, fragment_list):
     # pos = [1, 2, 3]
     
@@ -414,7 +415,7 @@ def read_fragment_graph(main_path, contig, coverage, frag_file):
     g_loaded = gt.load_graph(frag_graph_path)
     return g_loaded, v_label_reversed, e_label_reversed
 
-
+# @profile
 def read_quotient_graph(main_path, contig, coverage, frag_file):
     quotient_graph_path = os.path.join(main_path, 'quotient_graphs', contig, coverage)
     reversed_map_path = os.path.join(main_path, 'reverse_maps', contig, coverage)
@@ -459,7 +460,7 @@ def find_common_element_and_index(node1, node2):
     return common_ff, common_sf
 
 
-
+# @profile
 def find_phasings_matches(ff, sf, common_ff, common_sf, source_label, target_label):
     # Correct
     templates = []
@@ -478,6 +479,8 @@ def find_phasings_matches(ff, sf, common_ff, common_sf, source_label, target_lab
             templates.append(temp)
     return templates
 
+
+# @profile
 def hstack_with_order(source_matrix, target_matrix, source_label, target_label):
     """
     Combines columns from source and target matrices based on the given labels.
@@ -509,6 +512,7 @@ def hstack_with_order(source_matrix, target_matrix, source_label, target_label):
 
     return combined_matrix
 
+# @profile
 def find_matchings(nodes_part1, nodes_part2):
     # Sort both parts and remember the original indices.
     sorted_part1 = sorted(enumerate(nodes_part1), key=lambda x: x[1])
@@ -545,7 +549,7 @@ def find_matchings(nodes_part1, nodes_part2):
     
     return matchings
 
-
+# @profile
 def shortest_path_excluding_node(graph, source, target, exclude_node):
     # Create a vertex filter property map (all True initially)
     v_filter = graph.new_vertex_property("bool", val=True)
@@ -569,8 +573,6 @@ def shortest_path_excluding_node(graph, source, target, exclude_node):
     return path_edges
 
 
-
-
 def plot_subgraph_graph_tool(new_graph, included_vertices):
     v_filter = new_graph.new_vertex_property("bool")
 
@@ -592,7 +594,7 @@ def plot_subgraph_graph_tool(new_graph, included_vertices):
     gt.graph_draw(subgraph, output_size=(500, 500), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=14,  
     edge_font_size=12)
 
-
+# @profile
 def compute_phasings_and_weights(e_poss, input_handler, config, fragment_model):
     poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
     all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
@@ -641,7 +643,7 @@ def generate_phasings_ploidy_local():
                 this_weight = np.sum([e_weights[pm] for pm in matched_phasings_str if pm in e_weights.keys()])
                 transitions_mtx[i, j] = this_weight
 
-
+# @profile
 def compute_edge_weight(new_vertex_name, v_label, source_phasings, target_phasings, fragment_model, config):
     possitions = sorted(set([int(nn) for nn in new_vertex_name.split('-')] + [int(nn) for nn in v_label.split('-')]))
     common_ff, common_sf = find_common_element_and_index(new_vertex_name, v_label)
@@ -661,9 +663,16 @@ def compute_edge_weight(new_vertex_name, v_label, source_phasings, target_phasin
     weights = {phas_2_str(phas): 0 for phas in all_phasings}
     for phas in all_phasings:
         for indc, this_po, obs in matches:
-            weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+            
+            weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), str_2_phas_1(phas, config.ploidy), indc,
                                                                                 list(range(len(indc))),
                                                                                 config.error_rate)
     entr = entropy(list(weights.values()), base=10)
     final_weight = {"weight": weights, "entropy": entr}
     return final_weight
+
+# @profile
+def sort_strings(strings):
+    # Sort the list of strings using the custom comparison logic
+    return sorted(strings, key=lambda x: list(map(int, x.split('-'))))
+

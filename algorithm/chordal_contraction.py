@@ -440,6 +440,7 @@ def is_chordal(graph):
     return True
 
 
+# @profile
 def get_chordless_cycles(subgraph_copy):
     """
     Check if the given graph is chordal using Lexicographical Breadth-First Search (Lex-BFS).
@@ -461,6 +462,7 @@ def get_chordless_cycles(subgraph_copy):
 
     n = subgraph_copy.num_vertices()
     for i in range(n, 0, -1):
+        # print(i)
         # Select the unnumbered vertex with the largest label lexicographically
         max_label_vertex = None
         max_label = None
@@ -508,8 +510,7 @@ def get_chordless_cycles(subgraph_copy):
                 path_v = path_v + [v]
                 # print(path_v)
                 chordless_cycles.append(path_v)
-                subgraph_copy.set_vertex_filter(None)
-                
+                # subgraph_copy.set_vertex_filter(None)
 
     return chordless_cycles
 
@@ -653,3 +654,257 @@ def chordal_contraction_graph_tool(quotient_graph, input_handler, config, fragme
     new_graph.remove_vertex(to_be_removed_nodes)
     return new_graph
     
+
+def chordal_contraction_graph_tool2(quotient_graph, input_handler, config, fragment_model):
+    new_graph = quotient_graph.copy()
+    e_weights = new_graph.edge_properties["e_weights"]
+    new_graph.clear_filters()
+    e_entropy = new_graph.new_edge_property("double")
+
+    # Loop over edges and assign entropy from the e_weights property
+    for e in new_graph.edges():
+        e_entropy[e] = e_weights[e]['entropy']
+
+    new_graph.ep['e_entropy'] = e_entropy
+
+    chordless_cycles = get_chordless_cycles(new_graph)
+
+    to_be_removed_nodes = []
+
+    for cyc_id, cyc in enumerate(chordless_cycles):
+        
+        print(cyc_id)
+        
+        edges = [new_graph.edge(cyc[-1], cyc[0])]
+        for i in range(len(cyc) - 1):
+            edges += [new_graph.edge(cyc[i], cyc[i+1])]
+        edges = [x for x in edges if x is not None]
+        while len(edges) > 3:
+            min_edge = min(edges, key=lambda e: new_graph.ep['e_entropy'][e])
+            source_label = new_graph.vp['v_label'][min_edge.source()]
+            target_label = new_graph.vp['v_label'][min_edge.target()]
+            # new node positions
+            poss = sorted(set([int(nn) for nn in source_label.split('-')] + [int(nn) for nn in target_label.split('-')]))
+            # new vertex properties:
+            new_vertex_name = '-'.join([str(nnn) for nnn in poss])
+            vertex_weights = new_graph.ep['e_weights'][min_edge]
+            
+            new_graph.vertex_properties["v_weights"][min_edge.source()] = vertex_weights
+            new_graph.vertex_properties["v_label"][min_edge.source()] = new_vertex_name
+
+            source_nbrs = [n for n in min_edge.source().all_neighbors() if n != min_edge.target()]
+            target_nbrs = [n for n in min_edge.target().all_neighbors() if n != min_edge.source()]
+            common_nbrs = set(source_nbrs).intersection(set(target_nbrs))
+
+            for n in common_nbrs:
+                
+                v_label = new_graph.vertex_properties["v_label"][n]
+                # e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+                # print(len(e_poss))
+                # new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+                sorted_labels = sort_strings([new_vertex_name, v_label])
+                new_edge_name = '--'.join(sorted_labels)
+                (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+
+                first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+                second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+                final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+
+                e1 = new_graph.edge(min_edge.source(), n)
+                e2 = new_graph.edge(min_edge.target(), n)
+                
+                new_graph.edge_properties["e_weights"][e1] = final_weight
+                new_graph.edge_properties["e_label"][e1] = new_edge_name
+                new_graph.edge_properties['e_entropy'][e1] = final_weight['entropy']
+                new_graph.remove_edge(e2)
+
+            for n in set(source_nbrs)-common_nbrs:
+                
+                v_label = new_graph.vertex_properties["v_label"][n]
+
+                sorted_labels = sort_strings([new_vertex_name, v_label])
+                new_edge_name = '--'.join(sorted_labels)
+                (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+
+                first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+                second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+                final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+
+
+                e1 = new_graph.edge(min_edge.source(), n)
+                # e2 = new_graph.edge(min_edge.target(), n)
+                new_graph.edge_properties["e_weights"][e1] = final_weight
+                new_graph.edge_properties["e_label"][e1] = new_edge_name
+                new_graph.edge_properties['e_entropy'][e1] = final_weight['entropy']
+                # new_graph.edge_properties["e_weights"][e2]
+
+            
+            for n in set(target_nbrs)-common_nbrs:
+                
+                v_label = new_graph.vertex_properties["v_label"][n]
+                sorted_labels = sort_strings([new_vertex_name, v_label])
+                new_edge_name = '--'.join(sorted_labels)
+
+                (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+
+                first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+                second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+                final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+
+                e2 = new_graph.edge(min_edge.target(), n)
+                new_graph.remove_edge(e2)
+                e1 = new_graph.add_edge(min_edge.source(), n)
+                new_graph.edge_properties["e_weights"][e1] = final_weight
+                new_graph.edge_properties["e_label"][e1] = new_edge_name
+                new_graph.edge_properties['e_entropy'][e1] = final_weight['entropy']
+            
+            # to_be_removed_nodes += [min_edge.target()]
+            to_be_removed_nodes.append(min_edge.target())
+            new_graph.remove_edge(min_edge)
+            edges.remove(min_edge)
+
+    new_graph.remove_vertex(to_be_removed_nodes)
+    return new_graph
+    
+
+# @profile
+# def chordal_contraction_graph_tool_approx(quotient_graph, config, fragment_model, k):
+#     new_graph = quotient_graph.copy()
+#     e_weights = new_graph.edge_properties["e_weights"]
+#     # new_graph.clear_filters()
+#     e_entropy = new_graph.new_edge_property("double")
+
+#     # Loop over edges and assign entropy from the e_weights property
+#     for e in new_graph.edges():
+#         e_entropy[e] = e_weights[e]['entropy']
+
+#     new_graph.ep['e_entropy'] = e_entropy
+
+#     chordless_cycles = get_chordless_cycles(new_graph)
+
+#     to_be_removed_nodes = []
+
+#     for cyc_id, cyc in enumerate(chordless_cycles):
+        
+#         print(cyc_id)
+        
+#         edges = [new_graph.edge(cyc[-1], cyc[0])]
+#         for i in range(len(cyc) - 1):
+#             edges += [new_graph.edge(cyc[i], cyc[i+1])]
+#         edges = [x for x in edges if x is not None]
+#         while len(edges) > 3:
+#             min_edge = min(edges, key=lambda e: new_graph.ep['e_entropy'][e])
+#             source_label = new_graph.vp['v_label'][min_edge.source()]
+#             target_label = new_graph.vp['v_label'][min_edge.target()]
+#             # new node positions
+#             poss = sorted(set([int(nn) for nn in source_label.split('-')] + [int(nn) for nn in target_label.split('-')]))
+#             # new vertex properties:
+#             new_vertex_name = '-'.join([str(nnn) for nnn in poss])
+#             vertex_weights = new_graph.ep['e_weights'][min_edge]
+            
+
+#             new_graph.vertex_properties["v_weights"][min_edge.source()] = vertex_weights
+#             new_graph.vertex_properties["v_label"][min_edge.source()] = new_vertex_name
+
+#             source_nbrs = [n for n in min_edge.source().all_neighbors() if n != min_edge.target()]
+#             target_nbrs = [n for n in min_edge.target().all_neighbors() if n != min_edge.source()]
+#             common_nbrs = set(source_nbrs).intersection(set(target_nbrs))
+
+#             for n in common_nbrs:
+                
+#                 v_label = new_graph.vertex_properties["v_label"][n]
+#                 # e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+#                 # print(len(e_poss))
+#                 # new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+#                 sorted_labels = sort_strings([new_vertex_name, v_label])
+#                 new_edge_name = '--'.join(sorted_labels)
+#                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+
+#                 first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+#                 second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+#                 final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+
+#                 e1 = new_graph.edge(min_edge.source(), n)
+#                 e2 = new_graph.edge(min_edge.target(), n)
+                
+#                 new_graph.edge_properties["e_weights"][e1] = final_weight
+#                 new_graph.edge_properties["e_label"][e1] = new_edge_name
+#                 new_graph.edge_properties['e_entropy'][e1] = final_weight['entropy']
+#                 new_graph.remove_edge(e2)
+
+#             for n in set(source_nbrs)-common_nbrs:
+                
+#                 v_label = new_graph.vertex_properties["v_label"][n]
+
+#                 sorted_labels = sort_strings([new_vertex_name, v_label])
+#                 new_edge_name = '--'.join(sorted_labels)
+#                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+
+#                 first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+#                 second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+#                 final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+
+
+#                 e1 = new_graph.edge(min_edge.source(), n)
+#                 # e2 = new_graph.edge(min_edge.target(), n)
+#                 new_graph.edge_properties["e_weights"][e1] = final_weight
+#                 new_graph.edge_properties["e_label"][e1] = new_edge_name
+#                 new_graph.edge_properties['e_entropy'][e1] = final_weight['entropy']
+#                 # new_graph.edge_properties["e_weights"][e2]
+
+            
+#             for n in set(target_nbrs)-common_nbrs:
+                
+#                 v_label = new_graph.vertex_properties["v_label"][n]
+#                 sorted_labels = sort_strings([new_vertex_name, v_label])
+#                 new_edge_name = '--'.join(sorted_labels)
+
+#                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+
+#                 first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+#                 second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+#                 final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+
+#                 e2 = new_graph.edge(min_edge.target(), n)
+#                 new_graph.remove_edge(e2)
+#                 e1 = new_graph.add_edge(min_edge.source(), n)
+#                 new_graph.edge_properties["e_weights"][e1] = final_weight
+#                 new_graph.edge_properties["e_label"][e1] = new_edge_name
+#                 new_graph.edge_properties['e_entropy'][e1] = final_weight['entropy']
+            
+#             # to_be_removed_nodes += [min_edge.target()]
+#             to_be_removed_nodes.append(min_edge.target())
+#             new_graph.remove_edge(min_edge)
+#             edges.remove(min_edge)
+
+#     new_graph.remove_vertex(to_be_removed_nodes)
+#     return new_graph
+    
+# @profile
+def divide_graph_by_labels(graph, m):
+    # Retrieve vertex labels
+    vertex_labels = graph.vp["v_label"]
+
+    # Create a sorted list of vertices based on their labels
+    sorted_vertices = sorted(
+        graph.vertices(), key=lambda v: tuple(map(int, vertex_labels[v].split('-')))
+    )
+
+    # Divide sorted vertices into chunks of approximately 'm' vertices
+    subgraphs = []
+    current_chunk = []
+
+    for vertex in sorted_vertices:
+        current_chunk.append(vertex)
+        if len(current_chunk) >= m:
+            # Create a subgraph for the current chunk
+            subgraph = gt.GraphView(graph, vfilt=lambda v, chunk=current_chunk: v in chunk)
+            subgraphs.append(subgraph)
+            current_chunk = []  # Reset for the next chunk
+
+    # Handle any remaining vertices in the last chunk
+    if current_chunk:
+        subgraph = gt.GraphView(graph, vfilt=lambda v, chunk=current_chunk: v in chunk)
+        subgraphs.append(subgraph)
+
+    return subgraphs

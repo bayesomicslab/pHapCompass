@@ -54,7 +54,7 @@ class FragmentGraph:
     
         return graph, fragment_list
         
-
+    # @profile
     def construct2(self, inp_hand, conf):
         '''
         Loads in a fragment file created by extract-poly
