@@ -7,6 +7,7 @@ import numpy as np
 import time
 import gzip
 import pickle as cPickle
+import scipy
 
 def create_markov_net(q_graph, transitions):
     # initialize markov net object
@@ -33,10 +34,39 @@ def create_markov_net(q_graph, transitions):
 
     return markov_net
 
+def update_entropies(q_graph, bp):
+    for s, t in q_graph.iter_edges():
+        transition_matrix = bp.pair_beliefs[(s, t)]
+        entropy_array = scipy.stats.entropy(transition_matrix)
+        entropy = np.mean(entropy_array)
+        q_graph.ep['e_weights'][(s, t)]['entropy'] = entropy
+    return
+
 def to_edge(source, target):
     return
 
-def build_phasing(node_assignment_dict):
+def build_phasing(q_graph, node_assignment_dict):
+    v_label = q_graph.vp['v_label'][0]
+    phasing_list = q_graph.vp['v_weights'][0]['weight'].keys()
+    local_phasing = phasing_list[state]
+    positions = v_label.split('-')
+    ploidy = len(positions)
+    phasings = {}
+    for node, state in node_assignment_dict.items():
+        v_label = q_graph.vp['v_label'][node]
+        phasing_list = q_graph.vp['v_weights'][node]['weight'].keys()
+        local_phasing = phasing_list[state]
+        positions = v_label.split('-')
+        local_haplotypes = [local_phasing[i:i+len(positions)] for i in range(0, len(positions)*ploidy, positions)]
+        for i, position in enumerate(positions):
+            if phasings[position]:
+                # do some matching
+                pass
+            else:
+                phasing = ""
+                for j in range(ploidy):
+                    phasing += (local_haplotypes[j][i])
+                
     return
 
 def single_sample_phasings(q_graph, bp):
@@ -64,7 +94,7 @@ def max_phasings(q_graph, bp):
     tree_map = gt.random_spanning_tree(q_graph)
     node_assignments = {}
     starting_node = 0
-    node_belief = bp.var_beliefs[starting_node]
+    node_belief = np.argmax(bp.var_beliefs[starting_node])
     node_assignments[starting_node]=node_belief
     for neighbor in starting_node.all_neighbors():
         if tree_map[to_edge(starting_node, neighbor)]:
