@@ -107,6 +107,7 @@ class QuotientGraph:
             #     node_list.append('-'.join(sorted([str(node), str(nbr)])))
             edges_to_add = list(itertools.combinations(node_list, 2))
             for ed in edges_to_add:
+                # print(node_id, ed)
                 poss = sorted(list(set(ed[0].split('-') + ed[1].split('-'))))
                 # edge_label = '-'. join([str(elem) for elem in sorted([int(p) for p in poss])])
                 sorted_labels = sort_strings([ed[0], ed[1]])

@@ -19,8 +19,8 @@ from multiprocessing import Pool
 def generate_quotient_graph_make_input():
     inputs = []
     # contigs = ['Contig1_k3', 'Contig2_k3', 'Contig3_k3']
-    contigs = ['Contig2_k3', 'Contig3_k3']
-    # contigs = ['Contig1_k3']
+    # contigs = ['Contig2_k3', 'Contig3_k3']
+    contigs = ['Contig1_k2']
     # contigs = ['Contig1_k4', 'Contig1_k5', 'Contig1_k6']
     simulated_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data'
     graph_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_graphs/'
@@ -136,10 +136,17 @@ def generate_quotient_graph(inp):
 def generate_graphs():
     inputs = generate_quotient_graph_make_input()
     print('Number of inputs:', len(inputs))
-    # for inp in inputs:
-    #     generate_quotient_graph(inp)
-    pool = Pool(30)
-    pool.map(generate_quotient_graph, inputs)
+    for inp in inputs:
+        
+        try:
+            generate_quotient_graph(inp)
+        
+        except Exception as e:
+            print(e)
+            print('Error in:', inp[0])
+            continue
+    # pool = Pool(30)
+    # pool.map(generate_quotient_graph, inputs)
 
 
 if __name__ == '__main__':

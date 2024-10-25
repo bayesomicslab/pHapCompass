@@ -8,8 +8,8 @@ from multiprocessing import Pool
 
 def generate_transition_matrix_make_input():
     inputs = []
-    # contigs = ['Contig1_k3']
-    contigs = ['Contig1_k4', 'Contig1_k5', 'Contig1_k6']
+    contigs = ['Contig1_k2']
+    # contigs = ['Contig1_k4', 'Contig1_k5', 'Contig1_k6']
     # contigs = ['Contig2_k3']
     # simulated_data_path = '/home/mok23003/BML/HaplOrbit/simulated_data'
     # main_path = '/home/mok23003/BML/HaplOrbit/simulated_data_graphs/'
@@ -107,7 +107,6 @@ def generate_transitions():
 # path = '/home/mok23003/BML/HaplOrbit/simulated_data_graphs/transition_matrices/Contig1_k3/c2/ART_0.pkl.gz'
 # with gzip.open(path, 'rb') as f:
 #     transitions = cPickle.load(f)
-
 
 
 if __name__ == '__main__':

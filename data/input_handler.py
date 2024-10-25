@@ -48,7 +48,10 @@ class InputHandler:
         # new_row = {'0': 0, '1': 0, '2': 0}
         # gen_df = pd.concat([pd.DataFrame([new_row]), gen_df], ignore_index=True)
         gen_np = np.sum(gen_df.to_numpy(), axis=1)
-        genotype = 'N' + ''.join([str(g) for g in list(gen_np)])
+        if self.ploidy != 2:
+            genotype = 'N' + ''.join([str(g) for g in list(gen_np)])
+        else:
+            genotype = ''.join([str(g) for g in list(gen_np)])
         return genotype
     
     

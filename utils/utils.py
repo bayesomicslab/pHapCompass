@@ -10,7 +10,7 @@ import pandas as pd
 import pickle
 import graph_tool.all as gt
 from scipy.stats import entropy
-from algorithm.haplotype_assembly_helper import compute_likelihood_generalized_plus
+
 
 # @profile
 def get_matching_reads_for_positions(pos, fragment_list):
@@ -22,6 +22,11 @@ def get_matching_reads_for_positions(pos, fragment_list):
     matching_obs = [(obs_positions[idx], obs_reads[idx]) for idx in range(len(obs_positions)) if
                     len(set(pos).intersection(set(obs_positions[idx]))) > 1]
     
+    # for idx in range(len(obs_positions)):
+    #     if len(set(pos).intersection(set(obs_positions[idx]))) > 1:
+    #         print(idx, obs_positions[idx], obs_reads[idx])
+
+
     matches = []
     for mat in matching_obs:
         # print(mat)
@@ -676,3 +681,78 @@ def sort_strings(strings):
     # Sort the list of strings using the custom comparison logic
     return sorted(strings, key=lambda x: list(map(int, x.split('-'))))
 
+
+def get_minimum_spanning_tree(quotient_graph):
+    quotient_graph.clear_filters()
+    e_entropy = quotient_graph.new_edge_property("double")
+    for e in quotient_graph.edges():
+        e_entropy[e] = quotient_graph.ep['e_weights'][e]['entropy']
+    quotient_graph.ep['e_entropy'] = e_entropy
+    tree = gt.min_spanning_tree(quotient_graph, weights=e_entropy)
+    
+    mst_graph = gt.GraphView(quotient_graph, efilt=tree)
+    non_mst_graph = gt.GraphView(quotient_graph, efilt=lambda e: not tree[e])
+
+    return mst_graph, non_mst_graph, tree
+
+
+def compute_likelihood(observed, phasing, error_rate):
+    """This likelihood computation assumes the length of observation is the same as the length of phasing"""
+    y = np.tile(observed, (phasing.shape[0], 1))
+    diff = y - phasing
+    diff[diff != 0] = 1
+    comp_diff = 1 - diff
+    term1 = diff * error_rate
+    term2 = comp_diff * (1 - error_rate)
+    terms = term1 + term2
+    probs = np.prod(terms, axis=1)
+    likelihood = np.mean(probs)
+    return likelihood
+
+
+def compute_likelihood_generalized(observed, phasing, used_pos, error_rate):
+    """This likelihood computation can accept shorter observed and longer or equal length phasing, then the used pos
+    are the positions on the phasing that should be used"""
+    assert len(used_pos) == len(observed)
+    new_phasing = phasing[:, used_pos]
+    y = np.tile(observed, (new_phasing.shape[0], 1))
+    diff = y - new_phasing
+    diff[diff != 0] = 1
+    comp_diff = 1 - diff
+    term1 = diff * error_rate
+    term2 = comp_diff * (1 - error_rate)
+    terms = term1 + term2
+    probs = np.prod(terms, axis=1)
+    likelihood = np.mean(probs)
+    return likelihood
+
+# @profile
+def compute_likelihood_generalized_plus(observed, phasing, obs_pos, phas_pos, error_rate):
+    """This likelihood computation can accept different length observed and phasing, but the length of obs_pos and
+    phas_pos should be the same. The likelihood is computed on the provided indices on both vectors"""
+    new_phasing = phasing[:, phas_pos]
+    new_observed = observed[obs_pos]
+    y = np.tile(new_observed, (new_phasing.shape[0], 1))
+    diff = y - new_phasing
+    diff[diff != 0] = 1
+    comp_diff = 1 - diff
+    term1 = diff * error_rate
+    term2 = comp_diff * (1 - error_rate)
+    terms = term1 + term2
+    probs = np.prod(terms, axis=1)
+    likelihood = np.mean(probs)
+    return likelihood
+
+
+def plot_subgraph_graph_tool_simple(new_graph, included_vertices):
+    v_filter = new_graph.new_vertex_property("bool")
+
+    if not included_vertices is None:
+        for v in new_graph.vertices():
+            if int(v) in included_vertices:
+                v_filter[v] = True
+        subgraph = gt.GraphView(new_graph, vfilt=v_filter)
+
+        gt.graph_draw(subgraph, output_size=(500, 500), vertex_font_size=14,edge_font_size=12, vetex_size=10)
+    else:
+        gt.graph_draw(new_graph, output_size=(500, 500), vertex_font_size=14, edge_font_size=12, vetex_size=10)

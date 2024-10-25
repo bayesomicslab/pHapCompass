@@ -107,52 +107,6 @@ def get_max_length_paths_ploidy(root, max_depth, allel_set=[0, 1]):
     return max_length_paths
 
 
-def compute_likelihood(observed, phasing, error_rate):
-    """This likelihood computation assumes the length of observation is the same as the length of phasing"""
-    y = np.tile(observed, (phasing.shape[0], 1))
-    diff = y - phasing
-    diff[diff != 0] = 1
-    comp_diff = 1 - diff
-    term1 = diff * error_rate
-    term2 = comp_diff * (1 - error_rate)
-    terms = term1 + term2
-    probs = np.prod(terms, axis=1)
-    likelihood = np.mean(probs)
-    return likelihood
-
-
-def compute_likelihood_generalized(observed, phasing, used_pos, error_rate):
-    """This likelihood computation can accept shorter observed and longer or equal length phasing, then the used pos
-    are the positions on the phasing that should be used"""
-    assert len(used_pos) == len(observed)
-    new_phasing = phasing[:, used_pos]
-    y = np.tile(observed, (new_phasing.shape[0], 1))
-    diff = y - new_phasing
-    diff[diff != 0] = 1
-    comp_diff = 1 - diff
-    term1 = diff * error_rate
-    term2 = comp_diff * (1 - error_rate)
-    terms = term1 + term2
-    probs = np.prod(terms, axis=1)
-    likelihood = np.mean(probs)
-    return likelihood
-
-# @profile
-def compute_likelihood_generalized_plus(observed, phasing, obs_pos, phas_pos, error_rate):
-    """This likelihood computation can accept different length observed and phasing, but the length of obs_pos and
-    phas_pos should be the same. The likelihood is computed on the provided indices on both vectors"""
-    new_phasing = phasing[:, phas_pos]
-    new_observed = observed[obs_pos]
-    y = np.tile(new_observed, (new_phasing.shape[0], 1))
-    diff = y - new_phasing
-    diff[diff != 0] = 1
-    comp_diff = 1 - diff
-    term1 = diff * error_rate
-    term2 = comp_diff * (1 - error_rate)
-    terms = term1 + term2
-    probs = np.prod(terms, axis=1)
-    likelihood = np.mean(probs)
-    return likelihood
 
 
 def counts_to_phasing_ploidy(max_length_paths, allel_set=[0, 1]):
@@ -175,59 +129,6 @@ def generate_phasings_ploidy(ploidy, genotype, allel_set=[0, 1]):
     return phasing_np_list
 
 
-# NOT CORRECT
-# def find_phasings_matches(ff, sf, common_ff, common_sf):
-#     templates = []
-#     all_local = find_matchings(list(ff[:, common_ff]), list(sf[:, common_sf]))
-#     for al in all_local:
-#         ff_ordering = [ii[0] for ii in al]
-#         sf_ordering = [ii[1] for ii in al]
-#         assert any(ff[ff_ordering, common_ff] == sf[sf_ordering, common_sf])
-#         temp = np.hstack([ff[ff_ordering, :], sf[sf_ordering, 1:]])
-#         byte_set = {a.tobytes() for a in templates}
-#         if temp.tobytes() not in byte_set:
-#             # print(temp)
-#             templates.append(temp)
-#     return templates
-
-
-
-def combine_2list_phasings(first_phasings, second_phasings):
-    final_phasings = []
-    for ff in first_phasings:
-        for sf in second_phasings:
-            # print(ff, sf)
-            templates = []
-            all_local = find_matchings(list(ff[:, -1]), list(sf[:, 0]))
-            for al in all_local:
-                print(al)
-                ff_ordering = [ii[0] for ii in al]
-                sf_ordering = [ii[1] for ii in al]
-                assert any(ff[ff_ordering, -1] == sf[sf_ordering, 0])
-                temp = np.hstack([ff[ff_ordering, :], sf[sf_ordering, 1:]])
-                byte_set = {a.tobytes() for a in templates}
-                if temp.tobytes() not in byte_set:
-                    print(temp)
-                    templates.append(temp)
-            final_phasings += templates
-            # print('----------------------------')
-            byte_dict = {arr.tobytes(): arr for arr in final_phasings}
-            final_phasings = list(byte_dict.values())
-    
-    return final_phasings
-
-
-def generate_long_phasings(ploidy, genotype, allel_set=[0, 1]):
-    all_pair_genotypes = [''.join(lst) for lst in
-                          [list(genotype)[i:i + 2] for i in range(0, len(list(genotype)) - 1, 1)]]
-    first_phasings = generate_phasings_ploidy(ploidy, all_pair_genotypes[0], allel_set=allel_set)
-    for idx in range(1, len(all_pair_genotypes)):
-        this_geno = all_pair_genotypes[idx]
-        this_phasings = generate_phasings_ploidy(ploidy, this_geno, allel_set=allel_set)
-        first_phasings = combine_2list_phasings(first_phasings, this_phasings)
-    byte_dict = {arr.tobytes(): arr for arr in first_phasings}
-    final_phasings = list(byte_dict.values())
-    return final_phasings
 
 
 def phas_2_str(phas):
@@ -396,7 +297,7 @@ def counts_to_phasing_ploidy_long(max_length_paths, genotype, allel_set=[0, 1]):
     return phasing_np
 
 
-# def compute_edge_weight(new_vertex_name, v_label, source_phasings, target_phasings, fragment_model, config):
+def compute_edge_weight(new_vertex_name, v_label, source_phasings, target_phasings, fragment_model, config):
 
     possitions = sorted(set([int(nn) for nn in new_vertex_name.split('-')] + [int(nn) for nn in v_label.split('-')]))
     common_ff, common_sf = find_common_element_and_index(new_vertex_name, v_label)

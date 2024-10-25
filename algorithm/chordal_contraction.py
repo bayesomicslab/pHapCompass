@@ -1,7 +1,7 @@
 import numpy as np
 import itertools
-from algorithm.haplotype_assembly_helper import generate_phasings_ploidy_long, compute_likelihood_generalized_plus
-from utils.utils import get_matching_reads_for_positions, phas_2_str, networkit_find_cliques, nx2nk
+from algorithm.haplotype_assembly_helper import generate_phasings_ploidy_long
+from utils.utils import *
 from scipy.stats import entropy
 import random
 import networkx as nx
@@ -271,21 +271,6 @@ def find_cycle(mst_graph, quotient_graph, e):
     # The cycle is the path from source to target in the MST + the edge being added
     cycle_e = half_cyc[1] + [e]
     return cycle_e, half_cyc[0]
-
-
-def get_minimum_spanning_tree(quotient_graph):
-    quotient_graph.clear_filters()
-    e_entropy = quotient_graph.new_edge_property("double")
-    for e in quotient_graph.edges():
-        e_entropy[e] = quotient_graph.ep['e_weights'][e]['entropy']
-    quotient_graph.ep['e_entropy'] = e_entropy
-    tree = gt.min_spanning_tree(quotient_graph, weights=e_entropy)
-    
-    mst_graph = gt.GraphView(quotient_graph, efilt=tree)
-    non_mst_graph = gt.GraphView(quotient_graph, efilt=lambda e: not tree[e])
-
-
-    return mst_graph, non_mst_graph, tree
 
 
 def get_edge_name(a, b):
