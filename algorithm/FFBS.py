@@ -95,6 +95,9 @@ def run_ffbs():
     min_snp = min(snp_list)
     max_snp = max(snp_list)
     
+    all_vertices = [vvv for vvv in quotient_graph.vertex_properties["v_label"]]
+
+
     min_vertices = []
     max_vertices = []
     for vvv in quotient_graph.vertex_properties["v_label"]:
@@ -105,91 +108,112 @@ def run_ffbs():
 
     source_node = min_vertices[0]
     target_node = max_vertices[0]
+    target_node = '149-182'
     source = v_label_reversed[source_node]
     target = v_label_reversed[target_node]
 
+
+    
     mst_graph, non_mst_graph, tree = get_minimum_spanning_tree(quotient_graph)
     mst_graph = gt.Graph(mst_graph, prune=True)
 
     path_vertices, path_edges = gt.shortest_path(mst_graph, source, target)
-    alpha = forward_sum(quotient_graph, path_vertices, path_edges, ploidy, fragment_model)
+    alpha = forward_sum(quotient_graph, path_vertices, path_edges, ploidy, fragment_model, config)
     seq_len = len(path_vertices)
 
     sampled_states = ffbs(alpha, seq_len, path_vertices, path_edges, quotient_graph, ploidy, fragment_model, config)
-    revsered_sampled_states = sampled_states[::-1]
 
-    connections = []
-    for v_id in range(len(path_vertices) - 1):
-        vertex = path_vertices[v_id]
-        next_vertex = path_vertices[v_id + 1]
-        print(quotient_graph.vertex_properties["v_label"][vertex], revsered_sampled_states[v_id])
-        source_label = quotient_graph.vertex_properties["v_label"][vertex]
+
+    # for v_id in range(len(path_vertices)):
+    #     vertex = path_vertices[v_id]
+    #     print(quotient_graph.vertex_properties["v_label"][vertex], sampled_states[v_id])
+
+
+    phasings = []
+
+    vertex = path_vertices[0]
+    source_label = quotient_graph.vertex_properties["v_label"][vertex]
+    source_sampled_phasing = str_2_phas([sampled_states[0]], ploidy)
+    # cites = [int(v) for v in source_label.split('-')]
+
+    for v_id in range(1, len(path_vertices)):
+        # if v_id == 11:
+        #     stop
+        # vertex = path_vertices[v_id]
+        next_vertex = path_vertices[v_id]
+        # print(quotient_graph.vertex_properties["v_label"][vertex], sampled_states[v_id])
+        # source_label = quotient_graph.vertex_properties["v_label"][vertex]
         target_label = quotient_graph.vertex_properties["v_label"][next_vertex]
-        common_ff, common_sf = find_common_element_and_index(source_label, target_label)
-        source_sampled_phasing = str_2_phas_1(revsered_sampled_states[v_id], ploidy)
-        target_sampled_phasing = str_2_phas_1(revsered_sampled_states[v_id + 1], ploidy)
-        matched_phasings = find_phasings_matches(source_sampled_phasing, target_sampled_phasing, common_ff, common_sf, source_label, target_label)
-
-        input_handler.get_genotype_positions([3, 4, 6])
-        fragment_model.v_label_reversed['3']
-        fragment_model.v_label_reversed['4']
-        fragment_model.v_label_reversed['6']
-
-        fragment_model.graph.vertex_properties['v_weights'][fragment_model.graph.vertex(fragment_model.v_label_reversed['3'])]
-        fragment_model.graph.vertex_properties['v_weights'][fragment_model.graph.vertex(fragment_model.v_label_reversed['4'])]
-        fragment_model.graph.vertex_properties['v_weights'][fragment_model.graph.vertex(fragment_model.v_label_reversed['6'])]
-
-
-        edge_34 = fragment_model.graph.edge(fragment_model.v_label_reversed['3'], fragment_model.v_label_reversed['4'])
-        edge_36 = fragment_model.graph.edge(fragment_model.v_label_reversed['3'], fragment_model.v_label_reversed['6'])
-        edge_46 = fragment_model.graph.edge(fragment_model.v_label_reversed['4'], fragment_model.v_label_reversed['6'])
-
-
-        frag_weights34 = fragment_model.graph.edge_properties["e_weights"][edge_34]['weight'].keys()
-        frag_weights36 = fragment_model.graph.edge_properties["e_weights"][edge_36]['weight'].keys()
-        frag_weights46 = fragment_model.graph.edge_properties["e_weights"][edge_46]['weight'].keys()
-
-
-        print(quotient_graph.vertex_properties["v_weights"][quotient_graph.vertex(v_label_reversed['3-4'])]['weight'].keys())
-        print(quotient_graph.vertex_properties["v_weights"][quotient_graph.vertex(v_label_reversed['3-6'])]['weight'].keys())
-        print(quotient_graph.vertex_properties["v_weights"][quotient_graph.vertex(v_label_reversed['4-6'])]['weight'].keys())
-
-
-
-        q_edge_3436 = quotient_graph.edge(quotient_graph.vertex(v_label_reversed['3-4']), quotient_graph.vertex(v_label_reversed['3-6']))
-        q_edge_3446 = quotient_graph.edge(quotient_graph.vertex(v_label_reversed['3-4']), quotient_graph.vertex(v_label_reversed['4-6']))
-        q_edge_3646 = quotient_graph.edge(quotient_graph.vertex(v_label_reversed['3-6']), quotient_graph.vertex(v_label_reversed['4-6']))
-
-        quotient_graph.vertex_properties["v_weights"][quotient_graph.vertex(v_label_reversed['3-4'])]['weight']
-        quotient_graph.vertex_properties["v_weights"][quotient_graph.vertex(v_label_reversed['3-6'])]['weight']
-        quotient_graph.vertex_properties["v_weights"][quotient_graph.vertex(v_label_reversed['4-6'])]['weight']
-
-
-        print(quotient_graph.edge_properties["e_weights"][q_edge_3436]['weight'].keys())
-        print(quotient_graph.edge_properties["e_weights"][q_edge_3446]['weight'].keys())
-        print(quotient_graph.edge_properties["e_weights"][q_edge_3646]['weight'].keys())
-
-
-
-
-        sorted_phasings = []
+        # common_ff, common_sf = find_common_element_and_index(source_label, target_label)
+        common_ff, common_sf = find_common_element_and_index_generalized(source_label, target_label)
+        # source_sampled_phasing = str_2_phas_1(sampled_states[v_id], ploidy)
+        target_sampled_phasing = str_2_phas_1(sampled_states[v_id], ploidy)
+        phasings = []
+        
+        for sp in source_sampled_phasing:
+            
+        # for sp in source_sampled_phasing:
+            # print(sp)
+            matched_phasings = find_phasings_matches_generalized(sp, target_sampled_phasing, 
+                                                                    common_ff, common_sf, 
+                                                                    source_label, target_label)
+            target_positions = [int(tl) for tl in target_label.split('-')]
+            # all([tl in [int(tl) for tl in source_label.split('-')] for tl in target_positions])
+            if len(matched_phasings) == 0 and all([tl in [int(tl) for tl in source_label.split('-')] for tl in target_positions]):
+                # print(target_positions)
+                continue
+            else:
+                # phasings = []
+                sorted_phasings = []
                 for mtx in matched_phasings:
                     sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
                     sorted_phasings.append(sorted_matrix)
-                
                 matched_phasings_str = list(set([phas_2_str(pm) for pm in sorted_phasings]))
+                # sorted_phasings = []
+                # for mtx in matched_phasings:
+                #     sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
+                #     sorted_phasings.append(sorted_matrix)
+                # matched_phasings_str = list(set([phas_2_str(pm) for pm in sorted_phasings]))
+                
+                phasings += matched_phasings_str
+
+        phasings = list(set(phasings))
+        
+        # print(v_id, len(phasings), len(phasings[0])/ploidy)
+        current_vertex = next_vertex
+        source_label = '-'.join([str(s) for s in sorted(set([int(i) for i in source_label.split('-')] + [int(i) for i in target_label.split('-')]))])
+        if len(phasings) != 0:
+            source_sampled_phasing = str_2_phas(phasings, ploidy)
+        # print(v_id, len(source_sampled_phasing), source_label, target_label)
+        print(v_id, len(source_sampled_phasing), source_sampled_phasing[0].shape[1], source_label, target_label)
+        # else:
+        #     source_sampled_phasing = source_sampled_phasing
+        # cites = [int(v) for v in source_label.split('-')]
+        # input_handler.get_genotype_positions([96, 101])
+        # np.sum(source_sampled_phasing[0], axis=1)
+
+    dfs, gen_df = prepare_data_for_eval(source_label, source_sampled_phasing)
 
 
 
 
-        phase = revsered_sampled_states[v_id]
-        start, end = map(int, pos.split('-'))
-        connections.append((start, end, phase))
-    
 
 
+def prepare_data_for_eval(source_label, source_sampled_phasing, input_handler):
+    columns = source_label.split('-')
+    # positions = [int(c) for c in columns]
+    sorted_phasings = []
+    for mtx in source_sampled_phasing:
+        sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
+        sorted_phasings.append(sorted_matrix)
 
-def forward_sum(quotient_graph, path_vertices, path_edges, ploidy, fragment_model):
+    dfs = [pd.DataFrame(ssp, columns=columns) for ssp in sorted_phasings]
+    gen_df = input_handler.get_haplotype()
+
+    return dfs, gen_df
+
+
+def forward_sum(quotient_graph, path_vertices, path_edges, ploidy, fragment_model, config):
     alpha = {vi: np.zeros(len(quotient_graph.vertex_properties["v_weights"][v]['weight'].keys())) for vi, v in enumerate(path_vertices)}
     alpha[0] = np.array(list(quotient_graph.vertex_properties["v_weights"][path_vertices[0]]['weight'].values()))
     alpha[0] = torch.tensor(alpha[0] / np.sum(alpha[0]))
