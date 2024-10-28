@@ -13,6 +13,7 @@ from utils.utils import *
 from data.configuration import *
 from data.input_handler import InputHandler
 from models.fragment_graph import FragmentGraph
+from evaluation.metrics import *
 
 
 def generate_ffbs_input():
@@ -193,6 +194,42 @@ def run_ffbs():
         # np.sum(source_sampled_phasing[0], axis=1)
 
     dfs, gen_df = prepare_data_for_eval(source_label, source_sampled_phasing)
+    true_hap_np = gen_df.to_numpy()
+    true_hap_sorted = true_hap_np[np.argsort([''.join(map(str, row)) for row in true_hap_np])]
+    constructed_haps = [df.to_numpy() for df in dfs]
+
+    mec_scores = []
+    vector_error_rates = []
+    correct_phasing_rates = []
+    perfect_solution_rates = []
+    
+    for haplotypes in constructed_haps:
+        mec_score = calculate_mec_score(true_hap_sorted, haplotypes)
+        vector_error_rate = calculate_vector_error_rate(haplotypes, true_hap_sorted)
+        correct_phasing_rate = calculate_correct_phasing_rate(haplotypes, true_hap_sorted)
+        perfect_solution_rate = calculate_perfect_solution_rate(haplotypes, true_hap_sorted)
+        mec_scores.append(mec_score)
+        vector_error_rates.append(vector_error_rate)
+        correct_phasing_rates.append(correct_phasing_rate)
+        perfect_solution_rates.append(perfect_solution_rate)
+
+
+    
+    categories = ['vector error rate', 'correct phasing rate', 'perfect solution rate']
+    results_df = pd.DataFrame({
+        'Value': vector_error_rates + correct_phasing_rates + perfect_solution_rates,
+        'Category': ([categories[0]] * len(vector_error_rates)) +
+                    ([categories[1]] * len(correct_phasing_rates)) +
+                    ([categories[2]] * len(perfect_solution_rates))
+    })
+
+    # Create the box plot
+    plt.figure(figsize=(8, 6))
+    sns.boxplot(x='Category', y='Value', data=results_df)
+
+    # Customize plot
+    plt.title('Results on Contig1_k3')
+    plt.show()
 
 
 
@@ -201,7 +238,7 @@ def run_ffbs():
 
 def prepare_data_for_eval(source_label, source_sampled_phasing, input_handler):
     columns = source_label.split('-')
-    # positions = [int(c) for c in columns]
+    positions = [int(c) for c in columns]
     sorted_phasings = []
     for mtx in source_sampled_phasing:
         sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
@@ -209,6 +246,8 @@ def prepare_data_for_eval(source_label, source_sampled_phasing, input_handler):
 
     dfs = [pd.DataFrame(ssp, columns=columns) for ssp in sorted_phasings]
     gen_df = input_handler.get_haplotype()
+    gen_df = gen_df.loc[positions, :]
+    gen_df = gen_df.T
 
     return dfs, gen_df
 
