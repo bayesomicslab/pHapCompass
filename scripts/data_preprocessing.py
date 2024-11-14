@@ -337,3 +337,5 @@ def simulate_for_coverage():
     # Save commands to shell script
     with open(sh_path, "w") as sh_file:
         sh_file.write(to_print)
+
+    
