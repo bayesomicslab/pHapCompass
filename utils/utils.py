@@ -626,7 +626,6 @@ def find_matchings_generalized(part1, part2):
         # For each current matching, extend it with all possible permutations for the current type.
         new_matchings = []
         for perm in itertools.permutations(indices2, len(indices2)):
-            
             for current_matching in matchings:
                 # Add new matching to the results only if it doesn't conflict with the current matching.
                 if all((i1, i2) not in current_matching for i1, i2 in zip(indices1, perm)):
