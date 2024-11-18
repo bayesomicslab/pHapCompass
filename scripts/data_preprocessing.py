@@ -103,6 +103,7 @@ def merge_fastq_files():
             # paired_sam = '{}/{}_paired.sam'.format(this_sim_path, str(rd).zfill(2))
             # convert_sam_bam = 'samtools view -b {} > {}/{}_single.bam\n'.format(single_sam, merged_bam, str(rd).zfill(2))
 
+
 def align_fastq_files():
     reference_path = '/labs/Aguiar/pHapCompass/references/AWRI1499/GCA_000259595.1/GCA_000259595.1_AWRI1499_v1.0_genomic.fna'
     sh_path = '/labs/Aguiar/pHapCompass/scripts/04_align_fastq.sh'
@@ -340,4 +341,6 @@ def simulate_for_coverage():
 
 
 
-        
+
+
+    

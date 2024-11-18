@@ -112,14 +112,29 @@ def generate_reads(inp):
 
 
 
-def simulate_from_diploid():
-    vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/_EGAZ00001239269_HRC.r1-1.EGA.GRCh37.chr2.haplotypes.vcf.gz'
-    fasta_path = '/mnt/research/aguiarlab/data/hg19/chr2.fa'
-    
-    with open(fasta_path) as f:
+def check_compatibility_vcf_fasta():
+    vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/_EGAZ00001239288_HRC.r1-1.EGA.GRCh37.chr21.haplotypes.vcf.gz'
+    vcf_df = pd.read_csv(vcf_path, skiprows=48, nrows=10, sep='\t')
+    # Path to the FASTA file
+    # chr21_fasta_path = '/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21.fna'
+    chr21_fasta_path = '/mnt/research/aguiarlab/data/hg19/chr21.fa'
+    chr21_legend_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/_EGAZ00001239288_HRC.r1-1.EGA.GRCh37.chr21.legend.gz'
+    # Read the FASTA file, skipping the first line (chromosome name line)
+    with open(chr21_fasta_path, 'r') as f:
         fasta_file = f.readlines()
 
+    # Combine the sequence lines into a single string, skipping the first line
+    fasta_sequence = "".join(line.strip() for line in fasta_file if not line.startswith(">"))
 
+    legend_df = pd.read_csv(chr21_legend_path, sep=' ', compression='gzip')
+
+    for i in range(10):
+        pos = legend_df.loc[i, 'position']
+        ref_pos = legend_df.loc[i, 'a0']
+        # alt_pos = legend_df.loc[i, 'a1']
+
+        print(pos, ref_pos, fasta_sequence[pos - 1], legend_df.loc[i, 'a1'])
+        # print('----------------------------------')
 
 
 def generate_short_reads():
