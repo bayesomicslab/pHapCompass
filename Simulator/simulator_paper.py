@@ -15,13 +15,16 @@ def extract_column_NA12878(file_path):
 
 
 def extract_column_NA12878_v2(file_path):
-    output_file = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.vcf.gz'
-    output_vcf = pysam.VariantFile(output_file, 'w', header=bcf_file.header)
+
 
     # file_path = "/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/windows/10/hapref_chr21_filtered.vcf.bgz_sample0_len10.bcf"
     
     file_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz'
     bcf_file = pysam.VariantFile(file_path)
+
+
+    output_file = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.vcf.gz'
+    output_vcf = pysam.VariantFile(output_file, 'w', header=bcf_file.header)
 
     # Specify the sample you want to extract
     target_sample = "NA12878"
@@ -104,12 +107,16 @@ def generate_genomes_fasta():
     # output_vcf_prefix = 'vcf_out'
     # ploidy = 3 
     # input_vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/_EGAZ00001239288_HRC.r1-1.EGA.GRCh37.chr21.haplotypes.vcf.gz'
+    # snp_df_NA12878_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv'
     snp_df_NA12878_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv'
     snp_df_NA12878 = pd.read_csv(snp_df_NA12878_path)
     snp_positions = list(snp_df_NA12878['POS'].values)
+    # input_vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz'
     input_vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz'
+    # contig_fasta = '/mnt/research/aguiarlab/data/hg19/chr21.fa'
     contig_fasta = '/mnt/research/aguiarlab/data/hg19/chr21.fa'
-    output_fasta_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW'
+    # output_fasta_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW'
+    output_fasta_path = '/labs/Aguiar/pHapCompass/simulated_data_NEW'
     is_phased = True
     # output_vcf = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.vcf.gz'
     with open(contig_fasta) as f:
@@ -117,8 +124,8 @@ def generate_genomes_fasta():
         contig_seq = f.read().replace("\n", "")  # Get sequence without newlines
 
 
-    contig_lens = [100, 300, 1000] # [10, 100, 300, 1000] 
-    ploidies = [3, 4, 6, 8, 10]
+    contig_lens = [100] # [10, 100, 300, 1000] 
+    ploidies = [3] #, 4, 6, 8, 10]
     for contig_len in contig_lens:
         contig_path = os.path.join(output_fasta_path, 'contig_{}'.format(contig_len))
         if not os.path.exists(contig_path):
@@ -169,11 +176,12 @@ def generate_genomes_fasta():
 
                     # Format the genotype as VCF-style (e.g., 0|1|0)
                     genotype_str = "|".join(map(str, genotype))
-                    qual = round(random.uniform(3, 75), 4)
+                    qual = 75 # round(random.uniform(3, 75), 4)
                     
                     # Create a new VCF record with only NA12878
                     new_record = vcf_out.new_record(
-                        contig=record.chrom,
+                        # contig=record.chrom,
+                        contig='chr21',
                         start=record.start,
                         stop=record.stop,
                         alleles=(ref, alts[0]),
@@ -219,10 +227,14 @@ def generate_genomes_fasta():
 
 
 def simulate_fastq_art():
-    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW'
-    art_path = '/home/mah19006/downloads/art_bin_MountRainier/art_illumina'
-    sh_path = os.path.join('/mnt/research/aguiarlab/proj/HaplOrbit/scripts/simulation', '01_simulate_illumina.sh')
-    to_print = ''
+    # main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW'
+    main_path = '/labs/Aguiar/pHapCompass/simulated_data_NEW'
+    # art_path = '/home/mah19006/downloads/art_bin_MountRainier/art_illumina'
+    art_path = '/labs/Aguiar/pHapCompass/ART/art_bin_MountRainier/art_illumina'
+    # sh_path = os.path.join('/mnt/research/aguiarlab/proj/HaplOrbit/scripts/simulation', '01_simulate_illumina.sh')
+    sh_path = os.path.join('/labs/Aguiar/pHapCompass/scripts/simulation', '01_simulate_illumina.sh')
+    
+    # to_print = ''
     contig_lens = [10, 100, 300, 1000]
     ploidies = [3, 4, 6, 8, 10]
     coverages = [10, 20, 30, 40, 50]
@@ -232,7 +244,8 @@ def simulate_fastq_art():
     for contig_len in contig_lens:
         for ploidy in ploidies:
             fasta_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'contig_{}_ploidy_{}.fa'.format(contig_len, ploidy))
-            # this_sh_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'run_art.sh')
+            this_sh_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), '01_simulate_{}_{}.sh'.format(contig_len, ploidy))
+            to_print = ''
             for coverage in coverages:
                 this_cov_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
                 if not os.path.exists(this_cov_path):
@@ -247,20 +260,25 @@ def simulate_fastq_art():
                     # paired_cmd = './art_454 -s -t -r {} {} {}/{}_paired {} {} {}\n\n'.format(rn, chr_reference_path, this_sim_path, str(rd).zfill(2), coverage, mil, sil)
                     # to_print += single_cmd
                     # to_print += paired_cmd
-    with open(sh_path, 'w') as f:
-        f.write(to_print)
+            with open(this_sh_path, 'w') as f:
+                f.write(to_print)
 
 
 def align_fastq_files():
     main_path = '/labs/Aguiar/pHapCompass/simulated_data_NEW'
     chr21_fasta_path = '/labs/Aguiar/pHapCompass/references/EGA.GRCh37/chr21.fa'
     sh_path = os.path.join('/labs/Aguiar/pHapCompass/scripts/simulation', '02_align.sh')
-    to_print = 'module load bwa-mem2/2.1\nmodule load bwa/0.7.17\n\n'
-    contig_lens = [10] # [10, 100, 300, 1000]
-    ploidies = [3] # [3, 4, 6, 8, 10]
-    coverages = [10] #[10, 20, 30, 40, 50]
+    # to_print = 'module load bwa-mem2/2.1\nmodule load bwa/0.7.17\n\n'
+    contig_lens = [10, 100, 300, 1000]
+    ploidies =  [3, 4, 6, 8, 10]
+    coverages = [10, 20, 30, 40, 50]
     for contig_len in contig_lens:
         for ploidy in ploidies:
+            fasta_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'contig_{}_ploidy_{}.fa'.format(contig_len, ploidy))
+            fa_index = 'bwa index {}\n\n'.format(fasta_path)
+            this_sh_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), '02_align_{}_{}.sh'.format(contig_len, ploidy))
+            # to_print += fa_index
+            to_print = 'module load bwa-mem2/2.1\nmodule load bwa/0.7.17\n' + fa_index
             for coverage in coverages:
                 this_cov_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
                 fastq_path = os.path.join(this_cov_path, 'fastq')
@@ -268,7 +286,7 @@ def align_fastq_files():
                 if not os.path.exists(bam_path):
                     os.makedirs(bam_path)
                 for rd in range(100):
-                    command = 'bwa mem {} {}/{}1.fq {}/{}2.fq > {}/{}.sam\n'.format(chr21_fasta_path, fastq_path, str(rd).zfill(2), fastq_path, str(rd).zfill(2), bam_path, str(rd).zfill(2))
+                    command = 'bwa mem {} {}/{}1.fq {}/{}2.fq > {}/{}.sam\n'.format(fasta_path, fastq_path, str(rd).zfill(2), fastq_path, str(rd).zfill(2), bam_path, str(rd).zfill(2))
                     sort_com = 'samtools view -Sb {}/{}.sam | samtools sort -o {}/{}.bam\n'.format(bam_path, str(rd).zfill(2), bam_path, str(rd).zfill(2))
                     index_com = 'samtools index {}/{}.bam\n'.format(bam_path, str(rd).zfill(2))
                     rmv_com = 'rm {}/{}.sam\n\n'.format(bam_path, str(rd).zfill(2))
@@ -276,8 +294,12 @@ def align_fastq_files():
                     to_print += sort_com
                     to_print += index_com
                     to_print += rmv_com
-    with open(sh_path, 'w') as f:
-        f.write(to_print)
+            with open(this_sh_path, 'w') as f:
+                f.write(to_print)
+
+        '/home/FCAM/mhosseini/HaplOrbit/extract_poly/build/extractHAIRS --bam /labs/Aguiar/pHapCompass/simulated_data_NEW/contig_100/ploidy_3/cov_10/bam/00.bam --vcf /labs/Aguiar/pHapCompass/simulated_data_NEW/contig_100/ploidy_3/merged_haplotypes.vcf --out /labs/Aguiar/pHapCompass/simulated_data_NEW/contig_100/ploidy_3/cov_10/frag/00.frag'
+
+
 
 if __name__ == '__main__':
     generate_genomes_fasta()
