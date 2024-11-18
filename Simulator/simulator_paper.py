@@ -57,12 +57,15 @@ def extract_column_NA12878_v2(file_path):
 
     # Filter for heterozygous genotypes (1|0 or 0|1)
     df["GENOTYPE"] = df["GENOTYPE"].apply(lambda x: "|".join(map(str, x)))  # Convert tuples to string
-    hetero_df = df[df["GENOTYPE"].isin(["1|0", "0|1"])].reset_index(drop=True)
+    # hetero_df = df[df["GENOTYPE"].isin(["1|0", "0|1"])].reset_index(drop=True)
 
-    # Sort by position and add simulated positions
-    hetero_df = hetero_df.sort_values(by="POS").reset_index(drop=True)
-    hetero_df["sim_pos"] = hetero_df.index
-    hetero_df.to_csv('/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv', index=False)
+    # # Sort by position and add simulated positions
+    # hetero_df = hetero_df.sort_values(by="POS").reset_index(drop=True)
+    # hetero_df["sim_pos"] = hetero_df.index
+    # hetero_df.to_csv('/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv', index=False)
+    df = df.sort_values(by="POS").reset_index(drop=True)
+    # df['difference'] = df['POS'].diff()
+    df.to_csv('/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv', index=False)
 
 
 def check_compatibility_vcf_fasta():
@@ -108,13 +111,13 @@ def generate_genomes_fasta():
     # ploidy = 3 
     # input_vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/_EGAZ00001239288_HRC.r1-1.EGA.GRCh37.chr21.haplotypes.vcf.gz'
     # snp_df_NA12878_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv'
-    snp_df_NA12878_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv'
+    snp_df_NA12878_path = '/labs/Aguiar/pHapCompass/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv'
     snp_df_NA12878 = pd.read_csv(snp_df_NA12878_path)
     snp_positions = list(snp_df_NA12878['POS'].values)
     # input_vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz'
-    input_vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz'
+    input_vcf_path = '/labs/Aguiar/pHapCompass/simulated_data_NEW/maf0.01_hapref_chr21_filtered.vcf.bgz'
     # contig_fasta = '/mnt/research/aguiarlab/data/hg19/chr21.fa'
-    contig_fasta = '/mnt/research/aguiarlab/data/hg19/chr21.fa'
+    contig_fasta = '/labs/Aguiar/pHapCompass/references/EGA.GRCh37/chr21.fa'
     # output_fasta_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW'
     output_fasta_path = '/labs/Aguiar/pHapCompass/simulated_data_NEW'
     is_phased = True
@@ -122,7 +125,6 @@ def generate_genomes_fasta():
     with open(contig_fasta) as f:
         contig_name = f.readline().strip()[1:]  # Get contig name without '>'
         contig_seq = f.read().replace("\n", "")  # Get sequence without newlines
-
 
     contig_lens = [100] # [10, 100, 300, 1000] 
     ploidies = [3] #, 4, 6, 8, 10]
@@ -175,46 +177,36 @@ def generate_genomes_fasta():
                         haplotypes[i].append(genotype[i])
 
                     # Format the genotype as VCF-style (e.g., 0|1|0)
-                    genotype_str = "|".join(map(str, genotype))
+                    # genotype_str = "|".join(map(str, genotype))
                     qual = 75 # round(random.uniform(3, 75), 4)
                     
-                    # Create a new VCF record with only NA12878
-                    new_record = vcf_out.new_record(
-                        # contig=record.chrom,
-                        contig='chr21',
-                        start=record.start,
-                        stop=record.stop,
-                        alleles=(ref, alts[0]),
-                        id=record.id,
-                        qual=qual,
-                        filter=record.filter.keys(),
-                        info=record.info
-                    )
-                    new_record.samples["NA12878"]["GT"] = genotype
-                    new_record.samples["NA12878"].phased = is_phased
-                    vcf_out.write(new_record)
+                    for k in range(ploidy):
+                        # Create a new VCF record with only NA12878
+                        new_record = vcf_out.new_record(
+                            # contig=record.chrom,
+                            contig=f'haplotype_{k + 1}',
+                            start=record.start,
+                            stop=record.stop,
+                            alleles=(ref, alts[0]),
+                            id=record.id,
+                            qual=qual,
+                            filter=record.filter.keys(),
+                            info=record.info
+                        )
+                        new_record.samples["NA12878"]["GT"] = genotype
+                        new_record.samples["NA12878"].phased = is_phased
+                        vcf_out.write(new_record)
 
                     # Write the record line directly to the output VCF file
                     # vcf_out.write(f"{record.chrom}\t{record.pos}\t.\t{ref}\t{alts[0]}\t{qual}\tPASS\t*\tGT:GQ\t{genotype_str}:100\n")
 
             vcf_out.close()
 
-            # # Write each genome to a separate FASTA file
-            # for i in range(ploidy):
-            #     # output_fasta = f"{contig_name}_genome_{i + 1}.fa"
-            #     output_fasta = os.path.join(contig_ploidy_path, 'genome_{}.fa'.format(i+1))
-            #     with open(output_fasta, "w") as f_out:
-            #         f_out.write(f">{contig_name}_haplotype_{i + 1}\n")
-            #         f_out.write("".join(genomes[i]) + "\n")
-            # Write all ploidy genomes to a single FASTA file
-
             output_fasta = os.path.join(contig_ploidy_path, f'contig_{contig_len}_ploidy_{ploidy}.fa')
             with open(output_fasta, "w") as f_out:
                 for i in range(ploidy):
-                    f_out.write(f">{contig_name}_haplotype_{i + 1}\n")
+                    f_out.write(f">haplotype_{i + 1}\n")
                     f_out.write("".join(genomes[i]) + "\n")
-
-
 
             # write haplotypes to a DataFrame
             haplotype_df = pd.DataFrame(haplotypes).T  # Transpose so each column represents a haplotype
