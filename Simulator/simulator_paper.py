@@ -309,7 +309,7 @@ class Simulator:
                 haplotype_df = pd.DataFrame(haplotypes).T
                 haplotype_df.columns = [f"haplotype_{i + 1}" for i in range(ploidy)]
                 haplotype_df.to_csv(os.path.join(ploidy_path, 'haplotypes.csv'), index=False)
-
+                print(f"Generated genomes for contig length {contig_len} and ploidy {ploidy}.")
 
     def simulate_fastq_art(self):
         """
@@ -392,7 +392,7 @@ class Simulator:
                     if not os.path.exists(frag_path):
                         os.makedirs(frag_path)
                     for rd in range(self.n_samples): 
-                        command = '{} --bam {}/{}.bam --noquality --vcf {} --out {}/{}.frag\n'.format(self.extract_hairs_path, bam_path, str(rd).zfill(2), unzipped_vcf, frag_path, str(rd).zfill(2))
+                        command = '{} --bam {}/{}.bam --vcf {} --out {}/{}.frag\n'.format(self.extract_hairs_path, bam_path, str(rd).zfill(2), unzipped_vcf, frag_path, str(rd).zfill(2))
                         to_print += command
                 with open(this_sh_path, 'w') as f:
                     f.write(to_print)
@@ -412,16 +412,16 @@ class Simulator:
 if __name__ == '__main__':
 
     xanadu_config = {
-        "snp_df_path": '/labs/Aguiar/pHapCompass/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
-        "input_vcf_path": '/labs/Aguiar/pHapCompass/simulated_data_NEW/hapref_chr21_filtered.vcf.bgz',
+        "snp_df_path": '/labs/Aguiar/pHapCompass/references/Sim/maf0.01_hapref_chr21_filtered_NA12878.csv',
+        "input_vcf_path": '/labs/Aguiar/pHapCompass/references/Sim/hapref_chr21_filtered.vcf.bgz',
         "contig_fasta": '/labs/Aguiar/pHapCompass/references/EGA.GRCh37/chr21.fa',
         "art_path": '/labs/Aguiar/pHapCompass/ART/art_bin_MountRainier/art_illumina',
-        "main_path": '/labs/Aguiar/pHapCompass/simulated_data_long',
+        "main_path": '/labs/Aguiar/pHapCompass/simulated_data_NEW',
         "extract_hairs_path": '/home/FCAM/mhosseini/HaplOrbit/extract_poly/build/extractHAIRS',
-        "n_samples": 3, 
+        "n_samples": 100, 
         "target_spacing": 100,
         "densify_snps": True, 
-        "contig_lens": [100], 
+        "contig_lens": [10, 100, 1000], 
         "ploidies": [3],
         "coverages": [10],
         "read_length": 150,
@@ -450,6 +450,5 @@ if __name__ == '__main__':
 
     simulator = Simulator(xanadu_config)
     # simulator.generate_genomes_fasta()
-
 
     simulator.simulate()
