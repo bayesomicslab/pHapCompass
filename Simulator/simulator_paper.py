@@ -240,7 +240,7 @@ class Simulator:
                         genotype = tuple(1 if i in selected_genomes else 0 for i in range(ploidy))
 
                         for i in range(ploidy):
-                            genomes[i][pos] = alts[0] if genotype[i] == 1 else ref
+                            genomes[i][pos-1] = alts[0] if genotype[i] == 1 else ref
                             haplotypes[i].append(genotype[i])
 
                         for k in range(ploidy):
@@ -280,7 +280,7 @@ class Simulator:
                             genotype = tuple(1 if i in selected_genomes else 0 for i in range(ploidy))
 
                             for i in range(ploidy):
-                                genomes[i][pos] = alts[0] if genotype[i] == 1 else ref
+                                genomes[i][pos-1] = alts[0] if genotype[i] == 1 else ref
                                 haplotypes[i].append(genotype[i])
                             
 
@@ -411,7 +411,7 @@ class Simulator:
 
 if __name__ == '__main__':
 
-    config = {
+    xanadu_config = {
         "snp_df_path": '/labs/Aguiar/pHapCompass/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
         "input_vcf_path": '/labs/Aguiar/pHapCompass/simulated_data_NEW/hapref_chr21_filtered.vcf.bgz',
         "contig_fasta": '/labs/Aguiar/pHapCompass/references/EGA.GRCh37/chr21.fa',
@@ -429,5 +429,27 @@ if __name__ == '__main__':
         "std_insert_length": 150
         }
 
-    simulator = Simulator(config)
+    beagle_config = {
+        "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
+        "input_vcf_path": '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz',
+        "contig_fasta": '/mnt/research/aguiarlab/data/hg19/chr21.fa',
+        "art_path": '/home/mah19006/downloads/art_bin_MountRainier/art_illumina',
+        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_long',
+        "extract_hairs_path": '/home/FCAM/mhosseini/HaplOrbit/extract_poly/build/extractHAIRS',
+        "n_samples": 3, 
+        "target_spacing": 100,
+        "densify_snps": True, 
+        "contig_lens": [100], 
+        "ploidies": [3],
+        "coverages": [10],
+        "read_length": 150,
+        "mean_insert_length": 800,
+        "std_insert_length": 150
+        }
+
+
+    simulator = Simulator(xanadu_config)
+    # simulator.generate_genomes_fasta()
+
+
     simulator.simulate()
