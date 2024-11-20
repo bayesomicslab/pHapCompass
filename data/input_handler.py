@@ -54,6 +54,7 @@ class InputHandler:
             genotype = ''.join([str(g) for g in list(gen_np)])
         return genotype
     
+    
     def get_haplotype(self):
         gen_df = pd.read_csv(self.genotype_path, sep='\t', names=[str(i) for i in range(self.ploidy)]).reset_index(drop=True)
         if self.ploidy != 2:
