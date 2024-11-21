@@ -130,8 +130,6 @@ class Simulator:
         # --mail-type=END\n#SBATCH --mem=20G\n#SBATCH --mail-user=marjan.hosseini@uconn.edu\n#SBATCH -o script.out\n#SBATCH -e ont.err\n\necho `hostname`'
 
 
-
-
     def get_slurm_header(self, name):
         header = f"#!/bin/bash\n#BATCH --job-name={name}\n#SBATCH -N 1\n#SBATCH -n 1\n#SBATCH -c 1\n#SBATCH --partition=general\n#SBATCH --qos=general\n#SBATCH --mail-type=END\n#SBATCH --mem=20G\n#SBATCH --mail-user=marjan.hosseini@uconn.edu\n#SBATCH -o {name}.out\n#SBATCH -e {name}.err\n\necho `hostname`\n\n"
         return header
@@ -311,6 +309,7 @@ class Simulator:
                 haplotype_df.to_csv(os.path.join(ploidy_path, 'haplotypes.csv'), index=False)
                 print(f"Generated genomes for contig length {contig_len} and ploidy {ploidy}.")
 
+
     def simulate_fastq_art(self):
         """
         Simulate FASTQ files using ART.
@@ -432,6 +431,115 @@ class SimulatorAWRI:
         # '#!/bin/bash\n#BATCH --job-name=pyalb\n#SBATCH -N 1\n#SBATCH -n 1\n#SBATCH -c 1\n#SBATCH --partition=general\n#SBATCH --qos=general\n#SBATCH 
         # --mail-type=END\n#SBATCH --mem=20G\n#SBATCH --mail-user=marjan.hosseini@uconn.edu\n#SBATCH -o script.out\n#SBATCH -e ont.err\n\necho `hostname`'
 
+    def generate_genomes_fasta(self):
+        """
+        Generate genomes and save to FASTA format for various configurations.
+        """
+        # snp_df = pd.read_csv(self.snp_df_path)
+        # # snp_df['diff'] = snp_df['POS'].diff()
+        # snp_positions = list(snp_df['POS'].values)
+
+        # if self.densify_snps:
+        #     adjusted_pos = self.adjust_snp_spacing(snp_positions, max_length=None)
+        vcf_in = pysam.VariantFile(self.input_vcf_path)
+        snp_positions = [record.pos - 1 for record in vcf_in.fetch()]
+
+        with open(self.contig_fasta) as f:
+            contig_name = f.readline().strip()[1:]  # Get contig name without '>'
+            contig_seq = f.read().replace("\n", "")
+
+        for contig_len in self.contig_lens:
+            contig_path = os.path.join(self.main_path, f'contig_{contig_len}')
+            if not os.path.exists(contig_path):
+                os.makedirs(contig_path, exist_ok=True)
+
+            for ploidy in self.ploidies:
+                ploidy_path = os.path.join(contig_path, f'ploidy_{ploidy}')
+                if not os.path.exists(ploidy_path):
+                    os.makedirs(ploidy_path, exist_ok=True)
+                # stop
+                
+                
+                # last_snp = snp_positions[:contig_len][-1]
+                # if self.densify_snps:
+                #     last_snp = adjusted_pos[:contig_len][-1]
+                # else:
+                # last_snp = snp_positions[:contig_len][-1]
+
+                haplotypes = [[] for _ in range(ploidy)]
+                # genomes = [list(contig_seq[:last_snp]) for _ in range(ploidy)]
+                genomes = [list(contig_seq) for _ in range(ploidy)]
+
+                vcf_in = pysam.VariantFile(self.input_vcf_path)
+                original_snps = {record.pos - 1: record for record in vcf_in.fetch()}  # Map positions to records
+
+                # with pysam.VariantFile(self.input_vcf_path) as vcf_in:
+                new_header = pysam.VariantHeader()
+                for line in vcf_in.header.records:
+                    new_header.add_line(str(line))
+                for k in range(ploidy):
+                    new_header.contigs.add(f"haplotype_{k + 1}", length=len(contig_seq))
+                
+                new_header.add_sample("AWRI")
+
+                output_vcf = os.path.join(ploidy_path, f'AWRI_ploidy{ploidy}_contig{contig_len}.vcf.gz')
+                vcf_out = pysam.VariantFile(output_vcf, "wz", header=new_header)
+                snp_counter = 0
+
+                for record in vcf_in.fetch():
+                    pos = record.pos - 1
+                    ref = record.ref
+                    alts = record.alts[:1]
+                    # print(pos, ref, alts, contig_seq[pos], len(alts[0]))
+
+                    # if len(alts) > 0:
+                    #     alts = record.alts[:1]
+                    # else:
+                    #     ref_upper = ref.upper()  # Convert ref to uppercase
+                    #     bases = ["A", "C", "G", "T"]
+                    #     bases.remove(ref_upper)  # Remove the ref base from the options
+                    #     alts = random.choice(bases)
+                    
+                    if len(alts) > 0 and snp_counter < contig_len and len(ref) == 1 and len(alts[0]) == 1 and ref != 'N':
+                    # if pos + 1 in adjusted_pos and snp_counter < contig_len:
+                        print(pos, ref, genomes[0][pos], alts)
+                        snp_counter += 1
+                        g = random.randint(1, ploidy - 1)
+                        selected_genomes = random.sample(range(ploidy), g)
+                        genotype = tuple(1 if i in selected_genomes else 0 for i in range(ploidy))
+
+                        for i in range(ploidy):
+                            genomes[i][pos] = alts[0] if genotype[i] == 1 else ref
+                            haplotypes[i].append(genotype[i])
+                        
+                        for k in range(ploidy):
+                            new_record = vcf_out.new_record(
+                                contig=f"haplotype_{k + 1}",
+                                start=record.start,
+                                stop=record.stop,
+                                alleles=(ref, alts[0]),
+                                qual=75,
+                                filter=record.filter.keys(),
+                                info=record.info,
+                            )
+                            new_record.samples["AWRI"]["GT"] = genotype
+                            new_record.samples["AWRI"].phased = True
+                            vcf_out.write(new_record)
+
+                vcf_out.close()
+
+                output_fasta = os.path.join(ploidy_path, f'contig_{contig_len}_ploidy_{ploidy}.fa')
+                with open(output_fasta, "w") as f_out:
+                    for i in range(ploidy):
+                        f_out.write(f">haplotype_{i + 1}\n")
+                        f_out.write("".join(genomes[i]) + "\n")
+
+                haplotype_df = pd.DataFrame(haplotypes).T
+                haplotype_df.columns = [f"haplotype_{i + 1}" for i in range(ploidy)]
+                haplotype_df.to_csv(os.path.join(ploidy_path, 'haplotypes.csv'), index=False)
+                print(f"Generated genomes for contig length {contig_len} and ploidy {ploidy}.")
+
+
 
 
 
@@ -455,7 +563,7 @@ if __name__ == '__main__':
         "std_insert_length": 150
         }
 
-    beagle_config = {
+    beagle_config_human = {
         "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
         "input_vcf_path": '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz',
         "contig_fasta": '/mnt/research/aguiarlab/data/hg19/chr21.fa',
@@ -473,8 +581,26 @@ if __name__ == '__main__':
         "std_insert_length": 150
         }
 
+    beagle_config_AWRI = {
+        "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
+        "input_vcf_path": '/mnt/research/aguiarlab/proj/HaplOrbit/SRR942191/vcf_files/SRR942191_AHIQ01000001.1.vcf',
+        "contig_fasta": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/AWRI1499/contigs_noamb/contig_AHIQ01000001.1.fa',
+        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri',
+        "art_path": 'art_illumina',
+        "extract_hairs_path": 'extractHAIRS',
+        "n_samples": 10, 
+        "target_spacing": 100,
+        "densify_snps": False, 
+        "contig_lens": [10, 100, 1000], 
+        "ploidies": [3],
+        "coverages": [10],
+        "read_length": 150,
+        "mean_insert_length": 800,
+        "std_insert_length": 150
+        }
 
-    simulator = Simulator(beagle_config)
+
+    simulator = SimulatorAWRI(beagle_config_AWRI)
     # simulator.generate_genomes_fasta()
 
     simulator.simulate()
