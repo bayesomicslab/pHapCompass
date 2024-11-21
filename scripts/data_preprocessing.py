@@ -1,5 +1,6 @@
 import os
 import random
+import pandas as pd
 
 reference_path = '/labs/Aguiar/pHapCompass/references/AWRI1499/GCA_000259595.1/GCA_000259595.1_AWRI1499_v1.0_genomic.fna'
 
@@ -239,43 +240,43 @@ def generate_genomes_fasta(input_vcf_path, contig_fasta, output_fasta_path, outp
     haplotype_df.to_csv(os.path.join(output_fasta_path, 'haplotypes.csv'), index=False)
 
 
-def simulating_script():
-    chr_reference_path = '/labs/Aguiar/pHapCompass/datasets/SRR942191/simulated/genomes/genome_1.fa'
-    # command1 = 'art_454 -s -t -r 43 input_reference.fa -o output_single -f 5'
-    # command2 = 'art_454 -s -t -r 43 input_reference.fa -o output_paired -f 5 -m 800 -s 150'
-    to_print = ''
+# def simulating_script():
+#     chr_reference_path = '/labs/Aguiar/pHapCompass/datasets/SRR942191/simulated/genomes/genome_1.fa'
+#     # command1 = 'art_454 -s -t -r 43 input_reference.fa -o output_single -f 5'
+#     # command2 = 'art_454 -s -t -r 43 input_reference.fa -o output_paired -f 5 -m 800 -s 150'
+#     to_print = ''
 
-    simulated_path = '/labs/Aguiar/pHapCompass/datasets/SRR942191/simulated/contig1_k3'
-    if not os.path.exists(simulated_path):
-        os.makedirs(simulated_path)
-    sh_path = '/labs/Aguiar/pHapCompass/scripts/02_simulate.sh'
-    # random_seed = 43
-    coverages = [5, 10, 15, 20, 25]
-    coverages = [10, 20, 30, 40, 50]
-    mean_insert_lengths = [800]
-    std_insert_lengths = [150]
-    for mil in mean_insert_lengths:
-        for sil in std_insert_lengths:
-            for coverage in coverages:
-                this_sim_path = os.path.join(simulated_path, 'cov_{}'.format(coverage))
-                if not os.path.exists(this_sim_path):
-                    os.makedirs(this_sim_path)
-                for rd in range(100):
-                    rn = random.randint(1, 2**32)
-                    for i in range(ploidy):
-                        this_chr_reference_path = '/labs/Aguiar/pHapCompass/datasets/SRR942191/simulated/genomes/genome_{}.fa'.format(i+1)
-                        coverage = ? 
-                        single_cmd = './art_454 -s -t -r {} {} {}/{}_single_{}_{} {}\n'.format(rn, this_chr_reference_path, this_sim_path, str(rd).zfill(2), i+1, coverage)
-                        paired_cmd = './art_454 -s -t -r {} {} {}/{}_paired_{}_{} {} {} {}\n\n'.format(rn, this_chr_reference_path, this_sim_path, str(rd).zfill(2), i+1, coverage, mil, sil)
-                        to_print += single_cmd
-                        to_print += paired_cmd
-                    # single_cmd = './art_454 -s -t -r {} {} {}/{}_single {}\n'.format(rn, chr_reference_path, this_sim_path, str(rd).zfill(2), coverage)
-                    # paired_cmd = './art_454 -s -t -r {} {} {}/{}_paired {} {} {}\n\n'.format(rn, chr_reference_path, this_sim_path, str(rd).zfill(2), coverage, mil, sil)
-                    # to_print += single_cmd
-                    # to_print += paired_cmd
+#     simulated_path = '/labs/Aguiar/pHapCompass/datasets/SRR942191/simulated/contig1_k3'
+#     if not os.path.exists(simulated_path):
+#         os.makedirs(simulated_path)
+#     sh_path = '/labs/Aguiar/pHapCompass/scripts/02_simulate.sh'
+#     # random_seed = 43
+#     coverages = [5, 10, 15, 20, 25]
+#     coverages = [10, 20, 30, 40, 50]
+#     mean_insert_lengths = [800]
+#     std_insert_lengths = [150]
+#     for mil in mean_insert_lengths:
+#         for sil in std_insert_lengths:
+#             for coverage in coverages:
+#                 this_sim_path = os.path.join(simulated_path, 'cov_{}'.format(coverage))
+#                 if not os.path.exists(this_sim_path):
+#                     os.makedirs(this_sim_path)
+#                 for rd in range(100):
+#                     rn = random.randint(1, 2**32)
+#                     for i in range(ploidy):
+#                         this_chr_reference_path = '/labs/Aguiar/pHapCompass/datasets/SRR942191/simulated/genomes/genome_{}.fa'.format(i+1)
+#                         coverage = ? 
+#                         single_cmd = './art_454 -s -t -r {} {} {}/{}_single_{}_{} {}\n'.format(rn, this_chr_reference_path, this_sim_path, str(rd).zfill(2), i+1, coverage)
+#                         paired_cmd = './art_454 -s -t -r {} {} {}/{}_paired_{}_{} {} {} {}\n\n'.format(rn, this_chr_reference_path, this_sim_path, str(rd).zfill(2), i+1, coverage, mil, sil)
+#                         to_print += single_cmd
+#                         to_print += paired_cmd
+#                     # single_cmd = './art_454 -s -t -r {} {} {}/{}_single {}\n'.format(rn, chr_reference_path, this_sim_path, str(rd).zfill(2), coverage)
+#                     # paired_cmd = './art_454 -s -t -r {} {} {}/{}_paired {} {} {}\n\n'.format(rn, chr_reference_path, this_sim_path, str(rd).zfill(2), coverage, mil, sil)
+#                     # to_print += single_cmd
+#                     # to_print += paired_cmd
 
-    with open(sh_path, 'w') as f:
-        f.write(to_print)
+#     with open(sh_path, 'w') as f:
+#         f.write(to_print)
 
 
 def simulate_for_coverage():
@@ -341,6 +342,10 @@ def simulate_for_coverage():
 
 
 
-
+def inspect_snps_positions_dist():
+    vcf_path = '/labs/Aguiar/pHapCompass/datasets/SRR942191/vcf_files/SRR942191_AHIQ01000001.1.vcf'
+    vcf_in = pysam.VariantFile(vcf_path)
+    positions = [record.pos for record in vcf_in.fetch()]
+    
 
     

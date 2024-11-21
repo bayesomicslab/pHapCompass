@@ -408,6 +408,32 @@ class Simulator:
         self.extract_hairs()
 
 
+class SimulatorAWRI:
+    def __init__(self, config):
+        """
+        Initialize the simulation class with configuration.
+        :param config: A dictionary containing file paths and simulation parameters.
+        """
+        # self.snp_df_path = config["snp_df_path"] # '/labs/Aguiar/pHapCompass/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv'
+        self.input_vcf_path = config["input_vcf_path"] # '/labs/Aguiar/pHapCompass/simulated_data_NEW/hapref_chr21_filtered.vcf.bgz'
+        self.contig_fasta = config["contig_fasta"] # '/labs/Aguiar/pHapCompass/references/EGA.GRCh37/chr21.fa'
+        self.art_path = config["art_path"]
+        self.main_path = config["main_path"] # '/labs/Aguiar/pHapCompass/simulated_data_NEW'
+        self.extract_hairs_path = config["extract_hairs_path"]
+        self.contig_lens = config.get("contig_lens", [100])
+        self.ploidies = config.get("ploidies", [3])
+        self.coverages = config.get("coverages", [10])
+        self.read_length = config.get("read_length", 125)
+        self.mil = config.get("mean_insert_length", 400)
+        self.sil = config.get("std_insert_length", 50)
+        self.n_samples = config.get("n_samples", 100)
+        self.densify_snps = config.get("densify_snps", True)
+        self.target_spacing = config.get("target_spacing", 350)
+        # '#!/bin/bash\n#BATCH --job-name=pyalb\n#SBATCH -N 1\n#SBATCH -n 1\n#SBATCH -c 1\n#SBATCH --partition=general\n#SBATCH --qos=general\n#SBATCH 
+        # --mail-type=END\n#SBATCH --mem=20G\n#SBATCH --mail-user=marjan.hosseini@uconn.edu\n#SBATCH -o script.out\n#SBATCH -e ont.err\n\necho `hostname`'
+
+
+
 
 if __name__ == '__main__':
 
@@ -433,13 +459,13 @@ if __name__ == '__main__':
         "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
         "input_vcf_path": '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz',
         "contig_fasta": '/mnt/research/aguiarlab/data/hg19/chr21.fa',
-        "art_path": '/home/mah19006/downloads/art_bin_MountRainier/art_illumina',
-        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_long',
-        "extract_hairs_path": '/home/FCAM/mhosseini/HaplOrbit/extract_poly/build/extractHAIRS',
-        "n_samples": 3, 
+        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_long2',
+        "art_path": 'art_illumina',
+        "extract_hairs_path": 'extractHAIRS',
+        "n_samples": 10, 
         "target_spacing": 100,
         "densify_snps": True, 
-        "contig_lens": [100], 
+        "contig_lens": [10, 100, 1000], 
         "ploidies": [3],
         "coverages": [10],
         "read_length": 150,
@@ -448,7 +474,7 @@ if __name__ == '__main__':
         }
 
 
-    simulator = Simulator(xanadu_config)
+    simulator = Simulator(beagle_config)
     # simulator.generate_genomes_fasta()
 
     simulator.simulate()
