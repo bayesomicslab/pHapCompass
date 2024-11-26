@@ -43,17 +43,20 @@ class InputHandler:
     #     return genotype
     
     def parse_genotype(self):
-        gen_df = pd.read_csv(self.genotype_path, sep='\t', names=[str(i) for i in range(self.ploidy)]).reset_index(drop=True)
-        # gen_df = pd.read_csv(hap_ref_path, sep='\t', names=[str(i) for i in range(3)]).reset_index(drop=True)
-        # new_row = {'0': 0, '1': 0, '2': 0}
-        # gen_df = pd.concat([pd.DataFrame([new_row]), gen_df], ignore_index=True)
+        # gen_df = pd.read_csv(self.genotype_path, sep='\t', names=[str(i) for i in range(self.ploidy)]).reset_index(drop=True)
+        # # gen_df = pd.read_csv(hap_ref_path, sep='\t', names=[str(i) for i in range(3)]).reset_index(drop=True)
+        # # new_row = {'0': 0, '1': 0, '2': 0}
+        # # gen_df = pd.concat([pd.DataFrame([new_row]), gen_df], ignore_index=True)
+        # gen_np = np.sum(gen_df.to_numpy(), axis=1)
+        # if self.ploidy != 2:
+        #     genotype = 'N' + ''.join([str(g) for g in list(gen_np)])
+        # else:
+        #     genotype = ''.join([str(g) for g in list(gen_np)])
+        # return genotype
+        gen_df = pd.read_csv(self.genotype_path)
         gen_np = np.sum(gen_df.to_numpy(), axis=1)
-        if self.ploidy != 2:
-            genotype = 'N' + ''.join([str(g) for g in list(gen_np)])
-        else:
-            genotype = ''.join([str(g) for g in list(gen_np)])
+        genotype = 'N' + ''.join([str(g) for g in list(gen_np)])
         return genotype
-    
     
     def get_haplotype(self):
         gen_df = pd.read_csv(self.genotype_path, sep='\t', names=[str(i) for i in range(self.ploidy)]).reset_index(drop=True)
