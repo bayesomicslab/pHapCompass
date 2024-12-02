@@ -9,6 +9,7 @@ import gzip
 import pickle as cPickle
 import scipy
 
+# Create an mrftools Markov Network
 def create_markov_net(q_graph, transitions):
     # initialize markov net object
     markov_net = mrftools.TorchMarkovNet(is_cuda=False, var_on=False)
@@ -34,6 +35,7 @@ def create_markov_net(q_graph, transitions):
 
     return markov_net
 
+# Update edge entropies based on the computed BP beliefs
 def update_entropies(q_graph, bp):
     for s, t in q_graph.iter_edges():
         transition_matrix = bp.pair_beliefs[(s, t)]
@@ -42,9 +44,11 @@ def update_entropies(q_graph, bp):
         q_graph.ep['e_weights'][(s, t)]['entropy'] = entropy
     return
 
+# Produce graph-tool edge index from given source-target nodes
 def to_edge(source, target):
     return
 
+# Given the assignments of each node, build possible (1 phasing if no ambiguity, else some branching phasing)
 def build_phasing(q_graph, node_assignment_dict):
     v_label = q_graph.vp['v_label'][0]
     phasing_list = q_graph.vp['v_weights'][0]['weight'].keys()
@@ -69,15 +73,7 @@ def build_phasing(q_graph, node_assignment_dict):
                 
     return
 
-def single_sample_phasings(q_graph, bp):
-    # build spanning tree
-    tree_map = gt.random_spanning_tree(q_graph)
-
-    # sample edge indices according to spanning tree
-
-    # build phasings
-    return
-
+# Iterator through all nodes in a spanning tree graph
 def node_search(tree_map, prev_node, curr_node, node_assignments, bp):
     prev_node_state = node_assignments[prev_node]
     marginal = bp.pair_beliefs[(prev_node, curr_node)]
@@ -90,6 +86,17 @@ def node_search(tree_map, prev_node, curr_node, node_assignments, bp):
             node_search(tree_map=tree_map, prev_node=curr_node, curr_node=neighbor, node_assignments=node_assignments, bp=bp)
     return
 
+# return a single proportionately-sampled phasing from a quotient graph and computed BP
+def single_sample_phasings(q_graph, bp):
+    # build spanning tree
+    tree_map = gt.random_spanning_tree(q_graph)
+
+    # sample edge indices according to spanning tree
+
+    # build phasings
+    return
+
+# Return max probability samples phasings over a spanning tree given Quotient Graph and Computed BP graph
 def max_phasings(q_graph, bp):
     tree_map = gt.random_spanning_tree(q_graph)
     node_assignments = {}
@@ -104,6 +111,9 @@ def max_phasings(q_graph, bp):
 
     return
 
+
+# Each of These Take in an MN and output MN w/ computed marginals ---------------------------------------------------
+
 def torch_belief_propagation(markov_network, is_cuda=True):
     return
 
@@ -113,6 +123,9 @@ def pgmpy_belief_propagation(markov_network):
 def independent_belief_propagation(markov_network, is_cuda=True):
     return
 
+# ------------------------------------------------------------------------------------------------------------------
+
+# Take in Quotient Graph, Transitions Matrix, and maybe a Method, and output --- factor graph with computed marginals post BP?
 def inference(q_graph, transitions, method="smbp"):
     cuda_avail = torch.cuda.is_available()
     if method == "smbp":
@@ -129,19 +142,29 @@ def inference(q_graph, transitions, method="smbp"):
 
 if __name__ == "__main__":
     t0 = time.time()
+
+    # Initialize Quotient Graph
     quotient_graph = gt.Graph()
     print("Q Graph initialized")
+
+    # Load Quotient Graph
     # quotient_graph.load("/home/tgbergendahl/research/hap_assembly/HaplOrbit/example/ART_0_quotient_graph.gt.gz")
     quotient_graph.load("/Users/tgbergendahl/Research/HaplOrbit/example/ART_0_quotient_graph.gt.gz")
     print("Q Graph loaded")
+
+    # Load Transitions Matrix
     transitions_path = '/Users/tgbergendahl/Research/HaplOrbit/example/ART_0.pkl.gz'
     with gzip.open(transitions_path, 'rb') as f:
         transitions = cPickle.load(f)
     print("Transitions Loaded")
-    mn = create_markov_net(quotient_graph, transitions=transitions)
+
+    # Initialize Markov Network
+    mn = create_markov_net(quotient_graph, transitions=transitions) # Creates mrftools TorchMarkovNetwork
     t1 = time.time()
     print("Markov Network Created")
     print(f"Time elapsed: {t1-t0}")
+
+    # Belief Propagation Start
     t0 = time.time()
     print("Starting BP")
     torch_bp = mrftools.TorchMatrixBeliefPropagator(
