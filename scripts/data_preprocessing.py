@@ -343,9 +343,19 @@ def simulate_for_coverage():
 
 
 def inspect_snps_positions_dist():
-    vcf_path = '/labs/Aguiar/pHapCompass/datasets/SRR942191/vcf_files/SRR942191_AHIQ01000001.1.vcf'
+    # vcf_path = '/labs/Aguiar/pHapCompass/datasets/SRR942191/vcf_files/SRR942191_AHIQ01000001.1.vcf'
+    vcf_path = '/mnt/research/aguiarlab/proj/HaplOrbit/SRR942191/vcf_files/SRR942191_AHIQ01000001.1.vcf'
     vcf_in = pysam.VariantFile(vcf_path)
     positions = [record.pos for record in vcf_in.fetch()]
-    
+    differences = [positions[i+1] - positions[i] for i in range(len(positions) - 1)]
+
+    # plt.hist(differences, bins=6, edgecolor='black')
+    # # Add labels and title
+    # plt.xlabel('Value')
+    # plt.ylabel('Frequency')
+    # plt.title('Simple Histogram')
+    # # Show the plot
+    # plt.show()
+
 
     

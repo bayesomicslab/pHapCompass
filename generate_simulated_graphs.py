@@ -16,11 +16,11 @@ from multiprocessing import Pool
 
 
 
-def generate_quotient_graph_make_input():
+def generate_quotient_graph_make_input_hpopG():
     inputs = []
-    # contigs = ['Contig1_k3', 'Contig2_k3', 'Contig3_k3']
+    contigs = ['Contig1_k3', 'Contig2_k3', 'Contig3_k3']
     # contigs = ['Contig2_k3', 'Contig3_k3']
-    contigs = ['Contig1_k2']
+    # contigs = ['Contig1_k2']
     # contigs = ['Contig1_k4', 'Contig1_k5', 'Contig1_k6']
     simulated_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data'
     graph_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_graphs/'
@@ -134,7 +134,7 @@ def generate_quotient_graph(inp):
 
 
 def generate_graphs():
-    inputs = generate_quotient_graph_make_input()
+    inputs = generate_quotient_graph_make_input_hpopG()
     print('Number of inputs:', len(inputs))
     for inp in inputs:
         

@@ -5,6 +5,8 @@
 
 // simple hash function that takes a string and returns an integer hash value
 
+keyvalue* keypointer = NULL;
+
 int hashstring(char* str, int htsize) {
     unsigned long hash = 5381;
     int c;

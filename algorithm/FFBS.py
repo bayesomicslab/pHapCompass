@@ -201,8 +201,6 @@ def forward_sum(quotient_graph, path_vertices, path_edges, ploidy, fragment_mode
 
 
 
-
-
 def backward_sum(quotient_graph, spath_vertices, spath_edges):
     beta = {vi: np.zeros(len(quotient_graph.vertex_properties["v_weights"][v]['weight'].keys())) for vi, v in enumerate(spath_vertices)}
     # last_vertex = spath_vertices[-1]

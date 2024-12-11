@@ -3,6 +3,7 @@ import pandas as pd
 import random
 import pysam
 import sys
+import numpy as np
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import pickle
 # from ..generate_simulated_graphs import generate_quotient_graph
@@ -236,6 +237,7 @@ class Simulator:
         self.n_samples = config.get("n_samples", 100)
         self.densify_snps = config.get("densify_snps", True)
         self.target_spacing = config.get("target_spacing", 350)
+        self.main_sh = ''
         # '#!/bin/bash\n#BATCH --job-name=pyalb\n#SBATCH -N 1\n#SBATCH -n 1\n#SBATCH -c 1\n#SBATCH --partition=general\n#SBATCH --qos=general\n#SBATCH 
         # --mail-type=END\n#SBATCH --mem=20G\n#SBATCH --mail-user=marjan.hosseini@uconn.edu\n#SBATCH -o script.out\n#SBATCH -e ont.err\n\necho `hostname`'
 
@@ -275,7 +277,7 @@ class Simulator:
         return adjusted_positions
 
 
-    def generate_genomes_fasta(self):
+    def old_generate_genomes_fasta(self):
         """
         Generate genomes and save to FASTA format for various configurations.
         """
@@ -420,6 +422,210 @@ class Simulator:
                 print(f"Generated genomes for contig length {contig_len} and ploidy {ploidy}.")
 
 
+    def generate_genomes_fasta(self):
+        """
+        Generate genomes and save to FASTA format for various configurations.
+        """
+        # snp_df = pd.read_csv(self.snp_df_path)
+        # # snp_df['diff'] = snp_df['POS'].diff()
+        # snp_positions = list(snp_df['POS'].values)
+
+        # if self.densify_snps:
+        #     adjusted_pos = self.adjust_snp_spacing(snp_positions, max_length=None)
+        vcf_in = pysam.VariantFile(self.input_vcf_path)
+        snp_positions = [record.pos for record in vcf_in.fetch()]
+        snp_positions = list(np.unique(snp_positions))
+        # snp_differences = np.diff(snp_positions)
+
+        # def detect_outliers_iqr(data):
+        #     """
+        #     Detects outliers in a NumPy array using the IQR method.
+
+        #     Parameters:
+        #         data (np.ndarray): The input data array.
+
+        #     Returns:
+        #         np.ndarray: A boolean array where True indicates an outlier.
+        #     """
+        #     # Ensure the data is a NumPy array
+        #     data = np.asarray(data)
+
+        #     # Calculate the first (Q1) and third (Q3) quartiles
+        #     Q1 = np.percentile(data, 25)
+        #     Q3 = np.percentile(data, 75)
+        #     IQR = Q3 - Q1
+
+        #     # Define the outlier boundaries
+        #     lower_bound = Q1 - 1.5 * IQR
+        #     upper_bound = Q3 + 1.5 * IQR
+
+        #     # Identify outliers
+        #     outliers = (data < lower_bound) | (data > upper_bound)
+
+        #     return outliers
+
+
+        # def detect_large_differences(data, target_diff=2000, tolerance=500):
+        #     """
+        #     Detects indices where the difference between consecutive numbers 
+        #     is higher than the target_diff plus tolerance.
+
+        #     Parameters:
+        #         data (np.ndarray): The input data array.
+        #         target_diff (float): The target difference between consecutive numbers.
+        #         tolerance (float): The acceptable deviation for detection.
+
+        #     Returns:
+        #         np.ndarray: Indices where the difference is higher than target_diff + tolerance.
+        #     """
+        #     # Ensure the data is a NumPy array
+        #     data = np.asarray(data)
+            
+        #     # Calculate differences between consecutive numbers
+        #     differences = np.diff(data)
+            
+        #     # Identify indices where the difference is higher than the threshold
+        #     high_difference_indices = np.where(differences > target_diff + tolerance)[0]
+            
+        #     return high_difference_indices
+
+        # plt.plot(range(100), snp_differences[0:100])
+        # plt.xlim(0, 100)
+        # plt.show()
+
+        # devis = []
+        # for i in range(len(snp_positions) - 100):
+        #     # np.mean(snp_differences[i: i+100])
+        #     data = snp_positions[i: i+100]
+        #     # outliers = detect_outliers_iqr(data)
+        #     indices, differences = detect_large_differences(data, target_diff=3000, tolerance=500)
+            
+        #     deviation_values = [(data[idx], data[idx + 1]) for idx in indices]
+        #     # print(i, len(deviation_values))
+        #     devis.append(len(deviation_values))
+        #     # print('----------------------------------')
+
+        # np.min(devis)
+
+        with open(self.contig_fasta) as f:
+            contig_name = f.readline().strip()[1:]  # Get contig name without '>'
+            contig_seq = f.read().replace("\n", "")
+
+        for contig_len in self.contig_lens:
+            contig_path = os.path.join(self.main_path, f'contig_{contig_len}')
+            if not os.path.exists(contig_path):
+                os.makedirs(contig_path, exist_ok=True)
+
+            for ploidy in self.ploidies:
+                ploidy_path = os.path.join(contig_path, f'ploidy_{ploidy}')
+                if not os.path.exists(ploidy_path):
+                    os.makedirs(ploidy_path, exist_ok=True)
+                # stop
+                
+                last_snp = snp_positions[-1]
+                # if self.densify_snps:
+                #     last_snp = adjusted_pos[:contig_len][-1]
+                # else:
+                # last_snp = snp_positions[:contig_len][-1]
+
+                haplotypes = [[] for _ in range(ploidy)]
+                genomes = [list(contig_seq[:last_snp]) for _ in range(ploidy)]
+                # genomes = [list(contig_seq) for _ in range(ploidy)]
+
+                # vcf_in = pysam.VariantFile(self.input_vcf_path)
+                # original_snps = {record.pos - 1: record for record in vcf_in.fetch()}  # Map positions to records
+
+                # with pysam.VariantFile(self.input_vcf_path) as vcf_in:
+                new_header = pysam.VariantHeader()
+                for line in vcf_in.header.records:
+                    new_header.add_line(str(line))
+                # for k in range(ploidy):
+                #     new_header.contigs.add(f"haplotype_{k + 1}", length=len(contig_seq))
+                # new_header.contigs.add(f"contig_{contig_len}", length=len(contig_seq))
+                # new_header.contigs.add('AHIQ01000001.1', length=len(contig_seq))
+                
+                new_header.add_sample("NA12878")
+
+                output_vcf = os.path.join(ploidy_path, f'NA12878_ploidy{ploidy}_contig{contig_len}.vcf.gz')
+                vcf_out = pysam.VariantFile(output_vcf, "wz", header=new_header)
+                snp_counter = 0
+                current_snp = 0
+
+                for record in vcf_in.fetch():
+
+                    pos = record.pos - 1
+                    
+                    ref = record.ref
+                    alts = record.alts[:1]
+                    # print(pos, record.start, record.stop, alts, ref, contig_seq[pos], len(alts[0]))
+                    # print(ref, contig_seq[pos])
+                    if len(ref) > 1 or 'N' in ref or 'n' in ref:
+                        print('oomadam too 1')
+                        ref = random.choice(['A', 'C', 'G', 'T'])
+                    
+                    if len(alts[0]) > 1 or len(alts) == 0 or 'N' in alts[0] or 'n' in alts[0] or alts[0] == ref:
+                        print('oomadam too 2')
+                        ref_upper = ref.upper()
+                        alternatives = ['A', 'C', 'G', 'T']
+                        alternatives.remove(ref_upper)
+                        alts = [random.choice(alternatives)]
+                    # if len(alts) > 0:
+                    #     alts = record.alts[:1]
+                    # else:
+                    #     ref_upper = ref.upper()  # Convert ref to uppercase
+                    #     bases = ["A", "C", "G", "T"]
+                    #     bases.remove(ref_upper)  # Remove the ref base from the options
+                    #     alts = random.choice(bases)
+                    
+                    # if len(alts) > 0 and snp_counter < contig_len and len(ref) == 1 and len(alts[0]) == 1 and ref != 'N' and pos != current_snp:
+                    if len(alts) > 0 and len(ref) == 1 and len(alts[0]) == 1 and ref != 'N' and pos != current_snp:
+                    # if pos + 1 in adjusted_pos and snp_counter < contig_len:
+                        # print(pos, ref, genomes[0][pos], alts)
+                        # print(pos, record.start, record.stop, alts, ref, contig_seq[pos], len(alts[0]))
+                        print(pos, ref, contig_seq[pos], alts)
+                        processed_info = {key: (value[0],) if isinstance(value, tuple) and len(value) > 1 else value for key, value in record.info.items()}
+                        snp_counter += 1
+                        current_snp = pos
+                        g = random.randint(1, ploidy - 1)
+                        selected_genomes = random.sample(range(ploidy), g)
+                        genotype = tuple(1 if i in selected_genomes else 0 for i in range(ploidy))
+
+                        for i in range(ploidy):
+                            genomes[i][pos] = alts[0] if genotype[i] == 1 else ref
+                            haplotypes[i].append(genotype[i])
+                        
+                        new_record = vcf_out.new_record(
+                            # pos=record.pos,
+                            # contig=f"contig_{contig_len}",
+                            contig='chr21',
+                            start=record.start,
+                            stop=record.stop,
+                            alleles=(ref, alts[0]),
+                            qual=75,
+                            filter=record.filter.keys(),
+                            # info=record.info,
+                            info=processed_info)
+                        new_record.samples["NA12878"]["GT"] = genotype
+                        new_record.samples["NA12878"].phased = True
+                        vcf_out.write(new_record)
+
+                    # else:
+                    #     break
+
+                vcf_out.close()
+
+                output_fasta = os.path.join(ploidy_path, f'contig_{contig_len}_ploidy_{ploidy}.fa')
+                with open(output_fasta, "w") as f_out:
+                    for i in range(ploidy):
+                        f_out.write(f">haplotype_{i + 1}\n")
+                        f_out.write("".join(genomes[i]) + "\n")
+
+                haplotype_df = pd.DataFrame(haplotypes).T
+                haplotype_df.columns = [f"haplotype_{i + 1}" for i in range(ploidy)]
+                haplotype_df.to_csv(os.path.join(ploidy_path, 'haplotypes.csv'), index=False)
+                print(f"Generated genomes for contig length {contig_len} and ploidy {ploidy}.")
+
+
     def simulate_fastq_art(self):
         """
         Simulate FASTQ files using ART.
@@ -429,7 +635,8 @@ class Simulator:
                 fasta_path = os.path.join(self.main_path, f'contig_{contig_len}', f'ploidy_{ploidy}', f'contig_{contig_len}_ploidy_{ploidy}.fa')
                 this_sh_path = os.path.join(self.main_path, f'contig_{contig_len}', f'ploidy_{ploidy}', f'01_simulate_{contig_len}_{ploidy}.sh')
 
-                to_print = self.get_slurm_header('fastq')
+                # to_print = self.get_slurm_header('fastq')
+                to_print = ''
                 for coverage in self.coverages:
                     cov_path = os.path.join(self.main_path, f'contig_{contig_len}', f'ploidy_{ploidy}', f'cov_{coverage}')
                     if not os.path.exists(cov_path):
@@ -439,12 +646,40 @@ class Simulator:
                         os.makedirs(fastq_path, exist_ok=True)
 
                     for rd in range(self.n_samples):
-                        command = f'{self.art_path} -ss HS25 -i {fasta_path} -p -na -l {self.read_length} -f {coverage} -m {self.mil} -s {self.sil} -o {fastq_path}/{str(rd).zfill(2)}\n'
+                        rs = random.randint(1, 2**32)
+                        command = f'{self.art_path} -ss HS25 -rs {rs} -i {fasta_path} -p -na -l {self.read_length} -f {coverage} -m {self.mil} -s {self.sil} -o {fastq_path}/{str(rd).zfill(2)}\n'
                         to_print += command
 
                 with open(this_sh_path, 'w') as f:
                     f.write(to_print)
+                self.main_sh += f'sh {this_sh_path}\n'
 
+
+    # def simulate_fastq_art(self):
+    #     """
+    #     Simulate FASTQ files using ART.
+    #     """
+    #     for contig_len in self.contig_lens:
+    #         for ploidy in self.ploidies:
+    #             fasta_path = os.path.join(self.main_path, f'contig_{contig_len}', f'ploidy_{ploidy}', f'contig_{contig_len}_ploidy_{ploidy}.fa')
+    #             this_sh_path = os.path.join(self.main_path, f'contig_{contig_len}', f'ploidy_{ploidy}', f'01_simulate_{contig_len}_{ploidy}.sh')
+
+    #             to_print = self.get_slurm_header('fastq')
+    #             for coverage in self.coverages:
+    #                 cov_path = os.path.join(self.main_path, f'contig_{contig_len}', f'ploidy_{ploidy}', f'cov_{coverage}')
+    #                 if not os.path.exists(cov_path):
+    #                     os.makedirs(cov_path, exist_ok=True)
+    #                 fastq_path = os.path.join(cov_path, 'fastq')
+    #                 if not os.path.exists(fastq_path):
+    #                     os.makedirs(fastq_path, exist_ok=True)
+
+    #                 for rd in range(self.n_samples):
+                        # command = f'{self.art_path} -ss HS20 -i {fasta_path} -p -na -l {self.read_length} -f {coverage} -m {self.mil} -s {self.sil} -o {fastq_path}/{str(rd).zfill(2)}\n'
+    #                     to_print += command
+
+    #             with open(this_sh_path, 'w') as f:
+    #                 f.write(to_print)
+    #             self.main_sh += f'sh {this_sh_path}\n'
 
     def align_fastq_files(self):
         """
@@ -452,11 +687,13 @@ class Simulator:
         """
         for contig_len in self.contig_lens:
             for ploidy in self.ploidies:
-                fasta_path = os.path.join(self.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'contig_{}_ploidy_{}.fa'.format(contig_len, ploidy))
-                fa_index = 'bwa index {}\n\n'.format(fasta_path)
+                # fasta_path = os.path.join(self.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'contig_{}_ploidy_{}.fa'.format(contig_len, ploidy))
+                # fa_index = 'bwa index {}\n\n'.format(fasta_path)
                 this_sh_path = os.path.join(self.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), '02_align_{}_{}.sh'.format(contig_len, ploidy))
-                to_print = self.get_slurm_header('align')
-                to_print += 'module load bwa-mem2/2.1\nmodule load bwa/0.7.17\n' + fa_index
+                # to_print = self.get_slurm_header('align')
+                # to_print += 'module load bwa-mem2/2.1\nmodule load bwa/0.7.17\n' + fa_index
+                # to_print = fa_index
+                to_print = ''
                 for coverage in self.coverages:
                     this_cov_path = os.path.join(self.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
                     fastq_path = os.path.join(this_cov_path, 'fastq')
@@ -464,7 +701,7 @@ class Simulator:
                     if not os.path.exists(bam_path):
                         os.makedirs(bam_path)
                     for rd in range(self.n_samples):
-                        command = 'bwa mem {} {}/{}1.fq {}/{}2.fq > {}/{}.sam\n'.format(fasta_path, fastq_path, str(rd).zfill(2), fastq_path, str(rd).zfill(2), bam_path, str(rd).zfill(2))
+                        command = 'bwa mem {} {}/{}1.fq {}/{}2.fq > {}/{}.sam\n'.format(self.contig_fasta, fastq_path, str(rd).zfill(2), fastq_path, str(rd).zfill(2), bam_path, str(rd).zfill(2))
                         sort_com = 'samtools view -Sb {}/{}.sam | samtools sort -o {}/{}.bam\n'.format(bam_path, str(rd).zfill(2), bam_path, str(rd).zfill(2))
                         index_com = 'samtools index {}/{}.bam\n'.format(bam_path, str(rd).zfill(2))
                         rmv_com = 'rm {}/{}.sam\n\n'.format(bam_path, str(rd).zfill(2))
@@ -474,26 +711,29 @@ class Simulator:
                         to_print += rmv_com
                 with open(this_sh_path, 'w') as f:
                     f.write(to_print)
+                self.main_sh += f'sh {this_sh_path}\n'
 
 
     def extract_hairs(self):
         """
         Extract haplotypes using ExtractHAIRS.
         """
+        vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/updated_NA12878_extracted.vcf'
         for contig_len in self.contig_lens:
             for ploidy in self.ploidies:
                 this_sh_path = os.path.join(self.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), '03_extract_hairs_{}_{}.sh'.format(contig_len, ploidy))
-                to_print = self.get_slurm_header('exttract_hairs')
-                to_print += 'module load bcftools/1.20\nmodule load htslib/1.20\n\n'
-                this_vcf_path = os.path.join(self.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'maf0.01_hapref_chr21_filtered_NA12878_ploidy{}_contig{}.vcf.gz'.format(ploidy, contig_len))
-                this_vcf_sorted_path = os.path.join(self.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'sorted_maf0.01_hapref_chr21_filtered_NA12878_ploidy{}_contig{}.vcf.gz'.format(ploidy, contig_len))
-                unzipped_vcf = os.path.join(self.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'sorted_maf0.01_hapref_chr21_filtered_NA12878_ploidy{}_contig{}.vcf'.format(ploidy, contig_len))
-                sort_cmd = 'bcftools sort {} -Oz -o {}\n'.format(this_vcf_path, this_vcf_sorted_path)
-                idx_cmd = 'tabix -p vcf {}\n'.format(this_vcf_sorted_path)
-                unzip_cmd = 'gunzip {}\n\n'.format(this_vcf_sorted_path)
-                to_print += sort_cmd
-                to_print += idx_cmd
-                to_print += unzip_cmd
+                # to_print = self.get_slurm_header('exttract_hairs')
+                # to_print += 'module load bcftools/1.20\nmodule load htslib/1.20\n\n'
+                to_print = ''
+                # this_vcf_path = os.path.join(self.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'AWRI_ploidy{}_contig{}.vcf.gz'.format(ploidy, contig_len))
+                # this_vcf_sorted_path = os.path.join(self.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'sorted_AWRI_ploidy{}_contig{}.vcf.gz'.format(ploidy, contig_len))
+                # unzipped_vcf = os.path.join(self.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'sorted_AWRI_ploidy{}_contig{}.vcf'.format(ploidy, contig_len))
+                # sort_cmd = 'bcftools sort {} -Oz -o {}\n'.format(this_vcf_path, this_vcf_sorted_path)
+                # idx_cmd = 'tabix -p vcf {}\n'.format(this_vcf_sorted_path)
+                # unzip_cmd = 'gunzip {}\n\n'.format(this_vcf_sorted_path)
+                # to_print += sort_cmd
+                # to_print += idx_cmd
+                # to_print += unzip_cmd
                 for coverage in self.coverages:
                     this_cov_path = os.path.join(self.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
                     bam_path = os.path.join(this_cov_path, 'bam')
@@ -501,10 +741,11 @@ class Simulator:
                     if not os.path.exists(frag_path):
                         os.makedirs(frag_path)
                     for rd in range(self.n_samples): 
-                        command = '{} --bam {}/{}.bam --vcf {} --out {}/{}.frag\n'.format(self.extract_hairs_path, bam_path, str(rd).zfill(2), unzipped_vcf, frag_path, str(rd).zfill(2))
+                        command = '{} --bam {}/{}.bam --vcf {} --out {}/{}.frag\n'.format(self.extract_hairs_path, bam_path, str(rd).zfill(2), vcf_path, frag_path, str(rd).zfill(2))
                         to_print += command
                 with open(this_sh_path, 'w') as f:
                     f.write(to_print)
+                self.main_sh += f'sh {this_sh_path}\n'
 
 
     def simulate(self):
@@ -515,6 +756,8 @@ class Simulator:
         self.simulate_fastq_art()
         self.align_fastq_files()
         self.extract_hairs()
+        with open(os.path.join(self.main_path, 'main.sh'), 'w') as f:
+            f.write(self.main_sh)
 
 
 class SimulatorAWRI:
@@ -554,6 +797,7 @@ class SimulatorAWRI:
         #     adjusted_pos = self.adjust_snp_spacing(snp_positions, max_length=None)
         vcf_in = pysam.VariantFile(self.input_vcf_path)
         snp_positions = [record.pos for record in vcf_in.fetch()]
+        # snp_positions = np.unique(snp_positions)
 
         with open(self.contig_fasta) as f:
             contig_name = f.readline().strip()[1:]  # Get contig name without '>'
@@ -580,8 +824,8 @@ class SimulatorAWRI:
                 genomes = [list(contig_seq[:last_snp]) for _ in range(ploidy)]
                 # genomes = [list(contig_seq) for _ in range(ploidy)]
 
-                vcf_in = pysam.VariantFile(self.input_vcf_path)
-                original_snps = {record.pos - 1: record for record in vcf_in.fetch()}  # Map positions to records
+                # vcf_in = pysam.VariantFile(self.input_vcf_path)
+                # original_snps = {record.pos - 1: record for record in vcf_in.fetch()}  # Map positions to records
 
                 # with pysam.VariantFile(self.input_vcf_path) as vcf_in:
                 new_header = pysam.VariantHeader()
@@ -597,7 +841,7 @@ class SimulatorAWRI:
                 output_vcf = os.path.join(ploidy_path, f'AWRI_ploidy{ploidy}_contig{contig_len}.vcf.gz')
                 vcf_out = pysam.VariantFile(output_vcf, "wz", header=new_header)
                 snp_counter = 0
-
+                # current_snp = 0
                 for record in vcf_in.fetch():
 
                     pos = record.pos - 1
@@ -629,6 +873,7 @@ class SimulatorAWRI:
                         print(pos, ref, contig_seq[pos], alts)
                         processed_info = {key: (value[0],) if isinstance(value, tuple) and len(value) > 1 else value for key, value in record.info.items()}
                         snp_counter += 1
+                        # current_snp = pos
                         g = random.randint(1, ploidy - 1)
                         selected_genomes = random.sample(range(ploidy), g)
                         genotype = tuple(1 if i in selected_genomes else 0 for i in range(ploidy))
@@ -823,9 +1068,78 @@ def make_inputs_for_generate_qoutient_graph(simulator):
     return inputs
 
 
+def simulate_awri():
+
+    beagle_config_AWRI = {
+        "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
+        "input_vcf_path": '/mnt/research/aguiarlab/proj/HaplOrbit/SRR942191/vcf_files/SRR942191_AHIQ01000001.1.vcf',
+        # "contig_fasta": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/AWRI1499/contigs_noamb/contig_AHIQ01000001.1.fa',
+        "contig_fasta": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/AWRI1499/contigs/contig_AHIQ01000001.1.fa',
+        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri',
+        "art_path": 'art_illumina',
+        "extract_hairs_path": 'extractHAIRS',
+        "n_samples": 100, 
+        "target_spacing": 100,
+        "densify_snps": False, 
+        "contig_lens": [10, 100, 1000], 
+        "ploidies": [3, 4, 6, 8, 10],
+        "coverages": [10, 20, 30, 40, 50],
+        "read_length": 75,
+        "mean_insert_length": 300,
+        "std_insert_length": 30
+        }
 
 
+    simulator = SimulatorAWRI(beagle_config_AWRI)
+    # simulator.generate_genomes_fasta()
 
+    # simulator.simulate()
+    
+    inputs = make_inputs_for_generate_qoutient_graph(simulator)
+
+    pool = Pool(30)
+    pool.map(generate_quotient_graph, inputs)
+
+    # for inp in inputs:
+    #     print(inp[4])
+    #     generate_quotient_graph(inp)
+
+
+def simulate_na12878():
+
+    beagle_config_human = {
+        "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
+        # "input_vcf_path": '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz',
+        "input_vcf_path": '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/updated_NA12878_extracted.vcf',
+        "contig_fasta": '/mnt/research/aguiarlab/data/hg19/chr21.fa',
+        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878',
+        "art_path": 'art_illumina',
+        "extract_hairs_path": 'extractHAIRS',
+        "n_samples": 2, 
+        "target_spacing": 100,
+        "densify_snps": False, 
+        "contig_lens": [100], 
+        "ploidies": [3],
+        "coverages": [10],
+        "read_length": 150,
+        "mean_insert_length": 2000,
+        "std_insert_length": 300
+        }
+
+
+    simulator = Simulator(beagle_config_human)
+    # simulator.generate_genomes_fasta()
+
+    # simulator.simulate()
+    
+    inputs = make_inputs_for_generate_qoutient_graph(simulator)
+
+    pool = Pool(2)
+    pool.map(generate_quotient_graph, inputs)
+
+    # for inp in inputs:
+    #     print(inp[4])
+    #     generate_quotient_graph(inp)
 
 if __name__ == '__main__':
 
@@ -847,53 +1161,4 @@ if __name__ == '__main__':
         "std_insert_length": 150
         }
 
-    beagle_config_human = {
-        "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
-        "input_vcf_path": '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz',
-        "contig_fasta": '/mnt/research/aguiarlab/data/hg19/chr21.fa',
-        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_long2',
-        "art_path": 'art_illumina',
-        "extract_hairs_path": 'extractHAIRS',
-        "n_samples": 10, 
-        "target_spacing": 100,
-        "densify_snps": True, 
-        "contig_lens": [10, 100, 1000], 
-        "ploidies": [3],
-        "coverages": [10],
-        "read_length": 150,
-        "mean_insert_length": 800,
-        "std_insert_length": 150
-        }
-
-    beagle_config_AWRI = {
-        "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
-        "input_vcf_path": '/mnt/research/aguiarlab/proj/HaplOrbit/SRR942191/vcf_files/SRR942191_AHIQ01000001.1.vcf',
-        # "contig_fasta": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/AWRI1499/contigs_noamb/contig_AHIQ01000001.1.fa',
-        "contig_fasta": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/AWRI1499/contigs/contig_AHIQ01000001.1.fa',
-        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri',
-        "art_path": 'art_illumina',
-        "extract_hairs_path": 'extractHAIRS',
-        "n_samples": 100, 
-        "target_spacing": 100,
-        "densify_snps": False, 
-        "contig_lens": [10, 100, 1000], 
-        "ploidies": [3, 4, 6, 8, 10],
-        "coverages": [10, 20, 30, 40, 50],
-        "read_length": 75,
-        "mean_insert_length": 300,
-        "std_insert_length": 30
-        }
-
-    simulator = SimulatorAWRI(beagle_config_AWRI)
-    # simulator.generate_genomes_fasta()
-
-    # simulator.simulate()
-    
-    inputs = make_inputs_for_generate_qoutient_graph(simulator)
-
-    pool = Pool(30)
-    pool.map(generate_quotient_graph, inputs)
-
-    # for inp in inputs:
-    #     print(inp[4])
-    #     generate_quotient_graph(inp)
+    simulate_na12878()
