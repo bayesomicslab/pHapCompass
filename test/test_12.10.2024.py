@@ -317,10 +317,10 @@ def emissions(ploidy, quotient_g_v_label_reversed, error_rate):
     return emission_dict
 
 
-
-def assign_slices(nodes, edges):
+def assign_slices_and_interfaces(nodes, edges):
     """
     Assign nodes to slices in a directed acyclic graph (DAG).
+    Compute incoming and outgoing interfaces for a graph.
     
     Parameters:
     - nodes: List of nodes in the graph.
@@ -328,100 +328,597 @@ def assign_slices(nodes, edges):
     
     Returns:
     - slices: List of slices, where each slice is a set of nodes.
+    - interfaces: Dictionary containing incoming and outgoing interfaces for each slice.
     """
-    # Step 1: Compute in-degrees for all nodes
+    # Build adjacency and in-degree and reverse adjacency list
+    adjacency_list = defaultdict(list)
+    reverse_adjacency_list = defaultdict(list)
     in_degree = {node: 0 for node in nodes}
-    for source, target in edges:
-        in_degree[target] += 1
-
-    # Step 2: Initialize queue with nodes having zero in-degree
-    queue = deque([node for node in nodes if in_degree[node] == 0])
-
-    # Step 3: Assign nodes to slices
-    slices = []
-
-    while queue:
-        current_slice = set()
-        for _ in range(len(queue)):
-            node = queue.popleft()
-            current_slice.add(node)
-            # Reduce in-degree of neighbors and add to queue if in-degree becomes zero
-            for source, target in edges:
-                if source == node:
-                    in_degree[target] -= 1
-                    if in_degree[target] == 0:
-                        queue.append(target)
-        slices.append(current_slice)
-
-    return slices
+    for s, t in edges:
+        adjacency_list[s].append(t)
+        reverse_adjacency_list[t].append(s)
+        in_degree[t] += 1
 
 
-frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
-ploidy= 3
-genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
 
-class Args:
-    def __init__(self):
-        self.vcf_path = 'example/62_ID0.vcf'
-        self.data_path = frag_path
-        self.bam_path = 'example/example.bam'
-        self.genotype_path = genotype_path
-        self.ploidy = 3
-        self.error_rate = 0.001
-        self.epsilon = 0.0001
-        self.output_path = 'output'
-        self.root_dir = 'D:/UCONN/HaplOrbit'
-        self.alleles = [0, 1]
-
-# Create the mock args object
-args = Args()
-
-# Initialize classes with parsed arguments
-input_handler = InputHandler(args)
-
-config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
-
-fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
-
-fragment_model.construct2(input_handler, config)
-print('Fragment Graph constructed.')
-
-e_labels = fragment_model.graph.edge_properties["e_label"]
-v_labels = fragment_model.graph.vertex_properties["v_label"]
-gt.graph_draw(fragment_model.graph, output_size=(500, 500), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=14,  
-edge_font_size=12)
-
-fragment_model_v_label_reversed = fragment_model.v_label_reversed
-
-edges_map_fragment = {}
-for k in fragment_model.e_label_reversed.keys():
-    edges_map_fragment[k] = [int(fragment_model.e_label_reversed[k].source()), int(fragment_model.e_label_reversed[k].target())]
+    # Initial slice with zero in-degree nodes
+    current_slice = {n for n in nodes if in_degree[n] == 0}
+    slice_index = 1
+    slices = {slice_index: current_slice}
 
 
-# create quotient graph
-quotient_g = QuotientGraph(fragment_model)
-quotient_g.construct3(input_handler, config)
+    while len(current_slice) > 0:
+        # print(slice_index, slices)
+        slice_index += 1
+        successors = set()
+        for node in current_slice:
+            for nbr in adjacency_list[node]:
+                successors.add(nbr)
+        current_slice = successors
+        slices[slice_index]= current_slice
 
-e_labels_q = quotient_g.graph.edge_properties["e_label"]
-v_labels_q = quotient_g.graph.vertex_properties["v_label"]
-gt.graph_draw(quotient_g.graph, output_size=(500, 500), vertex_text=v_labels_q, edge_text=e_labels_q, vertex_font_size=14,  
-edge_font_size=12)
-
-
-quotient_g_v_label_reversed = quotient_g.v_label_reversed
-
-edges_map_quotient = {}
-for k in quotient_g.e_label_reversed.keys():
-    edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
+    slices = {i: sorted(list(slices[i])) for i in slices if len(slices[i]) > 0}
 
 
-transitions_dict = transition_matrices(quotient_g, edges_map_quotient)
-emission_dict = emissions(ploidy, quotient_g_v_label_reversed, config.error_rate)
+    # Step 3: Compute interfaces
+    slice_keys = sorted(slices.keys())  # Ensure slices are processed in order
+    interfaces = {"incoming": {}, "outgoing": {}}
 
-nodes = list(emission_dict.keys())
-edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
+    for t in slice_keys:
+        current_slice = set(slices[t])
+        next_slice = set(slices[t + 1]) if t + 1 in slices else set()
+        prev_slice = set(slices[t - 1]) if t - 1 in slices else set()
 
-slices = assign_slices(nodes, edges)
-print(slices)
+        # Outgoing interface for slice t
+        interfaces["outgoing"][t] = {
+            node for node in current_slice if any(nbr in next_slice for nbr in adjacency_list[node])
+        }
+
+        # Incoming interface for slice t
+        interfaces["incoming"][t] = {
+            node for node in current_slice if any(nbr in prev_slice for nbr in reverse_adjacency_list[node])
+        }
+
+    interfaces["incoming"] = {i: sorted(list(interfaces["incoming"][i])) for i in slices}
+    interfaces["outgoing"] = {i: sorted(list(interfaces["outgoing"][i])) for i in slices}
+
+    return slices, interfaces
 
 
+def assign_evidence_to_states_and_transitions(nodes, edges, input_file):
+    """
+    Assigns evidence (line indices) from the input file to states (nodes) and transitions (edges).
+    
+    Parameters:
+    - nodes: List of states (nodes) in the graph.
+    - edges: List of transitions (edges) in the graph.
+    - input_file: Path to the input file.
+    
+    Returns:
+    - assignment_dict: Dictionary containing line indices assigned to states and transitions.
+    """
+    # Initialize the assignment dictionary
+    assignment_dict = {
+        'states': {node: [] for node in nodes},
+        'transitions': {f"{s}--{t}": [] for s, t in edges}
+    }
+
+    # Open and process the input file line by line
+    with open(input_file, 'r') as file:
+        for line_idx, line in enumerate(file): 
+            line = line.strip()
+            parts = line.split()
+
+            # Parse the number of parts in the read
+            num_parts = int(parts[0])
+            current_positions = []
+
+            # Process each part of the read
+            for i in range(num_parts):
+                start_pos = int(parts[2 + i * 2])  # Starting position
+                read = parts[3 + i * 2]  # Read sequence
+                length = len(read)  # Length of the read
+                current_positions.extend(range(start_pos, start_pos + length))  # Covered positions
+
+            # Assign to states
+            for node in nodes:
+                node_positions = list(map(int, node.split('-')))
+                if all(pos in current_positions for pos in node_positions):  # Check explicit positions
+                    assignment_dict['states'][node].append(line_idx)
+
+            # Assign to transitions
+            for s, t in edges:
+                s_positions = list(map(int, s.split('-')))
+                t_positions = list(map(int, t.split('-')))
+                all_positions = s_positions + t_positions
+                if all(pos in current_positions for pos in all_positions):  # Check explicit positions
+                    assignment_dict['transitions'][f"{s}--{t}"].append(line_idx)
+
+    return assignment_dict
+
+
+def extract_observations_for_state(state, indices, observation_file):
+    """
+    Extracts observations associated with a specific state from the observation file.
+    
+    Parameters:
+    - state (str): The state (e.g., '1-2'), representing genomic positions covered by the node.
+    - indices (list): Line indices from the observation file relevant to the state.
+    - observation_file (str): Path to the observation file.
+    
+    Returns:
+    - List of observations (strings) associated with the state (same length as indices).
+    """
+    # Parse positions covered by the state
+    state_positions = list(map(int, state.split('-')))
+    
+    observations = []
+    with open(observation_file, 'r') as file:
+        lines = file.readlines()
+        
+        for idx in indices:
+            # Read the specific line
+            line = lines[idx].strip()
+            parts = line.split()
+            
+            # Parse the read structure
+            num_parts = int(parts[0])  # Number of parts in the read
+            
+            # For each part of the read, check if it overlaps with the state
+            observation = ""
+            for part_idx in range(num_parts):
+                start_pos = int(parts[2 + part_idx * 2])  # Start position of the current part
+                read = parts[3 + part_idx * 2]  # Read sequence
+                
+                # Extract the relevant substring for the state
+                for pos in state_positions:
+                    if start_pos <= pos < start_pos + len(read):
+                        observation += read[pos - start_pos]
+            
+            observations.append(observation)
+    
+    return observations
+
+
+def compute_forward_backward_with_interfaces(slices, interfaces, observations, emission_dict, transitions_dict):
+    """
+    Compute forward and backward messages for FFBS in a DBN with arbitrary state spaces using interfaces.
+    
+    Parameters:
+    - slices: Dictionary of slices {t: list of nodes in slice t}.
+    - interfaces: Dictionary of interfaces {"outgoing": {t: list of nodes}, "incoming": {t: list of nodes}}.
+    - observations: Dictionary of observations {t: list of observations relevant to slice t}.
+    - emission_dict: Hierarchical dictionary of emission probabilities for each node and its state space.
+    - transitions_dict: Hierarchical dictionary of transition probabilities for each edge.
+    
+    Returns:
+    - forward_messages: Forward messages {t: {node: array of forward probabilities for each state-space value}}.
+    - backward_messages: Backward messages {t: {node: array of backward probabilities for each state-space value}}.
+    """
+    adjacency_list = defaultdict(list)
+    reverse_adjacency_list = defaultdict(list)
+    for s, t in edges:
+        adjacency_list[s].append(t)
+        reverse_adjacency_list[t].append(s)
+
+    forward_messages = {}
+    backward_messages = {}
+    
+    # Initialize forward messages
+    for t in slices:
+        forward_messages[t] = {}
+        for node in slices[t]:  # Use outgoing interface
+            forward_messages[t][node] = {}
+            state_space = list(emission_dict[node].keys())
+            for phase in state_space:
+                forward_messages[t][node][phase] = 0
+                # forward_messages[t][node] = {phase: 0}
+    
+    # Initialize backward messages
+    for t in slices:
+        backward_messages[t] = {}
+        for node in slices[t]:  # Use outgoing interface
+            backward_messages[t][node] = {}
+            state_space = list(emission_dict[node].keys())
+            for phase in state_space:
+                backward_messages[t][node][phase] = 0
+
+    # Compute forward messages
+    # Base case
+    t = 1  
+    for node in slices[t]:
+        observations = extract_observations_for_state(node, assignment_dict['states'][node], frag_path)  # Compute for outgoing interface
+        state_space = list(emission_dict[node].keys())
+        for phase in state_space:
+            forward_messages[t][node][phase] += -1 * (np.sum([np.log(emission_dict[node][phase][r]) for r in observations]) + np.log(1/len(state_space)))
+
+    # Recursion
+    for t in range(2, len(slices) + 1):
+        for node in slices[t]:
+            observations = extract_observations_for_state(node, assignment_dict['states'][node], frag_path)  # Compute for outgoing interface
+            state_space = list(emission_dict[node].keys())
+            parents = reverse_adjacency_list[node] # interfaces["outgoing"][t-1]
+            parents_in_prev_t = list(set(slices[t-1]).intersection(set(parents)))
+            
+            for i, phase in enumerate(state_space):
+                log_likelihood = np.sum([np.log(emission_dict[node][phase][r]) for r in observations])
+                transition_sum = 0
+                for prev_node in parents_in_prev_t:
+                    prev_state_space = list(emission_dict[prev_node].keys())
+                    for j, prev_phase in enumerate(prev_state_space):
+
+                        transition_prob = transitions_dict[f"{prev_node}--{node}"][j, i]
+                        prev_meassage = forward_messages[t - 1][prev_node][prev_phase]
+                        # transition_prob = transitions_dict.get(f"{prev_node}--{node}", np.zeros((len(prev_state_space), len(state_space))))[j, i]
+                        # print(node, phase, prev_node, prev_phase, 'addition:', prev_meassage * transition_prob)
+                        transition_sum += prev_meassage * transition_prob
+                forward_messages[t][node][phase] += -1 * log_likelihood * np.log(transition_sum)
+    
+    # Compute for outgoing interface
+    # Base case
+    t = len(slices)
+    for node in slices[t]:  
+        state_space = list(emission_dict[node].keys())
+        for phase in state_space:  
+            backward_messages[t][node][phase] += 1
+
+    # Recursion
+    for t in range(len(slices) - 1, 0, -1):
+        # print(t)
+        for node in slices[t]:  # Compute for outgoing interface
+            state_space = list(emission_dict[node].keys())
+            children = adjacency_list[node]  # interfaces["incoming"][t+1]
+            children_in_next_t = list(set(slices[t+1]).intersection(set(children)))
+            # if t == len(slices):  # Base case
+            #     backward_messages[t][node] = np.ones(len(state_space))
+            # else:  # Recursion
+            # backward_sum = 0
+            for i, phase in enumerate(state_space):
+                backward_sum = 0
+                for next_node in children_in_next_t:
+                    backward_sum_in = 0
+                    observations = extract_observations_for_state(next_node, assignment_dict['states'][next_node], frag_path)
+                    next_state_space = list(emission_dict[next_node].keys())
+                    for j, next_phase in enumerate(next_state_space):
+                        transition_prob = transitions_dict[f"{node}--{next_node}"][i, j]
+                        bm = backward_messages[t + 1][next_node][next_phase]
+                        for r in observations:
+                            
+                            # log_likelihood = np.sum([np.log(emission_dict[next_node][next_phase][r]) for r in observations])
+                            likelihood = emission_dict[next_node][next_phase][r]
+                            backward_sum_in += bm * likelihood * transition_prob
+                            print(node, phase, next_node, next_phase, r, 'addition:', bm * likelihood * transition_prob)
+
+                            # backward_sum_in += np.log(bm * likelihood * transition_prob)
+                        backward_sum += np.log(backward_sum_in)
+                backward_messages[t][node][phase] += backward_sum
+    
+    return forward_messages, backward_messages
+
+
+def compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path):
+    """
+    Compute forward messages in log space for FFBS in a DBN with arbitrary state spaces.
+    
+    Parameters:
+    - slices: Dictionary of slices {t: list of nodes in slice t}.
+    - edges: List of directed edges (source, target).
+    - assignment_dict: Dictionary mapping states to line indices of observations.
+    - emission_dict: Hierarchical dictionary of emission probabilities for each node and its state space.
+    - transitions_dict: Dictionary of transition probabilities (log-space).
+    - frag_path: Path to the observation file.
+    
+    Returns:
+    - forward_messages: Forward messages {t: {node: {state: log probability}}}.
+    """
+    # Build adjacency lists for reverse lookups
+    reverse_adjacency_list = defaultdict(list)
+    for s, t in edges:
+        reverse_adjacency_list[t].append(s)
+    
+    forward_messages = {}
+
+    # Initialize forward messages
+    for t in slices:
+        forward_messages[t] = {}
+        for node in slices[t]:  # Nodes in the current slice
+            forward_messages[t][node] = {}
+            state_space = list(emission_dict[node].keys())
+            for phase in state_space:
+                forward_messages[t][node][phase] = -np.inf  # Initialize in log space to negative infinity
+
+    # Compute forward messages
+    # Base case (t = 1)
+    t = 1
+    for node in slices[t]:
+        # Extract observations for the current state
+        observations = extract_observations_for_state(node, assignment_dict['states'][node], frag_path)
+        state_space = list(emission_dict[node].keys())
+        for phase in state_space:
+            # Compute log P(r | Z_1^{(i)}) for all observations
+            log_emission = np.sum([np.log(emission_dict[node][phase][r]) for r in observations])
+            # Uniform prior: log P(I_1)
+            log_prior = np.log(1 / len(state_space))
+            forward_messages[t][node][phase] = log_emission + log_prior
+
+    # Recursion (t = 2, ..., T)
+    for t in range(2, len(slices) + 1):
+        for node in slices[t]:
+            # Extract observations for the current state
+            observations = extract_observations_for_state(node, assignment_dict['states'][node], frag_path)
+            state_space = list(emission_dict[node].keys())
+            parents = reverse_adjacency_list[node]  # Get parents of the current node
+            parents_in_prev_t = list(set(slices[t - 1]).intersection(set(parents)))  # Filter parents in slice t-1
+            
+            for i, phase in enumerate(state_space):
+                # Compute log P(r | Z_t^{(i)}) for all observations
+                log_likelihood = np.sum([np.log(emission_dict[node][phase][r]) for r in observations])
+
+                # Compute log-sum-exp over all transitions from parents
+                log_transition_sum = -np.inf  # Initialize for log-sum-exp
+                for prev_node in parents_in_prev_t:
+                    prev_state_space = list(emission_dict[prev_node].keys())
+                    for j, prev_phase in enumerate(prev_state_space):
+                        transition_prob = transitions_dict[f"{prev_node}--{node}"][j, i]
+                        prev_message = forward_messages[t - 1][prev_node][prev_phase]
+                        log_transition_sum = np.logaddexp(
+                            log_transition_sum,
+                            prev_message + np.log(transition_prob)
+                        )
+
+                # Update forward message
+                forward_messages[t][node][phase] = log_likelihood + log_transition_sum
+
+    return forward_messages
+
+
+def compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path):
+    """
+    Compute backward messages in log space for FFBS in a DBN with arbitrary state spaces.
+    
+    Parameters:
+    - slices: Dictionary of slices {t: list of nodes in slice t}.
+    - edges: List of directed edges (source, target).
+    - assignment_dict: Dictionary mapping states to line indices of observations.
+    - emission_dict: Hierarchical dictionary of emission probabilities for each node and its state space.
+    - transitions_dict: Dictionary of transition probabilities (log-space).
+    - frag_path: Path to the observation file.
+    
+    Returns:
+    - backward_messages: Backward messages {t: {node: {state: log probability}}}.
+    """
+    # Build adjacency list for forward traversal
+    adjacency_list = defaultdict(list)
+    for s, t in edges:
+        adjacency_list[s].append(t)
+
+    backward_messages = {}
+
+    # Initialize backward messages
+    for t in slices:
+        backward_messages[t] = {}
+        for node in slices[t]:
+            backward_messages[t][node] = {}
+            state_space = list(emission_dict[node].keys())
+            for phase in state_space:
+                backward_messages[t][node][phase] = -np.inf  # Initialize to negative infinity in log space
+
+    # Base case (t = T)
+    t = len(slices)
+    for node in slices[t]:
+        state_space = list(emission_dict[node].keys())
+        for phase in state_space:
+            backward_messages[t][node][phase] = 0  # log(1) = 0
+
+    # Recursion (t = T-1, ..., 1)
+    for t in range(len(slices) - 1, 0, -1):
+        for node in slices[t]:
+            state_space = list(emission_dict[node].keys())
+            children = adjacency_list[node]
+            children_in_next_t = list(set(slices[t + 1]).intersection(set(children)))
+            if len(children_in_next_t) == 0:
+                for i, phase in enumerate(state_space):
+                    backward_messages[t][node][phase] = 0
+                continue
+
+            for i, phase in enumerate(state_space):
+                log_backward_sum = -np.inf  # Initialize for log-sum-exp
+
+                for next_node in children_in_next_t:
+                    next_state_space = list(emission_dict[next_node].keys())
+                    observations = extract_observations_for_state(next_node, assignment_dict['states'][next_node], frag_path)
+
+                    # Compute the inner summation in probability space
+                    prob_sum = 0
+                    for j, next_phase in enumerate(next_state_space):
+                        # Multiply in probability space
+                        transition_prob = transitions_dict[f"{node}--{next_node}"][i, j]
+                        bm = np.exp(backward_messages[t + 1][next_node][next_phase])  # Convert back to probability space
+
+                        # Compute emission probabilities for all observations
+                        emission_prob = np.prod([emission_dict[next_node][next_phase][r] for r in observations])
+
+                        # Add to the summation in probability space
+                        prob_sum += bm * transition_prob * emission_prob
+
+                    # Combine using log after summing in probability space
+                    log_backward_sum = np.logaddexp(log_backward_sum, np.log(prob_sum))
+
+                # Update backward message for the current phase
+                backward_messages[t][node][phase] = log_backward_sum
+
+    return backward_messages
+
+
+def sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict):
+    """
+    Sample states using the FFBS algorithm, avoiding resampling nodes already sampled in earlier slices,
+    and leveraging precomputed forward and backward messages for efficiency.
+
+    Parameters:
+    - slices: Dictionary of slices {t: list of nodes in slice t}.
+    - edges: List of directed edges (source, target).
+    - forward_messages: Precomputed forward messages {t: {node: {state: log probability}}}.
+    - backward_messages: Precomputed backward messages {t: {node: {state: log probability}}}.
+    - transitions_dict: Dictionary of transition probabilities (log-space).
+
+    Returns:
+    - sampled_states: Dictionary of sampled states for each node in each slice.
+    """
+    sampled_states = {}
+    already_sampled_nodes = set()
+
+    # Step 1: Sample Q_T
+    t = len(slices)
+    sampled_states[t] = {}
+    for node in slices[t]:
+        if node in already_sampled_nodes:
+            continue
+        state_space = list(forward_messages[t][node].keys())
+        log_probs = np.array([
+            forward_messages[t][node][state] + backward_messages[t][node][state]
+            for state in state_space
+        ])
+        probs = np.exp(log_probs - np.max(log_probs))  # Stabilize for numerical issues
+        probs /= np.sum(probs)  # Normalize
+        sampled_states[t][node] = random.choices(state_space, weights=probs, k=1)[0]
+        already_sampled_nodes.add(node)
+
+    # Step 2: Sample Q_t for t = T-1, ..., 1
+    for t in range(len(slices) - 1, 0, -1):
+        # print(t)
+        sampled_states[t] = {}
+        for node in slices[t]:
+            if node in already_sampled_nodes:
+                sampled_states[t][node] = sampled_states[t + 1][node]  # Use the sampled state from the next slice
+                # print('comes here:', t, node)
+                continue
+            state_space = list(forward_messages[t][node].keys())
+            children = [edge[1] for edge in edges if edge[0] == node]
+            children_in_next_t = list(set(slices[t + 1]).intersection(set(children)))
+
+            log_probs = []
+            for state in state_space:
+                log_alpha = forward_messages[t][node][state]
+                log_child_contrib = 0
+
+                # Compute contribution from children
+                for child in children_in_next_t:
+                    if child in already_sampled_nodes:
+                        # Use the sampled state of the child
+                        sampled_child_state = sampled_states[t + 1][child]
+                        transition_prob = transitions_dict[f"{node}--{child}"][
+                            state_space.index(state), list(forward_messages[t + 1][child].keys()).index(sampled_child_state)
+                        ]
+                        log_child_contrib += np.log(transition_prob)
+                    else:
+                        # Use backward message of the child
+                        next_state_space = list(forward_messages[t + 1][child].keys())
+                        child_sum = -np.inf  # Log-sum-exp initialization
+
+                        for child_state in next_state_space:
+                            transition_prob = transitions_dict[f"{node}--{child}"][
+                                state_space.index(state), next_state_space.index(child_state)
+                            ]
+                            beta = backward_messages[t + 1][child][child_state]
+                            child_sum = np.logaddexp(child_sum, beta + np.log(transition_prob))
+
+                        log_child_contrib += child_sum
+
+                log_probs.append(log_alpha + log_child_contrib)
+
+            probs = np.exp(log_probs - np.max(log_probs))  # Stabilize for numerical issues
+            probs /= np.sum(probs)  # Normalize
+            sampled_states[t][node] = random.choices(state_space, weights=probs, k=1)[0]
+            already_sampled_nodes.add(node)
+
+    return sampled_states
+
+
+if __name__ == '__main__':
+
+    frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
+    ploidy= 3
+    genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
+
+    class Args:
+        def __init__(self):
+            self.vcf_path = 'example/62_ID0.vcf'
+            self.data_path = frag_path
+            self.bam_path = 'example/example.bam'
+            self.genotype_path = genotype_path
+            self.ploidy = 3
+            self.error_rate = 0.001
+            self.epsilon = 0.0001
+            self.output_path = 'output'
+            self.root_dir = 'D:/UCONN/HaplOrbit'
+            self.alleles = [0, 1]
+
+    # Create the mock args object
+    args = Args()
+
+    # Initialize classes with parsed arguments
+    input_handler = InputHandler(args)
+
+    config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+
+    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
+
+    fragment_model.construct2(input_handler, config)
+    print('Fragment Graph constructed.')
+
+    e_labels = fragment_model.graph.edge_properties["e_label"]
+    v_labels = fragment_model.graph.vertex_properties["v_label"]
+    gt.graph_draw(fragment_model.graph, output_size=(500, 500), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=14,  
+    edge_font_size=12)
+
+    fragment_model_v_label_reversed = fragment_model.v_label_reversed
+
+    edges_map_fragment = {}
+    for k in fragment_model.e_label_reversed.keys():
+        edges_map_fragment[k] = [int(fragment_model.e_label_reversed[k].source()), int(fragment_model.e_label_reversed[k].target())]
+
+
+    # create quotient graph
+    quotient_g = QuotientGraph(fragment_model)
+    quotient_g.construct3(input_handler, config)
+
+    e_labels_q = quotient_g.graph.edge_properties["e_label"]
+    v_labels_q = quotient_g.graph.vertex_properties["v_label"]
+    gt.graph_draw(quotient_g.graph, output_size=(500, 500), vertex_text=v_labels_q, edge_text=e_labels_q, vertex_font_size=14,  
+    edge_font_size=12)
+
+
+    quotient_g_v_label_reversed = quotient_g.v_label_reversed
+
+    edges_map_quotient = {}
+    for k in quotient_g.e_label_reversed.keys():
+        edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
+
+
+    transitions_dict = transition_matrices(quotient_g, edges_map_quotient)
+    emission_dict = emissions(ploidy, quotient_g_v_label_reversed, config.error_rate)
+
+    nodes = list(emission_dict.keys())
+    edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
+
+
+    slices, interfaces =  assign_slices_and_interfaces(nodes, edges)
+    # print('slice index      |', 'nodes in slice      |', 'incoming interface      |', 'outgoing interface      ')
+    # for t in slices.keys():
+    #     print(t, '|', slices[t], '|', interfaces['incoming'][t], '|', interfaces['outgoing'][t])
+
+    assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, frag_path)
+
+    forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path)
+
+    backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path)
+
+    samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
+
+    print('Sampled states:', samples)
+
+    for t in slices.keys():
+        print('Slice:', t)
+        for node in slices[t]:
+            print(node, samples[t][node])
