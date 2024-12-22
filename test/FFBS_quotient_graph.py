@@ -883,7 +883,12 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
             probabilities = {key: value / total for key, value in matched_phasings.items()}
             keys = list(probabilities.keys())
             probs = list(probabilities.values())
-            sampled_key = random.choices(keys, weights=probs, k=1)[0]
+            # sampled_key = random.choices(keys, weights=probs, k=1)[0]
+
+            # Sample 100 times and pick the most frequent sample
+            samples_100 = random.choices(keys, weights=probs, k=100)
+            sampled_key = Counter(samples_100).most_common(1)[0][0]
+
             sampled_key_np = str_2_phas_1(sampled_key, ploidy)
             poss = sorted(list(set([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])))
             poss = [p - 1 for p in poss]
@@ -967,11 +972,7 @@ if __name__ == '__main__':
     nodes = list(emission_dict.keys())
     edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
 
-
     slices, interfaces =  assign_slices_and_interfaces(nodes, edges)
-    # print('slice index      |', 'nodes in slice      |', 'incoming interface      |', 'outgoing interface      ')
-    # for t in slices.keys():
-    #     print(t, '|', slices[t], '|', interfaces['incoming'][t], '|', interfaces['outgoing'][t])
 
     assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, frag_path)
 
@@ -981,6 +982,7 @@ if __name__ == '__main__':
 
     samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
 
-    print('Sampled states:', samples)
-
     predicted_haplotypes = predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy)
+
+    print('Predicted Haplotypes:\n', predicted_haplotypes)
+    print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
