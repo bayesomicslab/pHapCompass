@@ -258,7 +258,9 @@ def generate_hmm_with_weights_and_emissions_random(qg, error_rate, k, m):
 
 def transition_matrices(quotient_g, edges_map_quotient):
     transitions_dict = {}
+    transitions_dict_extra = {}
     for edge in edges_map_quotient.keys():
+        transitions_dict_extra[edge] = {}
         source = edges_map_quotient[edge][0]
         target = edges_map_quotient[edge][1]
         source_weights = quotient_g.graph.vertex_properties["v_weights"][source]['weight']
@@ -270,9 +272,13 @@ def transition_matrices(quotient_g, edges_map_quotient):
         target_phasings = list(target_weights.keys())
         # transitions_dict = {'source': source_phasings, 'target': target_phasings}
         transitions_mtx = np.zeros((len(source_phasings), len(target_phasings)))
+
         for i, ffstr in enumerate(source_phasings):
             for j, sfstr in enumerate(target_phasings):
-                
+                transitions_dict_extra[edge][str(i) + '-' + str(j)] = {}
+                transitions_dict_extra[edge][str(i) + '-' + str(j)]['source_phasing'] = ffstr
+                transitions_dict_extra[edge][str(i) + '-' + str(j)]['target_phasing'] = sfstr
+                transitions_dict_extra[edge][str(i) + '-' + str(j)]['matched_phasings'] = {}
                 matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, ploidy), str_2_phas_1(sfstr, ploidy), common_ff, common_sf, source_label, target_label)
                 sorted_phasings = []
                 for mtx in matched_phasings:
@@ -280,18 +286,27 @@ def transition_matrices(quotient_g, edges_map_quotient):
                     sorted_phasings.append(sorted_matrix)
                 
                 matched_phasings_str = list(set([phas_2_str(pm) for pm in sorted_phasings]))
+                # print(i, ffstr, j, sfstr)
+                # print('matched phasings:', matched_phasings_str, len(matched_phasings_str))
+                # if len(matched_phasings_str) > 1:
+                #     print('More than one matching phasing')
+                #     # stop
                 poss = sorted(list(set([int(ss) for ss in source_label.split('-')] + [int(tt) for tt in target_label.split('-')])))
                 match_reads = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
                 wei = 0
                 for phas in matched_phasings_str:
+                    this_phas_weight = 0
                     for indc, this_po, obs in match_reads:
-                        wei += compute_likelihood_generalized_plus(np.array(obs), str_2_phas_1(phas, ploidy), indc, list(range(len(indc))), 
+                        this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), str_2_phas_1(phas, ploidy), indc, list(range(len(indc))), 
                                                                    config.error_rate)
+                        wei += this_phas_read_weight
+                        this_phas_weight += this_phas_read_weight
+                    transitions_dict_extra[edge][str(i) + '-' + str(j)]['matched_phasings'][phas] = this_phas_weight
                 transitions_mtx[i, j] = wei
 
         transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
         transitions_dict[edge] = transitions_mtx
-    return transitions_dict
+    return transitions_dict, transitions_dict_extra
 
 
 def emissions(ploidy, quotient_g_v_label_reversed, error_rate):
@@ -864,7 +879,7 @@ if __name__ == '__main__':
 
     fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
 
-    fragment_model.construct2(input_handler, config)
+    fragment_model.construct(input_handler, config)
     print('Fragment Graph constructed.')
 
     e_labels = fragment_model.graph.edge_properties["e_label"]
@@ -881,7 +896,7 @@ if __name__ == '__main__':
 
     # create quotient graph
     quotient_g = QuotientGraph(fragment_model)
-    quotient_g.construct3(input_handler, config)
+    quotient_g.construct(input_handler, config)
 
     e_labels_q = quotient_g.graph.edge_properties["e_label"]
     v_labels_q = quotient_g.graph.vertex_properties["v_label"]
@@ -896,7 +911,7 @@ if __name__ == '__main__':
         edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
 
 
-    transitions_dict = transition_matrices(quotient_g, edges_map_quotient)
+    transitions_dict, transitions_dict_extra = transition_matrices(quotient_g, edges_map_quotient)
     emission_dict = emissions(ploidy, quotient_g_v_label_reversed, config.error_rate)
 
     nodes = list(emission_dict.keys())
