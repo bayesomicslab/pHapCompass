@@ -62,7 +62,7 @@ def main():
 
     # frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
     # frag_graph, fragment_list = fragment_model.construct2(input_handler, config)
-    fragment_model.construct2(input_handler, config)
+    fragment_model.construct(input_handler, config)
     
     # fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
     # frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
@@ -72,16 +72,13 @@ def main():
 
     # quotient_g = QuotientGraph(fragment_model.graph).construct(fragment_model.fragment_list, input_handler, config)
     quotient_g = QuotientGraph(fragment_model)
-    quotient_g.construct3(input_handler, config)
+    quotient_g.construct(input_handler, config)
     # plot_graph(quotient_g)
     print('Quotient Graph constructed.')
 
 
     qg = chordal_contraction_graph_tool(quotient_graph, input_handler, config, fragment_model)
     print('Chordal Graph constructed.')
-
-
-
 
 
 class Args:
@@ -108,7 +105,7 @@ fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_p
 
 # frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
 # frag_graph, fragment_list = fragment_model.construct2(input_handler, config)
-fragment_model.construct2(input_handler, config)
+fragment_model.construct(input_handler, config)
 
 
 main_path = '/home/mok23003/BML/HaplOrbit/old_simulated_data_graphs'
@@ -203,7 +200,6 @@ def chordal_contraction_graph_tool2(quotient_graph, input_handler, config, fragm
                 new_graph.edge_properties["e_label"][e1] = new_edge_name
                 new_graph.edge_properties['e_entropy'][e1] = final_weight['entropy']
                 # new_graph.edge_properties["e_weights"][e2]
-
             
             for n in set(target_nbrs)-common_nbrs:
                 

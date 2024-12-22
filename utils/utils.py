@@ -758,9 +758,24 @@ def compute_edge_weight(new_vertex_name, v_label, source_phasings, target_phasin
     return final_weight
 
 # @profile
-def sort_strings(strings):
+def sort_nodes(strings):
     # Sort the list of strings using the custom comparison logic
     return sorted(strings, key=lambda x: list(map(int, x.split('-'))))
+
+def sort_edges(strings):
+    # Sort the list of strings using the custom key
+    return sorted(strings, key=lambda x: [
+        list(map(int, part.split('-'))) for part in x.split('--')
+    ])
+
+
+# def sort_nodes(nodes):
+#     # Custom sorting function to split each node and convert parts to integers
+#     def node_key(node):
+#         return [int(part) for part in node.split('-')]
+
+#     # Sort using the custom key
+#     return sorted(nodes, key=node_key)
 
 
 def get_minimum_spanning_tree(quotient_graph):

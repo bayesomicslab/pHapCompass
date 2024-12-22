@@ -2,7 +2,7 @@ import os
 import argparse
 import sys
 import networkx as nx
-import torch
+# import torch
 from data.input_handler import InputHandler
 from data.configuration import Configuration
 from algorithm.haplotype_assembly import HaplotypeAssembly
@@ -850,11 +850,61 @@ def sample_states_no_resample_optimized(slices, edges, forward_messages, backwar
     return sampled_states
 
 
+def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy):
+    samples_brief = {}
+    for t in samples.keys():
+        for nn in samples[t].keys():
+            if nn not in samples_brief.keys():
+                samples_brief[nn] = samples[t][nn]
+                # samples_brief.update({nn: samples[t][nn]})
+
+    # sorted_nodes = sort_nodes(nodes)
+    genotype_df = pd.read_csv(genotype_path).T
+    # positions = genotype_df.columns + 1 
+    predicted_haplotypes = pd.DataFrame(index=['haplotype_'+str(p+1) for p in range(ploidy)], columns=genotype_df.columns)
+
+    edges_names = list(transitions_dict.keys())
+    sorted_edges = sort_edges(edges_names)
+
+    for edge in sorted_edges:
+        source, target = edge.split('--')
+        # common_ff, common_sf = find_common_element_and_index(source, target)
+        source_sample = samples_brief[source]
+        target_sample = samples_brief[target]
+        edge_phasings = transitions_dict_extra[edge]
+        for key, value in edge_phasings.items():
+                # print(key, 'source', value['source_phasing'], source_sample, 'target', value['target_phasing'], target_sample)
+                if value['source_phasing'] == source_sample and value['target_phasing'] == target_sample:
+                    matched_phasings = value['matched_phasings']
+                    break
+        
+        if matched_phasings:
+            total = sum(matched_phasings.values())
+            probabilities = {key: value / total for key, value in matched_phasings.items()}
+            keys = list(probabilities.keys())
+            probs = list(probabilities.values())
+            sampled_key = random.choices(keys, weights=probs, k=1)[0]
+            sampled_key_np = str_2_phas_1(sampled_key, ploidy)
+            poss = sorted(list(set([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])))
+            poss = [p - 1 for p in poss]
+            if predicted_haplotypes.loc[:, poss].isna().any().any():
+                predicted_haplotypes.loc[:, poss] = sampled_key_np
+                # print('nan detected.')
+            # else:
+            #     print('These positions were already phased.', poss)
+        else:
+            print('No matched phasings found for the edge:', edge)
+
+    return predicted_haplotypes
+
+
 if __name__ == '__main__':
 
-    frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
+    # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
+    frag_path = '/labs/Aguiar/pHapCompass/test/test.frag'
     ploidy= 3
-    genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
+    # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
+    genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
 
     class Args:
         def __init__(self):
@@ -933,7 +983,4 @@ if __name__ == '__main__':
 
     print('Sampled states:', samples)
 
-    for t in slices.keys():
-        print('Slice:', t)
-        for node in slices[t]:
-            print(node, samples[t][node])
+    predicted_haplotypes = predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy)
