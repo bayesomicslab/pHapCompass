@@ -484,9 +484,10 @@ def get_chordless_cycles(subgraph_copy):
                 # print('ordering:', v, 'neighbor', u, 'min neighbor',w)
                 # gt.shortest_path(subgraph_copy, u, w)
                 v_filter = subgraph_copy.new_vertex_property("bool", val=True)
-    
+                v_filter[v] = False
+                subgraph_copy.set_vertex_filter(v_filter)
                 # Exclude the specified node by setting its filter to False
-                v_filter[subgraph_copy.vertex(v)] = False
+                # v_filter[subgraph_copy.vertex(v)] = False
                 # subgraph_2 = gt.GraphView(subgraph_copy, vfilt=v_filter)
     
                 # Find the shortest path in the filtered graph
@@ -497,150 +498,154 @@ def get_chordless_cycles(subgraph_copy):
                 chordless_cycles.append(path_v)
                 # subgraph_copy.set_vertex_filter(None)
 
+                # Reset the vertex filter after the computation
+                subgraph_copy.set_vertex_filter(None)
+
     return chordless_cycles
 
 
-def chordal_contraction_graph_tool(quotient_graph, input_handler, config, fragment_model):
-    new_graph = quotient_graph.copy()
-    e_weights = new_graph.edge_properties["e_weights"]
-    new_graph.clear_filters()
-    e_entropy = new_graph.new_edge_property("double")
+# def chordal_contraction_graph_tool_old(quotient_graph, input_handler, config, fragment_model):
+#     new_graph = quotient_graph.copy()
+#     e_weights = new_graph.edge_properties["e_weights"]
+#     new_graph.clear_filters()
+#     e_entropy = new_graph.new_edge_property("double")
 
-    # Loop over edges and assign entropy from the e_weights property
-    for e in new_graph.edges():
-        e_entropy[e] = e_weights[e]['entropy']
+#     # Loop over edges and assign entropy from the e_weights property
+#     for e in new_graph.edges():
+#         e_entropy[e] = e_weights[e]['entropy']
 
-    new_graph.ep['e_entropy'] = e_entropy
+#     new_graph.ep['e_entropy'] = e_entropy
 
-    chordless_cycles = get_chordless_cycles(new_graph)
+#     chordless_cycles = get_chordless_cycles(new_graph)
 
-    to_be_removed_nodes = []
+#     to_be_removed_nodes = []
 
-    e_weights = new_graph.edge_properties["e_weights"]
-    e_entropy = new_graph.new_edge_property("double")
+#     e_weights = new_graph.edge_properties["e_weights"]
+#     e_entropy = new_graph.new_edge_property("double")
 
-    # Loop over edges and assign entropy from the e_weights property
-    for e in new_graph.edges():
-        e_entropy[e] = e_weights[e]['entropy']
+#     # Loop over edges and assign entropy from the e_weights property
+#     for e in new_graph.edges():
+#         e_entropy[e] = e_weights[e]['entropy']
 
-    new_graph.ep['e_entropy'] = e_entropy
+#     new_graph.ep['e_entropy'] = e_entropy
 
-    for cyc_id, cyc in enumerate(chordless_cycles):
-        print(cyc_id)
-        edges = [new_graph.edge(cyc[-1], cyc[0])]
-        for i in range(len(cyc) - 1):
-            edges += [new_graph.edge(cyc[i], cyc[i+1])]
-        edges = [x for x in edges if x is not None]
-        while len(edges) > 3:
-            min_edge = min(edges, key=lambda e: new_graph.ep['e_entropy'][e])
-            source_label = new_graph.vp['v_label'][min_edge.source()]
-            target_label = new_graph.vp['v_label'][min_edge.target()]
+#     for cyc_id, cyc in enumerate(chordless_cycles):
+#         print(cyc_id)
+#         edges = [new_graph.edge(cyc[-1], cyc[0])]
+#         for i in range(len(cyc) - 1):
+#             edges += [new_graph.edge(cyc[i], cyc[i+1])]
+#         edges = [x for x in edges if x is not None]
+#         while len(edges) > 3:
+#             min_edge = min(edges, key=lambda e: new_graph.ep['e_entropy'][e])
+#             source_label = new_graph.vp['v_label'][min_edge.source()]
+#             target_label = new_graph.vp['v_label'][min_edge.target()]
             
-            # new node positions
-            poss = sorted(set([int(nn) for nn in source_label.split('-')] + [int(nn) for nn in target_label.split('-')]))
-            # new vertex properties:
-            new_vertex_name = '-'.join([str(nnn) for nnn in poss])
-            vertex_weights = new_graph.ep['e_weights'][min_edge]
+#             # new node positions
+#             poss = sorted(set([int(nn) for nn in source_label.split('-')] + [int(nn) for nn in target_label.split('-')]))
+#             # new vertex properties:
+#             new_vertex_name = '-'.join([str(nnn) for nnn in poss])
+#             vertex_weights = new_graph.ep['e_weights'][min_edge]
             
-            new_graph.vertex_properties["v_weights"][min_edge.source()] = vertex_weights
-            new_graph.vertex_properties["v_label"][min_edge.source()] = new_vertex_name
+#             new_graph.vertex_properties["v_weights"][min_edge.source()] = vertex_weights
+#             new_graph.vertex_properties["v_label"][min_edge.source()] = new_vertex_name
 
-            source_nbrs = [n for n in min_edge.source().all_neighbors() if n != min_edge.target()]
-            target_nbrs = [n for n in min_edge.target().all_neighbors() if n != min_edge.source()]
-            common_nbrs = set(source_nbrs).intersection(set(target_nbrs))
+#             source_nbrs = [n for n in min_edge.source().all_neighbors() if n != min_edge.target()]
+#             target_nbrs = [n for n in min_edge.target().all_neighbors() if n != min_edge.source()]
+#             common_nbrs = set(source_nbrs).intersection(set(target_nbrs))
 
-            for n in common_nbrs:
-                v_label = new_graph.vertex_properties["v_label"][n]
-                e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
-                print(len(e_poss))
-                new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
-                poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
-                all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
-                matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
-                weights = {phas_2_str(phas): 0 for phas in all_phasings}
-                for phas in all_phasings:
-                    for indc, this_po, obs in matches:
-                        # print(indc, this_po, obs)
-                        # for obs in all_obs:
-                        #     obs_np = np.array([int(po) for po in obs])
-                        #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
-                        weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
-                                                                                            list(range(len(indc))),
-                                                                                            config.error_rate)
-                entr = entropy(list(weights.values()), base=10)
+#             for n in common_nbrs:
+#                 v_label = new_graph.vertex_properties["v_label"][n]
+#                 e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+#                 print(len(e_poss))
+#                 new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+#                 poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
+#                 all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
+#                 matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
+#                 weights = {phas_2_str(phas): 0 for phas in all_phasings}
+#                 for phas in all_phasings:
+#                     for indc, this_po, obs in matches:
+#                         # print(indc, this_po, obs)
+#                         # for obs in all_obs:
+#                         #     obs_np = np.array([int(po) for po in obs])
+#                         #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
+#                         weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+#                                                                                             list(range(len(indc))),
+#                                                                                             config.error_rate)
+#                 entr = entropy(list(weights.values()), base=10)
 
-                # update the weights on the source and 
-                # e_weights[edge] = {"weight": weights, "entropy": entr}
-                e1 = new_graph.edge(min_edge.source(), n)
-                e2 = new_graph.edge(min_edge.target(), n)
+#                 # update the weights on the source and 
+#                 # e_weights[edge] = {"weight": weights, "entropy": entr}
+#                 e1 = new_graph.edge(min_edge.source(), n)
+#                 e2 = new_graph.edge(min_edge.target(), n)
                 
-                new_graph.edge_properties["e_weights"][e1] = {"weight": weights, "entropy": entr}
-                new_graph.edge_properties["e_label"][e1] = new_edge_name
-                new_graph.edge_properties['e_entropy'][e1] = entr
-                new_graph.remove_edge(e2)
+#                 new_graph.edge_properties["e_weights"][e1] = {"weight": weights, "entropy": entr}
+#                 new_graph.edge_properties["e_label"][e1] = new_edge_name
+#                 new_graph.edge_properties['e_entropy'][e1] = entr
+#                 new_graph.remove_edge(e2)
 
-            for n in set(source_nbrs)-common_nbrs:
-                v_label = new_graph.vertex_properties["v_label"][n]
-                e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
-                print(len(e_poss))
-                new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
-                poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
-                all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
-                matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
-                weights = {phas_2_str(phas): 0 for phas in all_phasings}
-                for phas in all_phasings:
-                    for indc, this_po, obs in matches:
-                        # print(indc, this_po, obs)
-                        # for obs in all_obs:
-                        #     obs_np = np.array([int(po) for po in obs])
-                        #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
-                        weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
-                                                                                            list(range(len(indc))),
-                                                                                            config.error_rate)
-                entr = entropy(list(weights.values()), base=10)
+#             for n in set(source_nbrs)-common_nbrs:
+#                 v_label = new_graph.vertex_properties["v_label"][n]
+#                 e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+#                 print(len(e_poss))
+#                 new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+#                 poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
+#                 all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
+#                 matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
+#                 weights = {phas_2_str(phas): 0 for phas in all_phasings}
+#                 for phas in all_phasings:
+#                     for indc, this_po, obs in matches:
+#                         # print(indc, this_po, obs)
+#                         # for obs in all_obs:
+#                         #     obs_np = np.array([int(po) for po in obs])
+#                         #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
+#                         weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+#                                                                                             list(range(len(indc))),
+#                                                                                             config.error_rate)
+#                 entr = entropy(list(weights.values()), base=10)
 
-                e1 = new_graph.edge(min_edge.source(), n)
-                # e2 = new_graph.edge(min_edge.target(), n)
-                new_graph.edge_properties["e_weights"][e1] = {"weight": weights, "entropy": entr}
-                new_graph.edge_properties["e_label"][e1] = new_edge_name
-                new_graph.edge_properties['e_entropy'][e1] = entr
-                # new_graph.edge_properties["e_weights"][e2]
+#                 e1 = new_graph.edge(min_edge.source(), n)
+#                 # e2 = new_graph.edge(min_edge.target(), n)
+#                 new_graph.edge_properties["e_weights"][e1] = {"weight": weights, "entropy": entr}
+#                 new_graph.edge_properties["e_label"][e1] = new_edge_name
+#                 new_graph.edge_properties['e_entropy'][e1] = entr
+#                 # new_graph.edge_properties["e_weights"][e2]
             
-            for n in set(target_nbrs)-common_nbrs:
-                v_label = new_graph.vertex_properties["v_label"][n]
-                e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
-                print(len(e_poss))
-                new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
-                poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
-                all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
-                matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
-                weights = {phas_2_str(phas): 0 for phas in all_phasings}
-                for phas in all_phasings:
-                    for indc, this_po, obs in matches:
-                        # print(indc, this_po, obs)
-                        # for obs in all_obs:
-                        #     obs_np = np.array([int(po) for po in obs])
-                        #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
-                        weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
-                                                                                            list(range(len(indc))),
-                                                                                            config.error_rate)
-                entr = entropy(list(weights.values()), base=10)
-                e2 = new_graph.edge(min_edge.target(), n)
-                new_graph.remove_edge(e2)
-                e1 = new_graph.add_edge(min_edge.source(), n)
-                new_graph.edge_properties["e_weights"][e1] = {"weight": weights, "entropy": entr}
-                new_graph.edge_properties["e_label"][e1] = new_edge_name
-                new_graph.edge_properties['e_entropy'][e1] = entr
+#             for n in set(target_nbrs)-common_nbrs:
+#                 v_label = new_graph.vertex_properties["v_label"][n]
+#                 e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+#                 print(len(e_poss))
+#                 new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+#                 poss_genotype = input_handler.get_genotype_positions([int(p) for p in e_poss])
+#                 all_phasings = generate_phasings_ploidy_long(config.ploidy, poss_genotype, allel_set=[0, 1])
+#                 matches = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
+#                 weights = {phas_2_str(phas): 0 for phas in all_phasings}
+#                 for phas in all_phasings:
+#                     for indc, this_po, obs in matches:
+#                         # print(indc, this_po, obs)
+#                         # for obs in all_obs:
+#                         #     obs_np = np.array([int(po) for po in obs])
+#                         #     weights[phas_2_str(phas)] += compute_likelihood(obs_np, phas, error_rate)
+#                         weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), phas, indc,
+#                                                                                             list(range(len(indc))),
+#                                                                                             config.error_rate)
+#                 entr = entropy(list(weights.values()), base=10)
+#                 e2 = new_graph.edge(min_edge.target(), n)
+#                 new_graph.remove_edge(e2)
+#                 e1 = new_graph.add_edge(min_edge.source(), n)
+#                 new_graph.edge_properties["e_weights"][e1] = {"weight": weights, "entropy": entr}
+#                 new_graph.edge_properties["e_label"][e1] = new_edge_name
+#                 new_graph.edge_properties['e_entropy'][e1] = entr
             
-            to_be_removed_nodes += [min_edge.target()]
-            new_graph.remove_edge(min_edge)
-            edges.remove(min_edge)
+#             to_be_removed_nodes += [min_edge.target()]
+#             new_graph.remove_edge(min_edge)
+#             edges.remove(min_edge)
             
-    new_graph.remove_vertex(to_be_removed_nodes)
-    return new_graph
+#     new_graph.remove_vertex(to_be_removed_nodes)
+#     return new_graph
     
 
-def chordal_contraction_graph_tool2(quotient_graph, input_handler, config, fragment_model):
+def chordal_contraction_graph_tool(quotient_graph, config, fragment_model):
+    # more efficient version of the chordal contraction
     new_graph = quotient_graph.copy()
     e_weights = new_graph.edge_properties["e_weights"]
     new_graph.clear_filters()
@@ -687,7 +692,7 @@ def chordal_contraction_graph_tool2(quotient_graph, input_handler, config, fragm
                 # e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
                 # print(len(e_poss))
                 # new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
-                sorted_labels = sort_strings([new_vertex_name, v_label])
+                sorted_labels = sort_nodes([new_vertex_name, v_label])
                 new_edge_name = '--'.join(sorted_labels)
                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
 
@@ -707,7 +712,7 @@ def chordal_contraction_graph_tool2(quotient_graph, input_handler, config, fragm
                 
                 v_label = new_graph.vertex_properties["v_label"][n]
 
-                sorted_labels = sort_strings([new_vertex_name, v_label])
+                sorted_labels = sort_nodes([new_vertex_name, v_label])
                 new_edge_name = '--'.join(sorted_labels)
                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
 
@@ -727,7 +732,7 @@ def chordal_contraction_graph_tool2(quotient_graph, input_handler, config, fragm
             for n in set(target_nbrs)-common_nbrs:
                 
                 v_label = new_graph.vertex_properties["v_label"][n]
-                sorted_labels = sort_strings([new_vertex_name, v_label])
+                sorted_labels = sort_nodes([new_vertex_name, v_label])
                 new_edge_name = '--'.join(sorted_labels)
 
                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
@@ -864,6 +869,7 @@ def chordal_contraction_graph_tool2(quotient_graph, input_handler, config, fragm
 
 #     new_graph.remove_vertex(to_be_removed_nodes)
 #     return new_graph
+
     
 # @profile
 def divide_graph_by_labels(graph, m):

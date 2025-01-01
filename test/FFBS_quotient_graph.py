@@ -15,6 +15,7 @@ from algorithm.inference import *
 from algorithm.chordal_contraction import *
 import graph_tool.all as gt
 from collections import defaultdict, deque
+from evaluation import compute_vector_error
 
 
 def permute_rows(a):
@@ -124,136 +125,6 @@ def generate_all_possible_emissions(unique_node_lengths):
     for length in unique_node_lengths:
         all_emissions.extend(generate_binary_combinations(length))
     return all_emissions
-
-
-def generate_hmm_with_weights_and_emissions_random(qg, error_rate, k, m):
-    state_names = []  # To store the names of states in hmmg
-    state_index_map = {}  # Map state names to their index in the transition matrix
-    emission_index_map = {}  # To map emissions to their index for the matrix
-    unique_node_lengths = set()  # Track the unique lengths of node names
-    
-    sorted_nodes = sorted(qg.nodes(data=True), key=lambda x: x[0])
-
-    sel_states_keys = {}
-
-    # Step 1: Generate the state names and collect unique node lengths
-    for node, node_data in sorted_nodes:
-        node_states_dict = node_data['weight']
-        if len(node_states_dict) > k + m:
-            print(f"Warning: Node {node} has more than {k+m} states. Selecting top {k+m} states.")
-            sel_mk_dict = select_top_k_keys(node_states_dict, k, m)
-        else:
-            sel_mk_dict = node_states_dict  # If k is greater than the number of states, use all states
-        sel_states_keys[node] = sel_mk_dict
-        for state_key in sel_mk_dict.keys():
-            state_name = f"{node}-{state_key}"
-            state_names.append(state_name)
-            node_length = len(node.split('-'))  # Get the length of the node part (excluding state_key)
-            unique_node_lengths.add(node_length)  # Track the unique lengths
-
-    # Convert unique_node_lengths to a sorted list (just in case)
-    unique_node_lengths = sorted(unique_node_lengths)
-
-    # Step 2: Generate all possible emissions (0-1 combinations) based on the actual unique node lengths
-    all_emissions = generate_all_possible_emissions(unique_node_lengths)
-    
-    # Map each emission to a unique index
-    for i, emission in enumerate(all_emissions):
-        emission_index_map[tuple(emission)] = i  # Map emissions to indices
-    
-    num_emissions = len(all_emissions)
-    num_states = len(state_names)
-    
-    # Step 3: Create the emission probability matrix (number of states x number of emissions), initialized with zeros
-    emission_prob_matrix = np.zeros((num_states, num_emissions))
-    
-    # Create an index for each state
-    for i, state_name in enumerate(state_names):
-        state_index_map[state_name] = i
-
-    # Step 4: Initialize transition matrix
-    transition_matrix = np.zeros((num_states, num_states))  # Start with a zero matrix
-
-    sorted_tuple_list = [sorted(iii, key=lambda x: int(x.split('-')[0])) for iii in qg.edges()]
-
-
-    # Step 5: Define transitions between neighboring nodes with weights
-    for node1, node2 in sorted_tuple_list:
-        # Get the states of node1
-        # for state_key1 in qg.nodes[node1]['weight'].keys():
-        for state_key1 in sel_states_keys[node1].keys():
-            state1 = f"{node1}-{state_key1}"
-            state1_idx = state_index_map[state1]
-            # Get the states of node2
-            # for state_key2 in qg.nodes[node2]['weight'].keys():
-            for state_key2 in sel_states_keys[node2].keys():
-                state2 = f"{node2}-{state_key2}"
-                state2_idx = state_index_map[state2]
-                # print(state1, state2)
-                # Step 4: Compute the transition weight based on phasings
-                # 1. Convert the state keys to phasings
-                ff = str_2_phas_1(state_key1, 3)
-                sf = str_2_phas_1(state_key2, 3)
-                
-                # 2. Find the common index (e.g., common_ff and common_sf)
-                common_ff, common_sf = find_common_element_and_index(node1, node2)
-                # print('common indices:', common_ff, common_sf)
-
-                # 3. Get the matching phasings
-                phasings = find_phasings_matches(ff, sf, common_ff, common_sf)
-                all_phasings_str = []
-                for phas in phasings:
-                    all_phasings = permute_rows(phas)
-                    # all_phasings = set(tuple(arr) for arr in permute_rows(phas))
-                    # all_phasings = {tuple(arr) for arr in permute_rows(phas)}
-
-                    phasings_str = [phas_2_str(phasss) for phasss in all_phasings]
-                    for pe in phasings_str:
-                        if pe not in all_phasings_str:
-                            all_phasings_str.append(pe)
-
-                # 4. Calculate the transition weight by summing the values of matching keys
-                transition_weight = 0
-                for phasing_key in all_phasings_str:
-                    if phasing_key in qg[node1][node2]['weight']:
-                        transition_weight += qg[node1][node2]['weight'][phasing_key]
-                    # else:
-
-                # print('edge weights:', qg[node1][node2]['weight'])
-                # print('transition prob.', transition_weight)
-                # 5. Set the transition weight in the matrix
-                transition_matrix[state1_idx][state2_idx] = transition_weight
-
-
-
-    # Step 7: Normalize the transition matrix row-wise, skipping zero-sum rows
-    for i in range(num_states):
-        row_sum = transition_matrix[i].sum()
-        if row_sum > 0:
-            transition_matrix[i] /= row_sum
-        else:
-            transition_matrix[i] = np.zeros(num_states)
-
-    # Step 8: Calculate emissions for each state and populate the emission probability matrix
-    for state in state_names:
-        node_part, state_key = state.rsplit('-', 1)  # Split the state into node part and key
-        node_elements = node_part.split('-')  # For example, '1-2' -> ['1', '2']
-        node_length = len(node_elements)  # Determine the number of elements in the node
-
-        # Generate all possible combinations of 0 and 1 based on the node length
-        possible_emissions = generate_binary_combinations(node_length)
-
-        # Compute the likelihood for each emission using compute_likelihood
-        phasing = str_2_phas_1(state_key, 3)  # Compute phasing for the state key
-        state_idx = state_index_map[state]  # Get the index for the state in the matrix
-
-        # Set emission probabilities for combinations with the same length as node_elements
-        for emission in possible_emissions:
-            likelihood = compute_likelihood(np.array(emission), phasing, error_rate)
-            emission_idx = emission_index_map[tuple(emission)]  # Get the index for the emission
-            emission_prob_matrix[state_idx][emission_idx] = likelihood
-
-    return state_names, transition_matrix, emission_prob_matrix, emission_index_map
 
 
 def transition_matrices(quotient_g, edges_map_quotient):
@@ -906,7 +777,7 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
 if __name__ == '__main__':
 
     # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
-    frag_path = '/labs/Aguiar/pHapCompass/test/test.frag'
+    frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
     ploidy= 3
     # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
     genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
@@ -965,7 +836,6 @@ if __name__ == '__main__':
     for k in quotient_g.e_label_reversed.keys():
         edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
 
-
     transitions_dict, transitions_dict_extra = transition_matrices(quotient_g, edges_map_quotient)
     emission_dict = emissions(ploidy, quotient_g_v_label_reversed, config.error_rate)
 
@@ -986,3 +856,8 @@ if __name__ == '__main__':
 
     print('Predicted Haplotypes:\n', predicted_haplotypes)
     print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
+
+    predicted_haplotypes_np = predicted_haplotypes.to_numpy()
+    true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()
+
+    vector_error, backtracking_steps, dp_table = compute_vector_error(predicted_haplotypes_np, true_haplotypes)

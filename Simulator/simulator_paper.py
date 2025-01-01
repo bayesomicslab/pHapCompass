@@ -12,6 +12,29 @@ from data.configuration import Configuration
 from models.fragment_graph import FragmentGraph
 from models.quotient_graph import QuotientGraph
 from multiprocessing import Pool
+import matplotlib.pyplot as plt
+
+
+def extract_positions(vcf_path):
+    positions = []
+    vcf_in = pysam.VariantFile(vcf_path)  # Open the VCF file
+    for record in vcf_in.fetch():
+        positions.append(record.pos)  # Extract the position (1-based)
+    return positions
+
+def plot_positions_distances(positions):
+    vcf_path = '/labs/Aguiar/pHapCompass/datasets/SRR10489264/variants_freebayes.vcf'
+    positions = extract_positions(vcf_path)
+    positions = sorted(positions)
+    differences = [positions[i] - positions[i - 1] for i in range(1, len(positions))]
+    plt.figure(figsize=(12, 6))
+    plt.hist(differences, bins=50, color='blue', alpha=0.7, edgecolor='black')
+    plt.xlabel('Difference (bp)')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Differences Between Consecutive VCF Positions')
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.show()
+
 
 def extract_column_NA12878(file_path):
     # file_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.1/windows/50000/sample_NA12878.txt'

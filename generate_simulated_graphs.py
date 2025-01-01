@@ -15,7 +15,6 @@ import pickle
 from multiprocessing import Pool
 
 
-
 def generate_quotient_graph_make_input_hpopG():
     inputs = []
     contigs = ['Contig1_k3', 'Contig2_k3', 'Contig3_k3']
@@ -94,7 +93,7 @@ def generate_quotient_graph(inp):
     
     # create fragment graph
     fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
-    fragment_model.construct2(input_handler, config)
+    fragment_model.construct(input_handler, config)
 
     # save fragment graph
     frag_graph_path = os.path.join(this_fragment_coverage_path, file_name + '.gt.gz')
@@ -113,7 +112,7 @@ def generate_quotient_graph(inp):
 
     # create quotient graph
     quotient_g = QuotientGraph(fragment_model)
-    quotient_g.construct3(input_handler, config)
+    quotient_g.construct(input_handler, config)
 
     # save quotient graph
     quot_graph_path = os.path.join(this_quotient_coverage_path, file_name + '.gt.gz')
@@ -130,7 +129,6 @@ def generate_quotient_graph(inp):
         pickle.dump(edges_map_quotient, f)
 
     print('[Done]', os.path.join(this_frag_path, frag_file))
-
 
 
 def generate_graphs():

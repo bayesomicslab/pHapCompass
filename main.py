@@ -165,7 +165,7 @@ def chordal_contraction_graph_tool2(quotient_graph, input_handler, config, fragm
                 # e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
                 # print(len(e_poss))
                 # new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
-                sorted_labels = sort_strings([new_vertex_name, v_label])
+                sorted_labels = sort_nodes([new_vertex_name, v_label])
                 new_edge_name = '--'.join(sorted_labels)
                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
 
@@ -185,7 +185,7 @@ def chordal_contraction_graph_tool2(quotient_graph, input_handler, config, fragm
                 
                 v_label = new_graph.vertex_properties["v_label"][n]
 
-                sorted_labels = sort_strings([new_vertex_name, v_label])
+                sorted_labels = sort_nodes([new_vertex_name, v_label])
                 new_edge_name = '--'.join(sorted_labels)
                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
 
@@ -204,7 +204,7 @@ def chordal_contraction_graph_tool2(quotient_graph, input_handler, config, fragm
             for n in set(target_nbrs)-common_nbrs:
                 
                 v_label = new_graph.vertex_properties["v_label"][n]
-                sorted_labels = sort_strings([new_vertex_name, v_label])
+                sorted_labels = sort_nodes([new_vertex_name, v_label])
                 new_edge_name = '--'.join(sorted_labels)
 
                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
@@ -276,7 +276,7 @@ def chordal_contraction_graph_tool_approx(quotient_graph, input_handler, config,
                 # e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
                 # print(len(e_poss))
                 # new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
-                sorted_labels = sort_strings([new_vertex_name, v_label])
+                sorted_labels = sort_nodes([new_vertex_name, v_label])
                 new_edge_name = '--'.join(sorted_labels)
                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
 
@@ -296,7 +296,7 @@ def chordal_contraction_graph_tool_approx(quotient_graph, input_handler, config,
                 
                 v_label = new_graph.vertex_properties["v_label"][n]
 
-                sorted_labels = sort_strings([new_vertex_name, v_label])
+                sorted_labels = sort_nodes([new_vertex_name, v_label])
                 new_edge_name = '--'.join(sorted_labels)
                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
 
@@ -316,7 +316,7 @@ def chordal_contraction_graph_tool_approx(quotient_graph, input_handler, config,
             for n in set(target_nbrs)-common_nbrs:
                 
                 v_label = new_graph.vertex_properties["v_label"][n]
-                sorted_labels = sort_strings([new_vertex_name, v_label])
+                sorted_labels = sort_nodes([new_vertex_name, v_label])
                 new_edge_name = '--'.join(sorted_labels)
 
                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
@@ -342,240 +342,235 @@ def chordal_contraction_graph_tool_approx(quotient_graph, input_handler, config,
     
 
 
+# for vvv in quotient_graph.vertex_properties["v_label"]:
+#     print(vvv)
+# vertex1 = '125-126'
+# vertex2 = '324-342'
 
 
+# spath_edges = gt.shortest_path(quotient_graph, source=quotient_graph.vertex(v_label_reversed[vertex1]), target=quotient_graph.vertex(v_label_reversed[vertex2]))[1]
+# spath_vertices = gt.shortest_path(quotient_graph, source=quotient_graph.vertex(v_label_reversed[vertex1]), target=quotient_graph.vertex(v_label_reversed[vertex2]))[0]
 
 
+# def forward_sum(quotient_graph, spath_vertices, spath_edges):
+#     alpha = {vi: np.zeros(len(quotient_graph.vertex_properties["v_weights"][v]['weight'].keys())) for vi, v in enumerate(spath_vertices)}
+#     alpha[0] = np.array(list(quotient_graph.vertex_properties["v_weights"][spath_vertices[0]]['weight'].values()))
+#     alpha[0] = torch.tensor(alpha[0] / np.sum(alpha[0]))
 
-for vvv in quotient_graph.vertex_properties["v_label"]:
-    print(vvv)
-vertex1 = '125-126'
-vertex2 = '324-342'
+#     seq_len = len(spath_vertices)
+#     for sl in range(1, seq_len):
+#         source = spath_vertices[sl-1]
+#         target = spath_vertices[sl]
+#         source_weights = quotient_graph.vertex_properties["v_weights"][source]['weight']
+#         target_weights = quotient_graph.vertex_properties["v_weights"][target]['weight']
+#         source_label = quotient_graph.vertex_properties["v_label"][source]
+#         target_label = quotient_graph.vertex_properties["v_label"][target]
+#         e_label = quotient_graph.edge_properties["e_label"][spath_edges[sl-1]]
+#         e_weights = quotient_graph.edge_properties["e_weights"][spath_edges[sl-1]]['weight']
 
+#         common_ff, common_sf = find_common_element_and_index(source_label, target_label)
+#         source_phasings = list(source_weights.keys())
+#         target_phasings = list(target_weights.keys())
+#         transitions_dict = {'source': source_phasings, 'target': target_phasings}
+#         transitions_mtx = np.zeros((len(source_phasings), len(target_phasings)))
+#         for i, ffstr in enumerate(source_phasings):
+#             for j, sfstr in enumerate(target_phasings):
+#                 matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, 3), str_2_phas_1(sfstr, 3), common_ff, common_sf)
+#                 sorted_phasings = []
+#                 for mtx in matched_phasings:
+#                     sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
+#                     sorted_phasings.append(sorted_matrix)
 
-spath_edges = gt.shortest_path(quotient_graph, source=quotient_graph.vertex(v_label_reversed[vertex1]), target=quotient_graph.vertex(v_label_reversed[vertex2]))[1]
-spath_vertices = gt.shortest_path(quotient_graph, source=quotient_graph.vertex(v_label_reversed[vertex1]), target=quotient_graph.vertex(v_label_reversed[vertex2]))[0]
+#                 matched_phasings_str = [phas_2_str(pm) for pm in sorted_phasings] 
+#                 this_weight = np.sum([e_weights[pm] for pm in matched_phasings_str if pm in e_weights.keys()])
+#                 transitions_mtx[i, j] = this_weight
 
+#         transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
 
-def forward_sum(quotient_graph, spath_vertices, spath_edges):
-    alpha = {vi: np.zeros(len(quotient_graph.vertex_properties["v_weights"][v]['weight'].keys())) for vi, v in enumerate(spath_vertices)}
-    alpha[0] = np.array(list(quotient_graph.vertex_properties["v_weights"][spath_vertices[0]]['weight'].values()))
-    alpha[0] = torch.tensor(alpha[0] / np.sum(alpha[0]))
-
-    seq_len = len(spath_vertices)
-    for sl in range(1, seq_len):
-        source = spath_vertices[sl-1]
-        target = spath_vertices[sl]
-        source_weights = quotient_graph.vertex_properties["v_weights"][source]['weight']
-        target_weights = quotient_graph.vertex_properties["v_weights"][target]['weight']
-        source_label = quotient_graph.vertex_properties["v_label"][source]
-        target_label = quotient_graph.vertex_properties["v_label"][target]
-        e_label = quotient_graph.edge_properties["e_label"][spath_edges[sl-1]]
-        e_weights = quotient_graph.edge_properties["e_weights"][spath_edges[sl-1]]['weight']
-
-        common_ff, common_sf = find_common_element_and_index(source_label, target_label)
-        source_phasings = list(source_weights.keys())
-        target_phasings = list(target_weights.keys())
-        transitions_dict = {'source': source_phasings, 'target': target_phasings}
-        transitions_mtx = np.zeros((len(source_phasings), len(target_phasings)))
-        for i, ffstr in enumerate(source_phasings):
-            for j, sfstr in enumerate(target_phasings):
-                matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, 3), str_2_phas_1(sfstr, 3), common_ff, common_sf)
-                sorted_phasings = []
-                for mtx in matched_phasings:
-                    sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
-                    sorted_phasings.append(sorted_matrix)
-
-                matched_phasings_str = [phas_2_str(pm) for pm in sorted_phasings] 
-                this_weight = np.sum([e_weights[pm] for pm in matched_phasings_str if pm in e_weights.keys()])
-                transitions_mtx[i, j] = this_weight
-
-        transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
-
-        dp_eq = alpha[sl-1][:, np.newaxis] * transitions_mtx
-        alpha[sl] = torch.tensor(dp_eq.sum(axis=0))
-    return alpha
+#         dp_eq = alpha[sl-1][:, np.newaxis] * transitions_mtx
+#         alpha[sl] = torch.tensor(dp_eq.sum(axis=0))
+#     return alpha
 
 
-def backward_sum(quotient_graph, spath_vertices, spath_edges):
-    beta = {vi: np.zeros(len(quotient_graph.vertex_properties["v_weights"][v]['weight'].keys())) for vi, v in enumerate(spath_vertices)}
-    # last_vertex = spath_vertices[-1]
-    beta[seq_len - 1] = torch.ones(len(quotient_graph.vertex_properties["v_weights"][last_vertex]['weight'].keys()))
+# def backward_sum(quotient_graph, spath_vertices, spath_edges):
+#     beta = {vi: np.zeros(len(quotient_graph.vertex_properties["v_weights"][v]['weight'].keys())) for vi, v in enumerate(spath_vertices)}
+#     # last_vertex = spath_vertices[-1]
+#     beta[seq_len - 1] = torch.ones(len(quotient_graph.vertex_properties["v_weights"][last_vertex]['weight'].keys()))
 
-    for sl in range(0, seq_len-1)[::-1]:
-        source = spath_vertices[sl]
-        target = spath_vertices[sl + 1]
-        source_weights = quotient_graph.vertex_properties["v_weights"][source]['weight']
-        target_weights = quotient_graph.vertex_properties["v_weights"][target]['weight']
-        source_label = quotient_graph.vertex_properties["v_label"][source]
-        target_label = quotient_graph.vertex_properties["v_label"][target]
-        e_label = quotient_graph.edge_properties["e_label"][spath_edges[sl]]
-        e_weights = quotient_graph.edge_properties["e_weights"][spath_edges[sl]]['weight']
-        for i, ffstr in enumerate(source_phasings):
-            for j, sfstr in enumerate(target_phasings):
-                matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, 3), str_2_phas_1(sfstr, 3), common_ff, common_sf)
-                sorted_phasings = []
-                for mtx in matched_phasings:
-                    sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
-                    sorted_phasings.append(sorted_matrix)
+#     for sl in range(0, seq_len-1)[::-1]:
+#         source = spath_vertices[sl]
+#         target = spath_vertices[sl + 1]
+#         source_weights = quotient_graph.vertex_properties["v_weights"][source]['weight']
+#         target_weights = quotient_graph.vertex_properties["v_weights"][target]['weight']
+#         source_label = quotient_graph.vertex_properties["v_label"][source]
+#         target_label = quotient_graph.vertex_properties["v_label"][target]
+#         e_label = quotient_graph.edge_properties["e_label"][spath_edges[sl]]
+#         e_weights = quotient_graph.edge_properties["e_weights"][spath_edges[sl]]['weight']
+#         for i, ffstr in enumerate(source_phasings):
+#             for j, sfstr in enumerate(target_phasings):
+#                 matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, 3), str_2_phas_1(sfstr, 3), common_ff, common_sf)
+#                 sorted_phasings = []
+#                 for mtx in matched_phasings:
+#                     sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
+#                     sorted_phasings.append(sorted_matrix)
 
-                matched_phasings_str = [phas_2_str(pm) for pm in sorted_phasings] 
-                this_weight = np.sum([e_weights[pm] for pm in matched_phasings_str if pm in e_weights.keys()])
-                transitions_mtx[i, j] = this_weight
+#                 matched_phasings_str = [phas_2_str(pm) for pm in sorted_phasings] 
+#                 this_weight = np.sum([e_weights[pm] for pm in matched_phasings_str if pm in e_weights.keys()])
+#                 transitions_mtx[i, j] = this_weight
 
-        transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
+#         transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
 
-        dp_eq = torch.tensor(transitions_mtx) * beta[sl + 1][np.newaxis, :]
-        beta[sl] = dp_eq.sum(axis=1)
+#         dp_eq = torch.tensor(transitions_mtx) * beta[sl + 1][np.newaxis, :]
+#         beta[sl] = dp_eq.sum(axis=1)
 
 
-def ffbs(alpha, seq_len, spath_vertices, spath_edges, quotient_graph):
+# def ffbs(alpha, seq_len, spath_vertices, spath_edges, quotient_graph):
 
     
-    # Initialize a list to store the sampled states
-    sampled_states = [None] * seq_len
+#     # Initialize a list to store the sampled states
+#     sampled_states = [None] * seq_len
 
-    # Step 1: Sample the last state x_T
-    last_vertex = spath_vertices[seq_len - 1]
-    target_weights = quotient_graph.vertex_properties["v_weights"][last_vertex]['weight']
-    target_phasings = list(target_weights.keys())
+#     # Step 1: Sample the last state x_T
+#     last_vertex = spath_vertices[seq_len - 1]
+#     target_weights = quotient_graph.vertex_properties["v_weights"][last_vertex]['weight']
+#     target_phasings = list(target_weights.keys())
 
-    # Convert alpha_T to probabilities
-    probs = alpha[seq_len - 1].numpy()
-    probs = probs / probs.sum()
+#     # Convert alpha_T to probabilities
+#     probs = alpha[seq_len - 1].numpy()
+#     probs = probs / probs.sum()
 
-    # Sample the last state based on alpha_T
-    x_T_index = np.random.choice(len(target_phasings), p=probs)
-    x_T = target_phasings[x_T_index]
-    sampled_states[seq_len - 1] = x_T
+#     # Sample the last state based on alpha_T
+#     x_T_index = np.random.choice(len(target_phasings), p=probs)
+#     x_T = target_phasings[x_T_index]
+#     sampled_states[seq_len - 1] = x_T
 
-    # Step 2: Backward Sampling for t from T-1 down to 0
-    for t in range(seq_len - 2, -1, -1):
-        source = spath_vertices[t]
-        target = spath_vertices[t + 1]
-        source_weights = quotient_graph.vertex_properties["v_weights"][source]['weight']
-        target_weights = quotient_graph.vertex_properties["v_weights"][target]['weight']
-        source_label = quotient_graph.vertex_properties["v_label"][source]
-        target_label = quotient_graph.vertex_properties["v_label"][target]
-        e_label = quotient_graph.edge_properties["e_label"][spath_edges[t]]
-        e_weights = quotient_graph.edge_properties["e_weights"][spath_edges[t]]['weight']
+#     # Step 2: Backward Sampling for t from T-1 down to 0
+#     for t in range(seq_len - 2, -1, -1):
+#         source = spath_vertices[t]
+#         target = spath_vertices[t + 1]
+#         source_weights = quotient_graph.vertex_properties["v_weights"][source]['weight']
+#         target_weights = quotient_graph.vertex_properties["v_weights"][target]['weight']
+#         source_label = quotient_graph.vertex_properties["v_label"][source]
+#         target_label = quotient_graph.vertex_properties["v_label"][target]
+#         e_label = quotient_graph.edge_properties["e_label"][spath_edges[t]]
+#         e_weights = quotient_graph.edge_properties["e_weights"][spath_edges[t]]['weight']
         
-        # Find common elements and indices
-        common_ff, common_sf = find_common_element_and_index(source_label, target_label)
-        source_phasings = list(source_weights.keys())
-        target_phasings = list(target_weights.keys())
-        transitions_mtx = np.zeros((len(source_phasings), len(target_phasings)))
+#         # Find common elements and indices
+#         common_ff, common_sf = find_common_element_and_index(source_label, target_label)
+#         source_phasings = list(source_weights.keys())
+#         target_phasings = list(target_weights.keys())
+#         transitions_mtx = np.zeros((len(source_phasings), len(target_phasings)))
         
-        # Recompute the transition matrix at time t
-        for i, ffstr in enumerate(source_phasings):
-            for j, sfstr in enumerate(target_phasings):
-                matched_phasings = find_phasings_matches(
-                    str_2_phas_1(ffstr, 3),
-                    str_2_phas_1(sfstr, 3),
-                    common_ff, common_sf
-                )
-                sorted_phasings = []
-                for mtx in matched_phasings:
-                    sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
-                    sorted_phasings.append(sorted_matrix)
+#         # Recompute the transition matrix at time t
+#         for i, ffstr in enumerate(source_phasings):
+#             for j, sfstr in enumerate(target_phasings):
+#                 matched_phasings = find_phasings_matches(
+#                     str_2_phas_1(ffstr, 3),
+#                     str_2_phas_1(sfstr, 3),
+#                     common_ff, common_sf
+#                 )
+#                 sorted_phasings = []
+#                 for mtx in matched_phasings:
+#                     sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
+#                     sorted_phasings.append(sorted_matrix)
                 
-                matched_phasings_str = [phas_2_str(pm) for pm in sorted_phasings]
-                this_weight = np.sum(
-                    [e_weights[pm] for pm in matched_phasings_str if pm in e_weights.keys()]
-                )
-                transitions_mtx[i, j] = this_weight
+#                 matched_phasings_str = [phas_2_str(pm) for pm in sorted_phasings]
+#                 this_weight = np.sum(
+#                     [e_weights[pm] for pm in matched_phasings_str if pm in e_weights.keys()]
+#                 )
+#                 transitions_mtx[i, j] = this_weight
         
-        # Normalize the transition matrix
-        transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
+#         # Normalize the transition matrix
+#         transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
         
-        # Get the index of the next sampled state
-        x_t1 = sampled_states[t + 1]
-        x_t1_index = target_phasings.index(x_t1)
+#         # Get the index of the next sampled state
+#         x_t1 = sampled_states[t + 1]
+#         x_t1_index = target_phasings.index(x_t1)
         
-        # Compute the probabilities for the current state
-        alpha_t = alpha[t].numpy()
-        probs = alpha_t * transitions_mtx[:, x_t1_index]
-        probs = probs / probs.sum()
+#         # Compute the probabilities for the current state
+#         alpha_t = alpha[t].numpy()
+#         probs = alpha_t * transitions_mtx[:, x_t1_index]
+#         probs = probs / probs.sum()
         
-        # Sample the current state
-        x_t_index = np.random.choice(len(source_phasings), p=probs)
-        x_t = source_phasings[x_t_index]
-        sampled_states[t] = x_t
-    return sampled_states
+#         # Sample the current state
+#         x_t_index = np.random.choice(len(source_phasings), p=probs)
+#         x_t = source_phasings[x_t_index]
+#         sampled_states[t] = x_t
+#     return sampled_states
 
 
-alpha = forward_sum(quotient_graph, spath_vertices, spath_edges)
-seq_len = len(spath_vertices)
+# alpha = forward_sum(quotient_graph, spath_vertices, spath_edges)
+# seq_len = len(spath_vertices)
 
-sampled_states = ffbs(alpha, seq_len, spath_vertices, spath_edges, quotient_graph)
-revsered_sampled_states = sampled_states[::-1]
-
-
+# sampled_states = ffbs(alpha, seq_len, spath_vertices, spath_edges, quotient_graph)
+# revsered_sampled_states = sampled_states[::-1]
 
 
 
-cliques = gt.max_cliques(quotient_graph)
-lenss = []
-for cli in cliques:
-    lenss.append(len(cli))
 
-def chordal_graph_tools(quotient_graph):
 
-    new_graph = quotient_graph.copy()
-    # self.v_label = self.graph.new_vertex_property("string")
-    # self.v_weights = self.graph.new_vertex_property("object")
-    # self.e_label = self.graph.new_edge_property("string")
-    # self.e_weights = self.graph.new_edge_property("object")
-    # self.v_label_reversed = {}
-    # self.e_label_reversed = {}
+# cliques = gt.max_cliques(quotient_graph)
+# lenss = []
+# for cli in cliques:
+#     lenss.append(len(cli))
 
-    mst_graph, non_mst_graph, tree = get_minimum_spanning_tree(new_graph)
+# def chordal_graph_tools(quotient_graph):
+
+#     new_graph = quotient_graph.copy()
+#     # self.v_label = self.graph.new_vertex_property("string")
+#     # self.v_weights = self.graph.new_vertex_property("object")
+#     # self.e_label = self.graph.new_edge_property("string")
+#     # self.e_weights = self.graph.new_edge_property("object")
+#     # self.v_label_reversed = {}
+#     # self.e_label_reversed = {}
+
+#     mst_graph, non_mst_graph, tree = get_minimum_spanning_tree(new_graph)
     
-    cycle_basis_edges, index_to_cycles, edge_to_cycles, forbidden_edges = get_cycles_basis_info_graph_tool(non_mst_graph, mst_graph, new_graph)
+#     cycle_basis_edges, index_to_cycles, edge_to_cycles, forbidden_edges = get_cycles_basis_info_graph_tool(non_mst_graph, mst_graph, new_graph)
     
-    # e_weights = 
-    # quotient_graph.edge_properties["e_weights"]
+#     # e_weights = 
+#     # quotient_graph.edge_properties["e_weights"]
     
-    for c_id, ccyc in index_to_cycles.items():
-        for ccc in ccyc:
-            print(new_graph.edge_properties["e_label"][ccc])
+#     for c_id, ccyc in index_to_cycles.items():
+#         for ccc in ccyc:
+#             print(new_graph.edge_properties["e_label"][ccc])
 
-        if len(ccyc) > 3:
-            sorted_edges = sorted(ccyc, key=lambda e: e_weights[e]['entropy'])
-            contracting_edges = sorted_edges[:-3]
-            for ce in contracting_edges:
-                # print(e_weights[ce]['entropy'])
-                source_vertex = ce.source()
-                target_vertex = ce.target()
+#         if len(ccyc) > 3:
+#             sorted_edges = sorted(ccyc, key=lambda e: e_weights[e]['entropy'])
+#             contracting_edges = sorted_edges[:-3]
+#             for ce in contracting_edges:
+#                 # print(e_weights[ce]['entropy'])
+#                 source_vertex = ce.source()
+#                 target_vertex = ce.target()
 
-                # Get all edges incident to the source and target vertices
-                incident_edges = set(source_vertex.all_edges()).union(set(target_vertex.all_edges()))
+#                 # Get all edges incident to the source and target vertices
+#                 incident_edges = set(source_vertex.all_edges()).union(set(target_vertex.all_edges()))
 
-                # Optionally, remove the original edge from the list
-                incident_edges.discard(ce)
+#                 # Optionally, remove the original edge from the list
+#                 incident_edges.discard(ce)
 
-                for eee in incident_edges:
-                    print(new_graph.edge_properties["e_label"][eee])
-                    print(new_graph.vertex_properties["v_label"][target_vertex])
+#                 for eee in incident_edges:
+#                     print(new_graph.edge_properties["e_label"][eee])
+#                     print(new_graph.vertex_properties["v_label"][target_vertex])
 
 
 
-                new_node_name = new_graph.edge_properties["e_label"][ce]
+#                 new_node_name = new_graph.edge_properties["e_label"][ce]
 
-                # new_node_name = '-'.join([str(nnn) for nnn in sorted(list(set([int(nn) for nn in \
-                # new_graph.vertex_properties["v_label"][source_vertex].split('-')] + \
-                # [int(nn) for nn in new_graph.vertex_properties["v_label"][target_vertex].split('-')])))])
+#                 # new_node_name = '-'.join([str(nnn) for nnn in sorted(list(set([int(nn) for nn in \
+#                 # new_graph.vertex_properties["v_label"][source_vertex].split('-')] + \
+#                 # [int(nn) for nn in new_graph.vertex_properties["v_label"][target_vertex].split('-')])))])
 
-                ce_wei = new_graph.edge_properties["e_weights"][ce]
+#                 ce_wei = new_graph.edge_properties["e_weights"][ce]
                 
-                v1 = new_graph.add_vertex()
-                new_graph.vertex_properties["v_label"][v1] = new_node_name
-                new_graph.vertex_properties["e_weights"][v1] = ce_wei
+#                 v1 = new_graph.add_vertex()
+#                 new_graph.vertex_properties["v_label"][v1] = new_node_name
+#                 new_graph.vertex_properties["e_weights"][v1] = ce_wei
                 
-                for ie in list(incident_edges):
+#                 for ie in list(incident_edges):
                     
-                    neighbor = list(set([ie.source(), ie.target()]) - set([source_vertex, target_vertex]))[0]
-                    neighbor_label = new_graph.vertex_properties["v_label"][neighbor]
-                    poss = sorted(set([int(nn) for nn in new_node_name.split('-')] + [int(nn) for nn in neighbor_label.split('-')]))
+#                     neighbor = list(set([ie.source(), ie.target()]) - set([source_vertex, target_vertex]))[0]
+#                     neighbor_label = new_graph.vertex_properties["v_label"][neighbor]
+#                     poss = sorted(set([int(nn) for nn in new_node_name.split('-')] + [int(nn) for nn in neighbor_label.split('-')]))
                     
 
