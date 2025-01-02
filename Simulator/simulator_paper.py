@@ -1052,6 +1052,7 @@ class SimulatorAWRI:
         self.simulate_fastq_art()
         self.align_fastq_files()
         self.extract_hairs()
+        print('save main.sh')
         with open(os.path.join(self.main_path, 'main.sh'), 'w') as f:
             f.write(self.main_sh)
 
@@ -1122,7 +1123,7 @@ def simulate_awri():
         "main_path": '/labs/Aguiar/pHapCompass/datasets/simulated/simulated_data_awri',
         "art_path": 'art_illumina',
         "extract_hairs_path": 'extractHAIRS',
-        "n_samples": 10, 
+        "n_samples": 1, 
         "target_spacing": 100,
         "densify_snps": False, 
         "contig_lens": [10, 100, 1000], 
@@ -1206,4 +1207,4 @@ if __name__ == '__main__':
         "std_insert_length": 150
         }
 
-    simulate_na12878()
+    # simulate_na12878()
