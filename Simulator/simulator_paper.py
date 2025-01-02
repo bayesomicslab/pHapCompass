@@ -199,7 +199,7 @@ def generate_quotient_graph(inp):
     
     # create fragment graph
     fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
-    fragment_model.construct2(input_handler, config)
+    fragment_model.construct(input_handler, config)
 
     # save fragment graph
     frag_graph_path = os.path.join(this_fragment_coverage_path, file_name + '.gt.gz')
@@ -218,7 +218,7 @@ def generate_quotient_graph(inp):
 
     # create quotient graph
     quotient_g = QuotientGraph(fragment_model)
-    quotient_g.construct3(input_handler, config)
+    quotient_g.construct(input_handler, config)
 
     # save quotient graph
     quot_graph_path = os.path.join(this_quotient_coverage_path, file_name + '.gt.gz')
@@ -804,7 +804,8 @@ class SimulatorAWRI:
         self.n_samples = config.get("n_samples", 100)
         self.densify_snps = config.get("densify_snps", True)
         self.target_spacing = config.get("target_spacing", 350)
-        self.main_sh = ''
+        self.sbatch_str = config.get("sbatch_str", '')
+        self.main_sh = self.sbatch_str + '\n\n' + 'echo `hostname`\n\nmodule load bwa/0.7.17\nmodule load bwa-mem2/2.0 bwa-mem2/2.1\n\n\n'
         # '#!/bin/bash\n#BATCH --job-name=pyalb\n#SBATCH -N 1\n#SBATCH -n 1\n#SBATCH -c 1\n#SBATCH --partition=general\n#SBATCH --qos=general\n#SBATCH 
         # --mail-type=END\n#SBATCH --mem=20G\n#SBATCH --mail-user=marjan.hosseini@uconn.edu\n#SBATCH -o script.out\n#SBATCH -e ont.err\n\necho `hostname`'
 
@@ -1109,14 +1110,35 @@ def simulate_awri():
         "coverages": [10, 20, 30, 40, 50],
         "read_length": 75,
         "mean_insert_length": 300,
-        "std_insert_length": 30
+        "std_insert_length": 30, 
+        "sbatch_str": ''
+        }
+
+    xanadu_config_AWRI = {
+        "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
+        "input_vcf_path": '/labs/Aguiar/pHapCompass/datasets/SRR942191/vcf_files/SRR942191_AHIQ01000001.1.vcf',
+        # "contig_fasta": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/AWRI1499/contigs_noamb/contig_AHIQ01000001.1.fa',
+        "contig_fasta": '/labs/Aguiar/pHapCompass/references/AWRI1499/contigs/contig_AHIQ01000001.1.fa',
+        "main_path": '/labs/Aguiar/pHapCompass/datasets/simulated/simulated_data_awri',
+        "art_path": 'art_illumina',
+        "extract_hairs_path": 'extractHAIRS',
+        "n_samples": 10, 
+        "target_spacing": 100,
+        "densify_snps": False, 
+        "contig_lens": [10, 100, 1000], 
+        "ploidies": [3, 4, 6, 8, 10],
+        "coverages": [10, 20, 30, 40, 50],
+        "read_length": 75,
+        "mean_insert_length": 300,
+        "std_insert_length": 30,
+        "sbatch_str": "#!/bin/bash\n#SBATCH --job-name={}\n#SBATCH -N 1\n#SBATCH -n 1\n#SBATCH -c 1\n#SBATCH --partition=general\n#SBATCH --qos=general\n#SBATCH --mail-type=END\n#SBATCH --mem=50G\n#SBATCH --mail-user=marjan.hosseini@uconn.edu\n#SBATCH -o {}.out\n#SBATCH -e {}.err".format('job', 'sim', 'sim')
         }
 
 
-    simulator = SimulatorAWRI(beagle_config_AWRI)
+    simulator = SimulatorAWRI(xanadu_config_AWRI)
     # simulator.generate_genomes_fasta()
 
-    # simulator.simulate()
+    simulator.simulate()
     
     inputs = make_inputs_for_generate_qoutient_graph(simulator)
 
