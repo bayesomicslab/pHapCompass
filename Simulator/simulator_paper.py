@@ -1222,7 +1222,7 @@ def make_inputs_for_running_FFBS(simulator):
 
 def run_FFBS_quotient(inp):
     this_frag_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path, results_path = inp
-    
+    print('Working on:', os.path.join(this_frag_path, frag_file))
     # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
     # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
     # ploidy= 3
@@ -1405,6 +1405,7 @@ def simulate_awri():
     # pool.map(generate_quotient_graph, inputs)
 
     next_inputs = make_inputs_for_running_FFBS(simulator)
+    print('number of inputs:', len(next_inputs))
     pool = Pool(30)
     pool.map(run_FFBS_quotient, next_inputs)
 
