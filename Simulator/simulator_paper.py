@@ -13,6 +13,91 @@ from models.fragment_graph import FragmentGraph
 from models.quotient_graph import QuotientGraph
 from multiprocessing import Pool
 import matplotlib.pyplot as plt
+import graph_tool.all as gt
+
+
+def emissions_v2(ploidy, quotient_g_v_label_reversed, error_rate):
+    """
+    The only difference in version 2 is that we are using quotient graph directly:
+    quotient_g.graph ==> quotient_g
+    """
+    emission_dict = {}
+    # Calculate emissions for each state and populate the emission probability matrix
+    for state in quotient_g_v_label_reversed.keys():
+        emission_dict[state] = {}
+
+        node_elements = state.split('-')  # For example, '1-2' -> ['1', '2']
+        node_length = len(node_elements)  # Determine the number of elements in the node
+
+        # Generate all possible combinations of 0 and 1 based on the node length
+        possible_emissions = generate_binary_combinations(node_length)
+        v = quotient_g_v_label_reversed[state]
+        phasings = quotient_g.vertex_properties["v_weights"][v]['weight'].keys()
+        for phasing in phasings:
+            emission_dict[state][phasing] = {}
+            phasing_np = str_2_phas_1(phasing, ploidy)  # Compute phasing for the state key
+            for emission in possible_emissions:
+                likelihood = compute_likelihood(np.array(emission), phasing_np, error_rate)
+                emission_dict[state][phasing][''.join([str(e) for e in emission])] = likelihood
+
+    return emission_dict
+
+
+def transition_matrices_v2(quotient_g, edges_map_quotient):
+    """
+    The only difference in version 2 is that we are using quotient graph directly:
+    quotient_g.graph ==> quotient_g
+    """
+    transitions_dict = {}
+    transitions_dict_extra = {}
+    for edge in edges_map_quotient.keys():
+        transitions_dict_extra[edge] = {}
+        source = edges_map_quotient[edge][0]
+        target = edges_map_quotient[edge][1]
+        source_weights = quotient_g.vertex_properties["v_weights"][source]['weight']
+        target_weights = quotient_g.vertex_properties["v_weights"][target]['weight']
+        source_label = quotient_g.vertex_properties["v_label"][source]
+        target_label = quotient_g.vertex_properties["v_label"][target]
+        common_ff, common_sf = find_common_element_and_index(source_label, target_label)
+        source_phasings = list(source_weights.keys())
+        target_phasings = list(target_weights.keys())
+        # transitions_dict = {'source': source_phasings, 'target': target_phasings}
+        transitions_mtx = np.zeros((len(source_phasings), len(target_phasings)))
+
+        for i, ffstr in enumerate(source_phasings):
+            for j, sfstr in enumerate(target_phasings):
+                transitions_dict_extra[edge][str(i) + '-' + str(j)] = {}
+                transitions_dict_extra[edge][str(i) + '-' + str(j)]['source_phasing'] = ffstr
+                transitions_dict_extra[edge][str(i) + '-' + str(j)]['target_phasing'] = sfstr
+                transitions_dict_extra[edge][str(i) + '-' + str(j)]['matched_phasings'] = {}
+                matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, ploidy), str_2_phas_1(sfstr, ploidy), common_ff, common_sf, source_label, target_label)
+                sorted_phasings = []
+                for mtx in matched_phasings:
+                    sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
+                    sorted_phasings.append(sorted_matrix)
+                
+                matched_phasings_str = list(set([phas_2_str(pm) for pm in sorted_phasings]))
+                # print(i, ffstr, j, sfstr)
+                # print('matched phasings:', matched_phasings_str, len(matched_phasings_str))
+                # if len(matched_phasings_str) > 1:
+                #     print('More than one matching phasing')
+                #     # stop
+                poss = sorted(list(set([int(ss) for ss in source_label.split('-')] + [int(tt) for tt in target_label.split('-')])))
+                match_reads = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
+                wei = 0
+                for phas in matched_phasings_str:
+                    this_phas_weight = 0
+                    for indc, this_po, obs in match_reads:
+                        this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), str_2_phas_1(phas, ploidy), indc, list(range(len(indc))), 
+                                                                   config.error_rate)
+                        wei += this_phas_read_weight
+                        this_phas_weight += this_phas_read_weight
+                    transitions_dict_extra[edge][str(i) + '-' + str(j)]['matched_phasings'][phas] = this_phas_weight
+                transitions_mtx[i, j] = wei
+
+        transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
+        transitions_dict[edge] = transitions_mtx
+    return transitions_dict, transitions_dict_extra
 
 
 def extract_positions(vcf_path):
@@ -809,6 +894,8 @@ class SimulatorAWRI:
         # '#!/bin/bash\n#BATCH --job-name=pyalb\n#SBATCH -N 1\n#SBATCH -n 1\n#SBATCH -c 1\n#SBATCH --partition=general\n#SBATCH --qos=general\n#SBATCH 
         # --mail-type=END\n#SBATCH --mem=20G\n#SBATCH --mail-user=marjan.hosseini@uconn.edu\n#SBATCH -o script.out\n#SBATCH -e ont.err\n\necho `hostname`'
 
+
+
     def generate_genomes_fasta(self):
         """
         Generate genomes and save to FASTA format for various configurations.
@@ -1093,6 +1180,113 @@ def make_inputs_for_generate_qoutient_graph(simulator):
     return inputs
 
 
+def make_inputs_for_running_FFBS(simulator):
+    inputs = []
+    for contig_len in simulator.contig_lens:
+        for ploidy in simulator.ploidies:
+            # stop
+            genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
+            # genotype_df = pd.read_csv(genotype_path)
+            for coverage in simulator.coverages:
+                this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+                frag_path = os.path.join(this_cov_path, 'frag')
+                frag_graph_path = os.path.join(this_cov_path, 'fgraph')
+                quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
+                qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
+                results_path = os.path.join(this_cov_path, 'results')
+
+                if not os.path.exists(frag_graph_path):
+                    os.makedirs(frag_graph_path)
+                if not os.path.exists(quotient_graph_path):
+                    os.makedirs(quotient_graph_path)
+                if not os.path.exists(qgraph_reverse_maps_path):
+                    os.makedirs(qgraph_reverse_maps_path)
+                if not os.path.exists(results_path):
+                    os.makedirs(results_path)
+
+                # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
+                # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
+                # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
+                # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
+                # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
+                # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
+                existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
+
+                for rd in range(simulator.n_samples):
+                    if 1 == 1:
+                        inp = [frag_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
+                        inputs.append(inp)
+    return inputs
+
+
+def run_FFBS_quotient(inp):
+    this_frag_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path, results_path = inp
+    
+    # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
+    # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
+    # ploidy= 3
+    # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
+    # genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
+
+    class Args:
+        def __init__(self):
+            self.vcf_path = 'example/62_ID0.vcf'
+            self.data_path = os.path.join(this_frag_path, frag_file)
+            # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
+            self.bam_path = 'example/example.bam'
+            self.genotype_path = genotype_path
+            self.ploidy = ploidy
+            self.error_rate = 0.001
+            self.epsilon = 0.0001
+            self.output_path = 'output'
+            self.root_dir = 'D:/UCONN/HaplOrbit'
+            self.alleles = [0, 1]
+
+    # Create the mock args object
+    args = Args()
+
+    # Initialize classes with parsed arguments
+    input_handler = InputHandler(args)
+
+    config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+
+    quotient_g_path = os.path.join(this_quotient_coverage_path, frag_file.split('.')[0] + '.gt.gz')
+    quotient_g = gt.load_graph(quotient_g_path)
+
+    edge_map_path = os.path.join(this_reverse_maps_path, 'qg_e_label_' + frag_file.split('.')[0] + '.pkl')
+    with open(edge_map_path, 'rb') as f:
+        edges_map_quotient = pickle.load(f)
+        
+    quotient_g_v_label_reversed_path = os.path.join(this_reverse_maps_path, 'qg_v_label_' + frag_file.split('.')[0] + '.pkl')
+    with open(quotient_g_v_label_reversed_path, 'rb') as f:
+        quotient_g_v_label_reversed = pickle.load(f)
+
+    transitions_dict, transitions_dict_extra = transition_matrices_v2(quotient_g, edges_map_quotient)
+    emission_dict = emissions_v2(ploidy, quotient_g_v_label_reversed, config.error_rate)
+
+    nodes = list(emission_dict.keys())
+    edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
+
+    slices, interfaces =  assign_slices_and_interfaces(nodes, edges)
+
+    assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, args.data_path)
+
+    forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, args.data_path)
+
+    backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, args.data_path)
+
+    samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
+
+    predicted_haplotypes = predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy)
+
+    print('Predicted Haplotypes:\n', predicted_haplotypes)
+    print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
+
+    predicted_haplotypes_np = predicted_haplotypes.to_numpy()
+    true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()
+
+    vector_error, backtracking_steps, dp_table = compute_vector_error(predicted_haplotypes_np, true_haplotypes)
+
 def simulate_awri():
 
     beagle_config_AWRI = {
@@ -1136,10 +1330,11 @@ def simulate_awri():
         }
 
 
-    simulator = SimulatorAWRI(xanadu_config_AWRI)
+    # simulator = SimulatorAWRI(xanadu_config_AWRI)
+    simulator = SimulatorAWRI(beagle_config_AWRI)
     # simulator.generate_genomes_fasta()
 
-    simulator.simulate()
+    # simulator.simulate()
     
     inputs = make_inputs_for_generate_qoutient_graph(simulator)
 
@@ -1189,22 +1384,23 @@ def simulate_na12878():
 
 if __name__ == '__main__':
 
-    xanadu_config = {
-        "snp_df_path": '/labs/Aguiar/pHapCompass/references/Sim/maf0.01_hapref_chr21_filtered_NA12878.csv',
-        "input_vcf_path": '/labs/Aguiar/pHapCompass/references/Sim/hapref_chr21_filtered.vcf.bgz',
-        "contig_fasta": '/labs/Aguiar/pHapCompass/references/EGA.GRCh37/chr21.fa',
-        "art_path": '/labs/Aguiar/pHapCompass/ART/art_bin_MountRainier/art_illumina',
-        "main_path": '/labs/Aguiar/pHapCompass/simulated_data_NEW',
-        "extract_hairs_path": '/home/FCAM/mhosseini/HaplOrbit/extract_poly/build/extractHAIRS',
-        "n_samples": 100, 
-        "target_spacing": 100,
-        "densify_snps": True, 
-        "contig_lens": [10, 100, 1000], 
-        "ploidies": [3],
-        "coverages": [10],
-        "read_length": 150,
-        "mean_insert_length": 800,
-        "std_insert_length": 150
-        }
+    # xanadu_config = {
+    #     "snp_df_path": '/labs/Aguiar/pHapCompass/references/Sim/maf0.01_hapref_chr21_filtered_NA12878.csv',
+    #     "input_vcf_path": '/labs/Aguiar/pHapCompass/references/Sim/hapref_chr21_filtered.vcf.bgz',
+    #     "contig_fasta": '/labs/Aguiar/pHapCompass/references/EGA.GRCh37/chr21.fa',
+    #     "art_path": '/labs/Aguiar/pHapCompass/ART/art_bin_MountRainier/art_illumina',
+    #     "main_path": '/labs/Aguiar/pHapCompass/simulated_data_NEW',
+    #     "extract_hairs_path": '/home/FCAM/mhosseini/HaplOrbit/extract_poly/build/extractHAIRS',
+    #     "n_samples": 100, 
+    #     "target_spacing": 100,
+    #     "densify_snps": True, 
+    #     "contig_lens": [10, 100, 1000], 
+    #     "ploidies": [3],
+    #     "coverages": [10],
+    #     "read_length": 150,
+    #     "mean_insert_length": 800,
+    #     "std_insert_length": 150
+    #     }
 
     # simulate_na12878()
+    simulate_awri()
