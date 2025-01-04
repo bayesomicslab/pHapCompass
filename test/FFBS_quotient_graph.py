@@ -773,7 +773,7 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
 
     return predicted_haplotypes
 
-# Run an example
+# # Run an example
 # if __name__ == '__main__':
 
 #     frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'

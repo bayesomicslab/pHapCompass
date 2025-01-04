@@ -14,7 +14,7 @@ from models.quotient_graph import QuotientGraph
 from multiprocessing import Pool
 import matplotlib.pyplot as plt
 import graph_tool.all as gt
-
+from test.FFBS_quotient_graph import *
 
 def emissions_v2(ploidy, quotient_g_v_label_reversed, error_rate):
     """
@@ -43,7 +43,7 @@ def emissions_v2(ploidy, quotient_g_v_label_reversed, error_rate):
     return emission_dict
 
 
-def transition_matrices_v2(quotient_g, edges_map_quotient):
+def transition_matrices_v2(quotient_g, edges_map_quotient, ploidy, config, fragment_model):
     """
     The only difference in version 2 is that we are using quotient graph directly:
     quotient_g.graph ==> quotient_g
@@ -106,6 +106,7 @@ def extract_positions(vcf_path):
     for record in vcf_in.fetch():
         positions.append(record.pos)  # Extract the position (1-based)
     return positions
+
 
 def plot_positions_distances(positions):
     vcf_path = '/labs/Aguiar/pHapCompass/datasets/SRR10489264/variants_freebayes.vcf'
@@ -320,8 +321,6 @@ def generate_quotient_graph(inp):
         pickle.dump(edges_map_quotient, f)
 
     print('[Done]', os.path.join(this_frag_path, frag_file))
-
-
 
 
 class Simulator:
@@ -1144,7 +1143,6 @@ class SimulatorAWRI:
             f.write(self.main_sh)
 
 
-
 def make_inputs_for_generate_qoutient_graph(simulator):
     inputs = []
     for contig_len in simulator.contig_lens:
@@ -1213,7 +1211,10 @@ def make_inputs_for_running_FFBS(simulator):
                 existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
 
                 for rd in range(simulator.n_samples):
-                    if 1 == 1:
+                    if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
+                        '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
+                        'qg_e_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path) and \
+                        'qg_v_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path):
                         inp = [frag_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
                         inputs.append(inp)
     return inputs
@@ -1250,6 +1251,12 @@ def run_FFBS_quotient(inp):
 
     config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
 
+    # frag_graph_path = os.path.join(this_frag_graph_path, frag_file.split('.')[0] + '.gt.gz')
+    # frag_graph = gt.load_graph(frag_graph_path)
+
+    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
+    fragment_model.construct(input_handler, config)
+
     quotient_g_path = os.path.join(this_quotient_coverage_path, frag_file.split('.')[0] + '.gt.gz')
     quotient_g = gt.load_graph(quotient_g_path)
 
@@ -1261,13 +1268,13 @@ def run_FFBS_quotient(inp):
     with open(quotient_g_v_label_reversed_path, 'rb') as f:
         quotient_g_v_label_reversed = pickle.load(f)
 
-    transitions_dict, transitions_dict_extra = transition_matrices_v2(quotient_g, edges_map_quotient)
+    transitions_dict, transitions_dict_extra = transition_matrices_v2(quotient_g, edges_map_quotient, ploidy, config, fragment_model)
     emission_dict = emissions_v2(ploidy, quotient_g_v_label_reversed, config.error_rate)
 
     nodes = list(emission_dict.keys())
     edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
 
-    slices, interfaces =  assign_slices_and_interfaces(nodes, edges)
+    slices, _ =  assign_slices_and_interfaces(nodes, edges)
 
     assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, args.data_path)
 
@@ -1279,13 +1286,70 @@ def run_FFBS_quotient(inp):
 
     predicted_haplotypes = predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy)
 
-    print('Predicted Haplotypes:\n', predicted_haplotypes)
-    print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
+    # print('Predicted Haplotypes:\n', predicted_haplotypes)
+    # print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
 
     predicted_haplotypes_np = predicted_haplotypes.to_numpy()
     true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()
 
     vector_error, backtracking_steps, dp_table = compute_vector_error(predicted_haplotypes_np, true_haplotypes)
+    results_name = 'FFBS_{}.pkl'.format(frag_file.split('.')[0])
+    results = {}
+    results['evaluation'] = {'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 'dp_table': dp_table}
+    results['predicted_haplotypes'] = predicted_haplotypes_np
+    results['true_haplotypes'] = true_haplotypes
+    results['forward_messages'] = forward_messages
+    results['backward_messages'] = backward_messages
+    results['transitions_dict'] = transitions_dict
+    results['transitions_dict_extra'] = transitions_dict_extra
+    results['emission_dict'] = emission_dict
+    results['assignment_dict'] = assignment_dict
+    results['samples'] = samples
+    results['slices'] = slices
+
+    with open(os.path.join(results_path, results_name), 'wb') as f:
+        pickle.dump(results, f)
+
+    print('Saved results in {}.'.format(os.path.join(results_path, results_name)))
+    
+
+
+def simulate_na12878():
+
+    beagle_config_human = {
+        "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
+        # "input_vcf_path": '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz',
+        "input_vcf_path": '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/updated_NA12878_extracted.vcf',
+        "contig_fasta": '/mnt/research/aguiarlab/data/hg19/chr21.fa',
+        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878',
+        "art_path": 'art_illumina',
+        "extract_hairs_path": 'extractHAIRS',
+        "n_samples": 2, 
+        "target_spacing": 100,
+        "densify_snps": False, 
+        "contig_lens": [100], 
+        "ploidies": [3],
+        "coverages": [10],
+        "read_length": 150,
+        "mean_insert_length": 2000,
+        "std_insert_length": 300
+        }
+
+
+    simulator = Simulator(beagle_config_human)
+    # simulator.generate_genomes_fasta()
+
+    # simulator.simulate()
+    
+    inputs = make_inputs_for_generate_qoutient_graph(simulator)
+
+    pool = Pool(2)
+    pool.map(generate_quotient_graph, inputs)
+
+    # for inp in inputs:
+    #     print(inp[4])
+    #     generate_quotient_graph(inp)
+
 
 def simulate_awri():
 
@@ -1329,58 +1393,26 @@ def simulate_awri():
         "sbatch_str": "#!/bin/bash\n#SBATCH --job-name={}\n#SBATCH -N 1\n#SBATCH -n 1\n#SBATCH -c 1\n#SBATCH --partition=general\n#SBATCH --qos=general\n#SBATCH --mail-type=END\n#SBATCH --mem=50G\n#SBATCH --mail-user=marjan.hosseini@uconn.edu\n#SBATCH -o {}.out\n#SBATCH -e {}.err".format('job', 'sim', 'sim')
         }
 
-
     # simulator = SimulatorAWRI(xanadu_config_AWRI)
     simulator = SimulatorAWRI(beagle_config_AWRI)
     # simulator.generate_genomes_fasta()
 
     # simulator.simulate()
     
-    inputs = make_inputs_for_generate_qoutient_graph(simulator)
+    # inputs = make_inputs_for_generate_qoutient_graph(simulator)
 
+    # pool = Pool(30)
+    # pool.map(generate_quotient_graph, inputs)
+
+    next_inputs = make_inputs_for_running_FFBS(simulator)
     pool = Pool(30)
-    pool.map(generate_quotient_graph, inputs)
+    pool.map(run_FFBS_quotient, next_inputs)
+
 
     # for inp in inputs:
     #     print(inp[4])
     #     generate_quotient_graph(inp)
 
-
-def simulate_na12878():
-
-    beagle_config_human = {
-        "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
-        # "input_vcf_path": '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz',
-        "input_vcf_path": '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/updated_NA12878_extracted.vcf',
-        "contig_fasta": '/mnt/research/aguiarlab/data/hg19/chr21.fa',
-        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878',
-        "art_path": 'art_illumina',
-        "extract_hairs_path": 'extractHAIRS',
-        "n_samples": 2, 
-        "target_spacing": 100,
-        "densify_snps": False, 
-        "contig_lens": [100], 
-        "ploidies": [3],
-        "coverages": [10],
-        "read_length": 150,
-        "mean_insert_length": 2000,
-        "std_insert_length": 300
-        }
-
-
-    simulator = Simulator(beagle_config_human)
-    # simulator.generate_genomes_fasta()
-
-    # simulator.simulate()
-    
-    inputs = make_inputs_for_generate_qoutient_graph(simulator)
-
-    pool = Pool(2)
-    pool.map(generate_quotient_graph, inputs)
-
-    # for inp in inputs:
-    #     print(inp[4])
-    #     generate_quotient_graph(inp)
 
 if __name__ == '__main__':
 
