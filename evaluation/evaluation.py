@@ -135,6 +135,54 @@ def mec(H_star, list_of_reads):
                 # once we find a match for this read, we can stop checking other rows
                 break
     return np.sum(map_back)/len(list_of_reads)
+  
+  
+'''
+calculates how many SNPs line up perfectly (across all haplotypes)
+from the reconstructed haplotypes to the ground truth
+returns:
+the proportion of correct SNPs
+the permutation of the haplotypes that gives the best accuracy
+'''
+def calculate_accuracy(reconstructed_haplotypes, true_haplptypes):
+  n = reconstructed_haplotypes.shape[1]  # Number of SNPs
+  k = reconstructed_haplotypes.shape[0]  # Number of haplotypes
+  
+  accuracy = 0
+  
+  for row_permutations in permutations(reconstructed_haplotypes):
+    permuted_reconstructed_haplotypes = np.array(row_permutations)
+    temp_accuracy = np.sum(np.all(true_haplptypes == permuted_reconstructed_haplotypes, axis=0))/n
+    if temp_accuracy>accuracy:
+      accuracy = temp_accuracy
+      best_permutation = permuted_reconstructed_haplotypes
+      
+  return accuracy, best_permutation
+  
+  
+'''
+calculates the number of alleles that must be switched
+to make the reconstructed haplotypes line up perfectly
+with the ground truth
+returns:
+the numbers of alleles to be switched
+the permutation of haplotypes that gives the best mismatch error
+'''  
+def calculate_mismatch_error(reconstructed_haplotypes, true_haplotypes):
+  n = reconstructed_haplotypes.shape[1]  # Number of SNPs
+  k = reconstructed_haplotypes.shape[0]  # Number of haplotypes
+    
+  mismatch_error = n*k
+  
+  for row_permutations in permutations(reconstructed_haplotypes):
+    permuted_reconstructed_haplotypes = np.array(row_permutations)
+    temp_mismatch_error = np.sum(permuted_reconstructed_haplotypes != true_haplotypes)
+    if temp_mismatch_error<mismatch_error:
+      mismatch_error = temp_mismatch_error
+      best_permutation = permuted_reconstructed_haplotypes
+      
+  return mismatch_error, best_permutation
+    
 
 ########
 # examples
