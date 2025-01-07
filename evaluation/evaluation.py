@@ -54,7 +54,7 @@ retuns:
 the value of the vector error
 the backtracking steps - how we have to permute each column of H to make them match H_star
 '''
-def compute_vector_error(H, H_star):
+def compute_vector_error_rate(H, H_star):
   k, n = H.shape
 
   # i^th dictionary stores the ways to get through the i^th col
@@ -92,6 +92,7 @@ def compute_vector_error(H, H_star):
   # Grab the minimal cost from the last column
   vector_error, _ = min(dp_table[n-1].values(), key=lambda x: x[0])
 
+  vector_error_rate = vector_error/n
   # Identify the matching that gave that minimal cost
   last_matching = min(dp_table[n-1], key=lambda m: dp_table[n-1][m][0])
 
@@ -110,7 +111,7 @@ def compute_vector_error(H, H_star):
 
   backtracking_steps.reverse()
 
-  return vector_error, backtracking_steps, dp_table
+  return vector_error_rate, vector_error, backtracking_steps, dp_table
 
 
 
@@ -135,6 +136,100 @@ def mec(H_star, list_of_reads):
                 # once we find a match for this read, we can stop checking other rows
                 break
     return np.sum(map_back)/len(list_of_reads)
+  
+  
+'''
+calculates how many SNPs line up perfectly (across all haplotypes)
+from the reconstructed haplotypes to the ground truth
+returns:
+the proportion of correct SNPs
+the permutation of the haplotypes that gives the best accuracy
+'''
+def calculate_accuracy(reconstructed_haplotypes, true_haplptypes):
+  n = reconstructed_haplotypes.shape[1]  # Number of SNPs
+  k = reconstructed_haplotypes.shape[0]  # Number of haplotypes
+  
+  accuracy = 0
+  
+  for row_permutations in permutations(reconstructed_haplotypes):
+    permuted_reconstructed_haplotypes = np.array(row_permutations)
+    temp_accuracy = np.sum(np.all(true_haplptypes == permuted_reconstructed_haplotypes, axis=0))/n
+    if temp_accuracy>accuracy:
+      accuracy = temp_accuracy
+      best_permutation = permuted_reconstructed_haplotypes
+      
+  return accuracy, best_permutation
+  
+  
+'''
+calculates the number of alleles that must be switched
+to make the reconstructed haplotypes line up perfectly
+with the ground truth
+returns:
+the numbers of alleles to be switched
+the permutation of haplotypes that gives the best mismatch error
+'''  
+def calculate_mismatch_error(reconstructed_haplotypes, true_haplotypes):
+  n = reconstructed_haplotypes.shape[1]  # Number of SNPs
+  k = reconstructed_haplotypes.shape[0]  # Number of haplotypes
+    
+  mismatch_error = n*k
+  
+  for row_permutations in permutations(reconstructed_haplotypes):
+    permuted_reconstructed_haplotypes = np.array(row_permutations)
+    temp_mismatch_error = np.sum(permuted_reconstructed_haplotypes != true_haplotypes)
+    if temp_mismatch_error<mismatch_error:
+      mismatch_error = temp_mismatch_error
+      best_permutation = permuted_reconstructed_haplotypes
+      
+  return mismatch_error, best_permutation
+  
+
+'''
+fragment mapping phase relationship from hap compass
+takes all fragments and true haplotypes
+returns: counting all of the pairwise phase relationships defined 
+by the input set of fragments that do not exist in the solution
+'''
+def calculate_fmpr(SNP_matrix, true_haplotypes):
+  m, n = SNP_matrix.shape
+  k = true_haplotypes.shape[0]
+  
+  fmpr_metric = 0
+  
+  for frag in SNP_matrix:
+    # idx_j = snp lcoation, f_ij = value read out of the fragment
+    for idx_j, f_ij in enumerate(frag):
+      for idx_k, f_ik in enumerate(frag):
+        if idx_j != idx_k:
+          current_min = np.inf
+          for hap in true_haplotypes:
+            temp_min = one_fmpr(f_ij, idx_j, f_ik, idx_k, hap)
+            if temp_min<current_min:
+              current_min = temp_min
+          fmpr_metric += current_min
+          
+  return fmpr_metric
+
+
+'''
+helper function for fragment mapping phase relationship
+np.nan might need to be replaced with
+however we represent no read for that location on that fragment
+'''
+def one_fmpr(f_ij, j_idx, f_ik, k_idx, haplotype):
+  
+  if ((f_ij != np.nan and f_ik != np.nan) and 
+      (f_ij != haplotype[j_idx] or f_ik != haplotype[k_idx])):
+    return 1
+  return 0
+
+# correct phasing rate = 
+# num alleles that are in the same place 
+# in the true & reconstructed
+
+# perfect solution rate = num haplotypes 
+# w no switches (identical in true & reconst)
 
 ########
 # examples
