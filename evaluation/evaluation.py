@@ -198,7 +198,7 @@ def calculate_fmpr(SNP_matrix, true_haplotypes):
   fmpr_metric = 0
   
   for frag in SNP_matrix:
-    # idx_j = snp lcoation, f_ij = value read out of the fragment
+    # idx_j = snp location, f_ij = value read out of the fragment
     for idx_j, f_ij in enumerate(frag):
       for idx_k, f_ik in enumerate(frag):
         if idx_j != idx_k:
