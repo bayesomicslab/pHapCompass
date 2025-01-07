@@ -180,7 +180,7 @@ def transition_matrices(quotient_g, edges_map_quotient, ploidy, fragment_model):
     return transitions_dict, transitions_dict_extra
 
 
-def emissions(ploidy, quotient_g_v_label_reversed, error_rate):
+def emissions(ploidy, quotient_g, quotient_g_v_label_reversed, error_rate):
     emission_dict = {}
     # Calculate emissions for each state and populate the emission probability matrix
     for state in quotient_g_v_label_reversed.keys():
