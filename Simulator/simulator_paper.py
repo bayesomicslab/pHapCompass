@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import graph_tool.all as gt
 from test.FFBS_quotient_graph import *
 
-def emissions_v2(ploidy, quotient_g_v_label_reversed, error_rate):
+def emissions_v2(ploidy, quotient_g, quotient_g_v_label_reversed, error_rate):
     """
     The only difference in version 2 is that we are using quotient graph directly:
     quotient_g.graph ==> quotient_g
@@ -1179,6 +1179,7 @@ def make_inputs_for_generate_qoutient_graph(simulator):
 
 
 def make_inputs_for_running_FFBS(simulator):
+    simulator.contig_lens = [10]
     inputs = []
     for contig_len in simulator.contig_lens:
         for ploidy in simulator.ploidies:
@@ -1217,6 +1218,7 @@ def make_inputs_for_running_FFBS(simulator):
                         'qg_v_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path):
                         inp = [frag_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
                         inputs.append(inp)
+        inputs = sorted(inputs, key=lambda x: x[0])
     return inputs
 
 
@@ -1269,7 +1271,7 @@ def run_FFBS_quotient(inp):
         quotient_g_v_label_reversed = pickle.load(f)
 
     transitions_dict, transitions_dict_extra = transition_matrices_v2(quotient_g, edges_map_quotient, ploidy, config, fragment_model)
-    emission_dict = emissions_v2(ploidy, quotient_g_v_label_reversed, config.error_rate)
+    emission_dict = emissions_v2(ploidy, quotient_g, quotient_g_v_label_reversed, config.error_rate)
 
     nodes = list(emission_dict.keys())
     edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
@@ -1283,19 +1285,24 @@ def run_FFBS_quotient(inp):
     backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, args.data_path)
 
     samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
+    # for k in samples.keys():
+    #     kedges = samples[k].keys()
+    #     for e in kedges:
+    #         print(e, samples[k][e])
 
     predicted_haplotypes = predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy)
 
     # print('Predicted Haplotypes:\n', predicted_haplotypes)
-    # print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
+    # print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T)
+    sampled_positions = [c for c in predicted_haplotypes.columns.values if np.nan not in list(predicted_haplotypes[c].values)]
 
-    predicted_haplotypes_np = predicted_haplotypes.to_numpy()
-    true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()
+    predicted_haplotypes_np = predicted_haplotypes[sampled_positions].to_numpy()
+    true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()[:, sampled_positions]
 
-    vector_error, backtracking_steps, dp_table = compute_vector_error(predicted_haplotypes_np, true_haplotypes)
+    vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes)
     results_name = 'FFBS_{}.pkl'.format(frag_file.split('.')[0])
     results = {}
-    results['evaluation'] = {'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 'dp_table': dp_table}
+    results['evaluation'] = {'vector_error_rate': vector_error_rate, 'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 'dp_table': dp_table}
     results['predicted_haplotypes'] = predicted_haplotypes_np
     results['true_haplotypes'] = true_haplotypes
     results['forward_messages'] = forward_messages
@@ -1408,6 +1415,10 @@ def simulate_awri():
     print('number of inputs:', len(next_inputs))
     pool = Pool(30)
     pool.map(run_FFBS_quotient, next_inputs)
+    # for inp in next_inputs:
+    #     # print(inp)
+        
+    #     run_FFBS_quotient(inp)
 
 
     # for inp in inputs:
