@@ -117,25 +117,27 @@ def compute_vector_error_rate(H, H_star):
 
 '''
 input:
-H_star - numpy array assembled phasing
-list of reads - list of tuples
-  each tuple is of form (list representing the read, integer representing the starting index)
+reconstucted haplotypes - numpy array assembled phasing
+list of reads - list of lists
+  odd index lists are positions, even index reads are alleles
 returns:
 the proportion of reads that could be mapped to some row of H_star at their specified position
 '''
-def mec(H_star, list_of_reads):
+def mec(reconstructed_haplotypes, list_of_reads):
+  
+    pos_allele_pairs = [(list_of_reads[i], list_of_reads[i + 1]) for i in range(0, len(list_of_reads), 2)]
 
-    map_back = np.zeros(len(list_of_reads))
+    map_back = np.zeros(len(pos_allele_pairs))
 
-    for idx, (read_seq, start_pos) in enumerate(list_of_reads):
-        for row in H_star:
-            subarray = row[start_pos : start_pos + len(read_seq)]
+    for idx, (position_seq, allele_seq) in enumerate(pos_allele_pairs):
+        for reconstructed_hap in reconstructed_haplotypes:
+            subarray = reconstructed_hap[position_seq[0] : position_seq[-1]]
 
-            if np.array_equal(subarray, read_seq):
+            if np.array_equal(subarray, allele_seq):
                 map_back[idx] = 1
                 # once we find a match for this read, we can stop checking other rows
                 break
-    return np.sum(map_back)/len(list_of_reads)
+    return np.sum(map_back)/len(pos_allele_pairs)
   
   
 '''
