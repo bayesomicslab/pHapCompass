@@ -851,11 +851,11 @@ if __name__ == '__main__':
     backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path)
 
     samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
-    samples_brief = {}
-    for t in samples.keys():
-        for nn in samples[t].keys():
-            if nn not in samples_brief.keys():
-                samples_brief[nn] = samples[t][nn]
+    # samples_brief = {}
+    # for t in samples.keys():
+    #     for nn in samples[t].keys():
+    #         if nn not in samples_brief.keys():
+    #             samples_brief[nn] = samples[t][nn]
 
     predicted_haplotypes = predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy)
 
