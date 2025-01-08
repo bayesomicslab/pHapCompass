@@ -765,7 +765,7 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
             # print('Edge:', edge, 'Matched phasings:', matched_phasings, 'Positions:', poss)
             if predicted_haplotypes.loc[:, poss].isna().any().any():
                 predicted_haplotypes.loc[:, poss] = sampled_key_np
-                # print('Poss', poss, 'Predicted haplotypes:', predicted_haplotypes)
+                print('Poss', poss, 'Predicted haplotypes:', predicted_haplotypes)
                 # print('nan detected.')
             # else:
             #     print('These positions were already phased.', poss)
@@ -830,7 +830,6 @@ if __name__ == '__main__':
     gt.graph_draw(quotient_g.graph, output_size=(500, 500), vertex_text=v_labels_q, edge_text=e_labels_q, vertex_font_size=14,  
     edge_font_size=12)
 
-
     quotient_g_v_label_reversed = quotient_g.v_label_reversed
 
     edges_map_quotient = {}
@@ -852,11 +851,11 @@ if __name__ == '__main__':
     backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path)
 
     samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
-    # samples_brief = {}
-    # for t in samples.keys():
-    #     for nn in samples[t].keys():
-    #         if nn not in samples_brief.keys():
-    #             samples_brief[nn] = samples[t][nn]
+    samples_brief = {}
+    for t in samples.keys():
+        for nn in samples[t].keys():
+            if nn not in samples_brief.keys():
+                samples_brief[nn] = samples[t][nn]
 
     predicted_haplotypes = predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy)
 
