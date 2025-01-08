@@ -15,7 +15,7 @@ from algorithm.inference import *
 from algorithm.chordal_contraction import *
 import graph_tool.all as gt
 from collections import defaultdict, deque
-from evaluation.evaluation import compute_vector_error
+from evaluation.evaluation import compute_vector_error_rate
 
 
 def permute_rows(a):
@@ -127,7 +127,7 @@ def generate_all_possible_emissions(unique_node_lengths):
     return all_emissions
 
 
-def transition_matrices(quotient_g, edges_map_quotient):
+def transition_matrices(quotient_g, edges_map_quotient, ploidy, fragment_model):
     transitions_dict = {}
     transitions_dict_extra = {}
     for edge in edges_map_quotient.keys():
@@ -180,7 +180,7 @@ def transition_matrices(quotient_g, edges_map_quotient):
     return transitions_dict, transitions_dict_extra
 
 
-def emissions(ploidy, quotient_g_v_label_reversed, error_rate):
+def emissions(ploidy, quotient_g, quotient_g_v_label_reversed, error_rate):
     emission_dict = {}
     # Calculate emissions for each state and populate the emission probability matrix
     for state in quotient_g_v_label_reversed.keys():
@@ -748,7 +748,6 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
                 if value['source_phasing'] == source_sample and value['target_phasing'] == target_sample:
                     matched_phasings = value['matched_phasings']
                     break
-        
         if matched_phasings:
             total = sum(matched_phasings.values())
             probabilities = {key: value / total for key, value in matched_phasings.items()}
@@ -763,8 +762,10 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
             sampled_key_np = str_2_phas_1(sampled_key, ploidy)
             poss = sorted(list(set([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])))
             poss = [p - 1 for p in poss]
+            # print('Edge:', edge, 'Matched phasings:', matched_phasings, 'Positions:', poss)
             if predicted_haplotypes.loc[:, poss].isna().any().any():
                 predicted_haplotypes.loc[:, poss] = sampled_key_np
+                print('Poss', poss, 'Predicted haplotypes:', predicted_haplotypes)
                 # print('nan detected.')
             # else:
             #     print('These positions were already phased.', poss)
@@ -773,93 +774,97 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
 
     return predicted_haplotypes
 
-# # Run an example
-# if __name__ == '__main__':
+# Run an example
+if __name__ == '__main__':
 
-#     frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
-#     # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
-#     ploidy= 3
-#     genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
-#     # genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
+    frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
+    # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
+    ploidy= 3
+    genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
+    # genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
 
-#     class Args:
-#         def __init__(self):
-#             self.vcf_path = 'example/62_ID0.vcf'
-#             self.data_path = frag_path
-#             self.bam_path = 'example/example.bam'
-#             self.genotype_path = genotype_path
-#             self.ploidy = 3
-#             self.error_rate = 0.001
-#             self.epsilon = 0.0001
-#             self.output_path = 'output'
-#             self.root_dir = 'D:/UCONN/HaplOrbit'
-#             self.alleles = [0, 1]
+    class Args:
+        def __init__(self):
+            self.vcf_path = 'example/62_ID0.vcf'
+            self.data_path = frag_path
+            self.bam_path = 'example/example.bam'
+            self.genotype_path = genotype_path
+            self.ploidy = 3
+            self.error_rate = 0.001
+            self.epsilon = 0.0001
+            self.output_path = 'output'
+            self.root_dir = 'D:/UCONN/HaplOrbit'
+            self.alleles = [0, 1]
 
-#     # Create the mock args object
-#     args = Args()
+    # Create the mock args object
+    args = Args()
 
-#     # Initialize classes with parsed arguments
-#     input_handler = InputHandler(args)
+    # Initialize classes with parsed arguments
+    input_handler = InputHandler(args)
 
-#     config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+    config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
 
-#     fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
+    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
 
-#     fragment_model.construct(input_handler, config)
-#     print('Fragment Graph constructed.')
+    fragment_model.construct(input_handler, config)
+    print('Fragment Graph constructed.')
 
-#     e_labels = fragment_model.graph.edge_properties["e_label"]
-#     v_labels = fragment_model.graph.vertex_properties["v_label"]
-#     gt.graph_draw(fragment_model.graph, output_size=(500, 500), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=14,  
-#     edge_font_size=12)
+    e_labels = fragment_model.graph.edge_properties["e_label"]
+    v_labels = fragment_model.graph.vertex_properties["v_label"]
+    gt.graph_draw(fragment_model.graph, output_size=(500, 500), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=14,  
+    edge_font_size=12)
 
-#     fragment_model_v_label_reversed = fragment_model.v_label_reversed
+    fragment_model_v_label_reversed = fragment_model.v_label_reversed
 
-#     edges_map_fragment = {}
-#     for k in fragment_model.e_label_reversed.keys():
-#         edges_map_fragment[k] = [int(fragment_model.e_label_reversed[k].source()), int(fragment_model.e_label_reversed[k].target())]
-
-
-#     # create quotient graph
-#     quotient_g = QuotientGraph(fragment_model)
-#     quotient_g.construct(input_handler, config)
-
-#     e_labels_q = quotient_g.graph.edge_properties["e_label"]
-#     v_labels_q = quotient_g.graph.vertex_properties["v_label"]
-#     gt.graph_draw(quotient_g.graph, output_size=(500, 500), vertex_text=v_labels_q, edge_text=e_labels_q, vertex_font_size=14,  
-#     edge_font_size=12)
+    edges_map_fragment = {}
+    for k in fragment_model.e_label_reversed.keys():
+        edges_map_fragment[k] = [int(fragment_model.e_label_reversed[k].source()), int(fragment_model.e_label_reversed[k].target())]
 
 
-#     quotient_g_v_label_reversed = quotient_g.v_label_reversed
+    # create quotient graph
+    quotient_g = QuotientGraph(fragment_model)
+    quotient_g.construct(input_handler, config)
 
-#     edges_map_quotient = {}
-#     for k in quotient_g.e_label_reversed.keys():
-#         edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
+    e_labels_q = quotient_g.graph.edge_properties["e_label"]
+    v_labels_q = quotient_g.graph.vertex_properties["v_label"]
+    gt.graph_draw(quotient_g.graph, output_size=(500, 500), vertex_text=v_labels_q, edge_text=e_labels_q, vertex_font_size=14,  
+    edge_font_size=12)
 
-#     transitions_dict, transitions_dict_extra = transition_matrices(quotient_g, edges_map_quotient)
-#     emission_dict = emissions(ploidy, quotient_g_v_label_reversed, config.error_rate)
+    quotient_g_v_label_reversed = quotient_g.v_label_reversed
 
-#     nodes = list(emission_dict.keys())
-#     edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
+    edges_map_quotient = {}
+    for k in quotient_g.e_label_reversed.keys():
+        edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
 
-#     slices, interfaces =  assign_slices_and_interfaces(nodes, edges)
+    transitions_dict, transitions_dict_extra = transition_matrices(quotient_g, edges_map_quotient, ploidy, fragment_model)
+    emission_dict = emissions(ploidy, quotient_g, quotient_g_v_label_reversed, config.error_rate)
 
-#     assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, frag_path)
+    nodes = list(emission_dict.keys())
+    edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
 
-#     forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path)
+    slices, interfaces =  assign_slices_and_interfaces(nodes, edges)
 
-#     backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path)
+    assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, frag_path)
 
-#     samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
+    forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path)
 
-#     predicted_haplotypes = predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy)
+    backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path)
 
-#     print('Predicted Haplotypes:\n', predicted_haplotypes)
-#     print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
+    samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
+    # samples_brief = {}
+    # for t in samples.keys():
+    #     for nn in samples[t].keys():
+    #         if nn not in samples_brief.keys():
+    #             samples_brief[nn] = samples[t][nn]
 
-#     predicted_haplotypes_np = predicted_haplotypes.to_numpy()
-#     true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()
+    predicted_haplotypes = predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy)
 
-#     vector_error, backtracking_steps, dp_table = compute_vector_error(predicted_haplotypes_np, true_haplotypes)
+    print('Predicted Haplotypes:\n', predicted_haplotypes)
+    print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
+
+    predicted_haplotypes_np = predicted_haplotypes.to_numpy()
+    true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()
+
+    vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes)
 
 

@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 import graph_tool.all as gt
 from test.FFBS_quotient_graph import *
 
-def emissions_v2(ploidy, quotient_g_v_label_reversed, error_rate):
+def emissions_v2(ploidy, quotient_g, quotient_g_v_label_reversed, error_rate):
     """
     The only difference in version 2 is that we are using quotient graph directly:
     quotient_g.graph ==> quotient_g
@@ -1179,6 +1179,7 @@ def make_inputs_for_generate_qoutient_graph(simulator):
 
 
 def make_inputs_for_running_FFBS(simulator):
+    simulator.contig_lens = [10]
     inputs = []
     for contig_len in simulator.contig_lens:
         for ploidy in simulator.ploidies:
@@ -1217,7 +1218,229 @@ def make_inputs_for_running_FFBS(simulator):
                         'qg_v_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path):
                         inp = [frag_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
                         inputs.append(inp)
+        inputs = sorted(inputs, key=lambda x: x[0])
     return inputs
+
+
+def make_inputs_for_chordal_contraction(simulator):
+    simulator.contig_lens = [10]
+    k = 10
+    inputs = []
+    for contig_len in simulator.contig_lens:
+        for ploidy in simulator.ploidies:
+            # stop
+            genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
+            # genotype_df = pd.read_csv(genotype_path)
+            for coverage in simulator.coverages:
+                this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+                frag_path = os.path.join(this_cov_path, 'frag')
+                frag_graph_path = os.path.join(this_cov_path, 'fgraph')
+                quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
+                qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
+                chordal_graph_path = os.path.join(this_cov_path, 'chgraph')
+
+                if not os.path.exists(frag_graph_path):
+                    os.makedirs(frag_graph_path)
+                if not os.path.exists(quotient_graph_path):
+                    os.makedirs(quotient_graph_path)
+                if not os.path.exists(qgraph_reverse_maps_path):
+                    os.makedirs(qgraph_reverse_maps_path)
+                if not os.path.exists(chordal_graph_path):
+                    os.makedirs(chordal_graph_path)
+
+                # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
+                # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
+                # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
+                # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
+                # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
+                # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
+                existing_results = [ff for ff in os.listdir(chordal_graph_path) if '.gt.gz' in ff]
+
+                for rd in range(simulator.n_samples):
+                    if '{}.gt.gz'.format(str(rd).zfill(2)) not in existing_results and \
+                        '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path):
+                        inp = [frag_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), chordal_graph_path, genotype_path, ploidy, k]
+                        
+                        inputs.append(inp)
+        inputs = sorted(inputs, key=lambda x: x[0])
+    return inputs
+
+
+def chordal_contraction_graph_tool_top_k(inp):
+    this_frag_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, chordal_graph_path, genotype_path, ploidy, k = inp
+
+    # save_path, subg_id, subg, config, fragment_model, k = inp
+    # this_path = os.path.join(save_path, 'chordal_sub_' + str(subg_id) + '.gt.gz')
+
+    print('Working on:', os.path.join(this_frag_path, frag_file))
+    chordal_v_label_revered_path = os.path.join(this_reverse_maps_path, 'ch_v_label_' + frag_file.split('.')[0] + '.pkl')
+    chordal_e_label_revered_path = os.path.join(this_reverse_maps_path, 'ch_e_label_' + frag_file.split('.')[0] + '.pkl')
+
+
+    class Args:
+        def __init__(self):
+            self.vcf_path = 'example/62_ID0.vcf'
+            self.data_path = os.path.join(this_frag_path, frag_file)
+            # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
+            self.bam_path = 'example/example.bam'
+            self.genotype_path = genotype_path
+            self.ploidy = ploidy
+            self.error_rate = 0.001
+            self.epsilon = 0.0001
+            self.output_path = 'output'
+            self.root_dir = 'D:/UCONN/HaplOrbit'
+            self.alleles = [0, 1]
+
+    # Create the mock args object
+    args = Args()
+
+    # Initialize classes with parsed arguments
+    input_handler = InputHandler(args)
+
+    config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+
+    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
+    fragment_model.construct(input_handler, config)
+
+    quotient_g_path = os.path.join(this_quotient_coverage_path, frag_file.split('.')[0] + '.gt.gz')
+    quotient_g = gt.load_graph(quotient_g_path)
+
+    new_graph = quotient_g.copy()
+    e_weights = new_graph.edge_properties["e_weights"]
+    # new_graph.clear_filters()
+    e_entropy = new_graph.new_edge_property("double")
+
+    # Loop over edges and assign entropy from the e_weights property
+    for e in new_graph.edges():
+        e_entropy[e] = e_weights[e]['entropy']
+
+    new_graph.ep['e_entropy'] = e_entropy
+
+    chordless_cycles = get_chordless_cycles(new_graph)
+
+    to_be_removed_nodes = []
+
+    for cyc_id, cyc in enumerate(chordless_cycles):
+        # print(cyc_id)        
+        edges = [new_graph.edge(cyc[-1], cyc[0])]
+        for i in range(len(cyc) - 1):
+            edges += [new_graph.edge(cyc[i], cyc[i+1])]
+        edges = [x for x in edges if x is not None]
+        while len(edges) > 3:
+            min_edge = min(edges, key=lambda e: new_graph.ep['e_entropy'][e])
+            source_label = new_graph.vp['v_label'][min_edge.source()]
+            target_label = new_graph.vp['v_label'][min_edge.target()]
+            # new node positions
+            poss = sorted(set([int(nn) for nn in source_label.split('-')] + [int(nn) for nn in target_label.split('-')]))
+            # new vertex properties:
+            new_vertex_name = '-'.join([str(nnn) for nnn in poss])
+            vertex_weights = new_graph.ep['e_weights'][min_edge]
+            vertex_weights_appr = get_top_k_weights(vertex_weights, k)
+
+            new_graph.vertex_properties["v_weights"][min_edge.source()] = vertex_weights_appr
+            new_graph.vertex_properties["v_label"][min_edge.source()] = new_vertex_name
+
+            source_nbrs = [n for n in min_edge.source().all_neighbors() if n != min_edge.target()]
+            target_nbrs = [n for n in min_edge.target().all_neighbors() if n != min_edge.source()]
+            common_nbrs = set(source_nbrs).intersection(set(target_nbrs))
+
+            for n in common_nbrs:
+                
+                v_label = new_graph.vertex_properties["v_label"][n]
+                # e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+                # print(len(e_poss))
+                # new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+                sorted_labels = sort_nodes([new_vertex_name, v_label])
+                new_edge_name = '--'.join(sorted_labels)
+                (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+
+                first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+                second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+                final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+                final_weights_appr = get_top_k_weights(final_weight, k)
+
+                e1 = new_graph.edge(min_edge.source(), n)
+                e2 = new_graph.edge(min_edge.target(), n)
+                
+                new_graph.edge_properties["e_weights"][e1] = final_weights_appr
+                new_graph.edge_properties["e_label"][e1] = new_edge_name
+                new_graph.edge_properties['e_entropy'][e1] = final_weights_appr['entropy']
+                new_graph.remove_edge(e2)
+
+            for n in set(source_nbrs)-common_nbrs:
+                
+                v_label = new_graph.vertex_properties["v_label"][n]
+
+                sorted_labels = sort_nodes([new_vertex_name, v_label])
+                new_edge_name = '--'.join(sorted_labels)
+                (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+
+                first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+                second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+                final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+                final_weights_appr = get_top_k_weights(final_weight, k)
+
+
+                e1 = new_graph.edge(min_edge.source(), n)
+                # e2 = new_graph.edge(min_edge.target(), n)
+                new_graph.edge_properties["e_weights"][e1] = final_weights_appr
+                new_graph.edge_properties["e_label"][e1] = new_edge_name
+                new_graph.edge_properties['e_entropy'][e1] = final_weights_appr['entropy']
+                # new_graph.edge_properties["e_weights"][e2]
+
+            
+            for n in set(target_nbrs)-common_nbrs:
+                
+                v_label = new_graph.vertex_properties["v_label"][n]
+                sorted_labels = sort_nodes([new_vertex_name, v_label])
+                new_edge_name = '--'.join(sorted_labels)
+
+                (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+
+                first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+                second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+                final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+                final_weights_appr = get_top_k_weights(final_weight, k)
+
+                e2 = new_graph.edge(min_edge.target(), n)
+                new_graph.remove_edge(e2)
+                e1 = new_graph.add_edge(min_edge.source(), n)
+                new_graph.edge_properties["e_weights"][e1] = final_weights_appr
+                new_graph.edge_properties["e_label"][e1] = new_edge_name
+                new_graph.edge_properties['e_entropy'][e1] = final_weights_appr['entropy']
+            
+            # to_be_removed_nodes += [min_edge.target()]
+            to_be_removed_nodes.append(min_edge.target())
+            new_graph.remove_edge(min_edge)
+            edges.remove(min_edge)
+
+    new_graph.remove_vertex(to_be_removed_nodes)
+
+    e_labels_ch = new_graph.edge_properties["e_label"]
+    v_labels_ch = new_graph.vertex_properties["v_label"]
+        
+    v_label_reversed = {}
+    for v in new_graph.vertices():
+        v_label = v_labels_ch[v]
+        v_label_reversed[v_label] = int(v)
+    
+    e_label_reversed = {}
+    for e in new_graph.edges():
+        e_label = e_labels_ch[e]
+        v1_label, v2_label = e_label.split('--')
+        e_label_reversed[e_label] = [v_label_reversed[v1_label], v_label_reversed[v2_label]]
+        
+
+    this_path = os.path.join(chordal_graph_path, frag_file.split('.')[0] + '.gt.gz')
+    new_graph.save(this_path)
+
+    with open(chordal_v_label_revered_path, 'wb') as f:
+        pickle.dump(v_label_reversed, f)
+
+    with open(chordal_e_label_revered_path, 'wb') as f:
+        pickle.dump(e_label_reversed, f)
+
+    print('[Done]', this_path)
 
 
 def run_FFBS_quotient(inp):
@@ -1269,7 +1492,7 @@ def run_FFBS_quotient(inp):
         quotient_g_v_label_reversed = pickle.load(f)
 
     transitions_dict, transitions_dict_extra = transition_matrices_v2(quotient_g, edges_map_quotient, ploidy, config, fragment_model)
-    emission_dict = emissions_v2(ploidy, quotient_g_v_label_reversed, config.error_rate)
+    emission_dict = emissions_v2(ploidy, quotient_g, quotient_g_v_label_reversed, config.error_rate)
 
     nodes = list(emission_dict.keys())
     edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
@@ -1283,19 +1506,24 @@ def run_FFBS_quotient(inp):
     backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, args.data_path)
 
     samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
+    # for k in samples.keys():
+    #     kedges = samples[k].keys()
+    #     for e in kedges:
+    #         print(e, samples[k][e])
 
     predicted_haplotypes = predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy)
 
     # print('Predicted Haplotypes:\n', predicted_haplotypes)
-    # print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
+    # print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T)
+    sampled_positions = [c for c in predicted_haplotypes.columns.values if np.nan not in list(predicted_haplotypes[c].values)]
 
-    predicted_haplotypes_np = predicted_haplotypes.to_numpy()
-    true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()
+    predicted_haplotypes_np = predicted_haplotypes[sampled_positions].to_numpy()
+    true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()[:, sampled_positions]
 
-    vector_error, backtracking_steps, dp_table = compute_vector_error(predicted_haplotypes_np, true_haplotypes)
+    vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes)
     results_name = 'FFBS_{}.pkl'.format(frag_file.split('.')[0])
     results = {}
-    results['evaluation'] = {'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 'dp_table': dp_table}
+    results['evaluation'] = {'vector_error_rate': vector_error_rate, 'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 'dp_table': dp_table}
     results['predicted_haplotypes'] = predicted_haplotypes_np
     results['true_haplotypes'] = true_haplotypes
     results['forward_messages'] = forward_messages
@@ -1312,7 +1540,6 @@ def run_FFBS_quotient(inp):
 
     print('Saved results in {}.'.format(os.path.join(results_path, results_name)))
     
-
 
 def simulate_na12878():
 
@@ -1404,15 +1631,15 @@ def simulate_awri():
     # pool = Pool(30)
     # pool.map(generate_quotient_graph, inputs)
 
-    next_inputs = make_inputs_for_running_FFBS(simulator)
-    print('number of inputs:', len(next_inputs))
+    # next_inputs = make_inputs_for_running_FFBS(simulator)
+    # print('number of inputs:', len(next_inputs))
+    # pool = Pool(30)
+    # pool.map(run_FFBS_quotient, next_inputs)
+
+    next_next_inputs = make_inputs_for_chordal_contraction(simulator)
+    print('number of inputs:', len(next_next_inputs))
     pool = Pool(30)
-    pool.map(run_FFBS_quotient, next_inputs)
-
-
-    # for inp in inputs:
-    #     print(inp[4])
-    #     generate_quotient_graph(inp)
+    pool.map(chordal_contraction_graph_tool_top_k, next_next_inputs)
 
 
 if __name__ == '__main__':

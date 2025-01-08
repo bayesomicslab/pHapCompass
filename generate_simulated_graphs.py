@@ -86,7 +86,6 @@ def generate_quotient_graph(inp):
             self.root_dir = 'D:/UCONN/HaplOrbit'
             self.alleles = [0, 1]
 
-
     args = Args()
     input_handler = InputHandler(args)
     config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
