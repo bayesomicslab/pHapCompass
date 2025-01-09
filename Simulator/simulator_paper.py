@@ -1209,8 +1209,8 @@ def make_inputs_for_running_FFBS(simulator):
                 # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
                 # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
                 # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
-                existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
-
+                # existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
+                existing_results = []
                 for rd in range(simulator.n_samples):
                     if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
                         '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
@@ -1521,9 +1521,13 @@ def run_FFBS_quotient(inp):
     true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()[:, sampled_positions]
 
     vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes)
+    accuracy, _ = calculate_accuracy(predicted_haplotypes_np, true_haplotypes)
+    mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes)
+    mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
     results_name = 'FFBS_{}.pkl'.format(frag_file.split('.')[0])
     results = {}
-    results['evaluation'] = {'vector_error_rate': vector_error_rate, 'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 'dp_table': dp_table}
+    results['evaluation'] = {'vector_error_rate': vector_error_rate, 'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 
+                             'dp_table': dp_table, 'accuracy': accuracy, 'mismatch_error': mismatch_error, 'mec': mec_}
     results['predicted_haplotypes'] = predicted_haplotypes_np
     results['true_haplotypes'] = true_haplotypes
     results['forward_messages'] = forward_messages
@@ -1534,11 +1538,13 @@ def run_FFBS_quotient(inp):
     results['assignment_dict'] = assignment_dict
     results['samples'] = samples
     results['slices'] = slices
+    results['best_permutation'] = best_permutation
+    results['fragment_list'] = fragment_model.fragment_list
 
     with open(os.path.join(results_path, results_name), 'wb') as f:
         pickle.dump(results, f)
 
-    print('Saved results in {}.'.format(os.path.join(results_path, results_name)))
+    print('Saved results in {}.'.format(os.path.join(results_path, results_name)), 'vector_error_rate', vector_error_rate, 'accuracy', accuracy, 'mismatch_error', mismatch_error, 'mec', mec_)
     
 
 def simulate_na12878():
@@ -1631,36 +1637,23 @@ def simulate_awri():
     # pool = Pool(30)
     # pool.map(generate_quotient_graph, inputs)
 
-    # next_inputs = make_inputs_for_running_FFBS(simulator)
-    # print('number of inputs:', len(next_inputs))
-    # pool = Pool(30)
-    # pool.map(run_FFBS_quotient, next_inputs)
-
-    next_next_inputs = make_inputs_for_chordal_contraction(simulator)
-    print('number of inputs:', len(next_next_inputs))
+    next_inputs = make_inputs_for_running_FFBS(simulator)
+    print('number of inputs:', len(next_inputs))
     pool = Pool(30)
-    pool.map(chordal_contraction_graph_tool_top_k, next_next_inputs)
+    pool.map(run_FFBS_quotient, next_inputs)
+
+
+    # next_next_inputs = make_inputs_for_chordal_contraction(simulator)
+    # print('number of inputs:', len(next_next_inputs))
+    # pool = Pool(30)
+    # pool.map(chordal_contraction_graph_tool_top_k, next_next_inputs)
+
+    # for inp in next_next_inputs:
+    #     # print(inp[4])
+    #     chordal_contraction_graph_tool_top_k(inp)
 
 
 if __name__ == '__main__':
-
-    # xanadu_config = {
-    #     "snp_df_path": '/labs/Aguiar/pHapCompass/references/Sim/maf0.01_hapref_chr21_filtered_NA12878.csv',
-    #     "input_vcf_path": '/labs/Aguiar/pHapCompass/references/Sim/hapref_chr21_filtered.vcf.bgz',
-    #     "contig_fasta": '/labs/Aguiar/pHapCompass/references/EGA.GRCh37/chr21.fa',
-    #     "art_path": '/labs/Aguiar/pHapCompass/ART/art_bin_MountRainier/art_illumina',
-    #     "main_path": '/labs/Aguiar/pHapCompass/simulated_data_NEW',
-    #     "extract_hairs_path": '/home/FCAM/mhosseini/HaplOrbit/extract_poly/build/extractHAIRS',
-    #     "n_samples": 100, 
-    #     "target_spacing": 100,
-    #     "densify_snps": True, 
-    #     "contig_lens": [10, 100, 1000], 
-    #     "ploidies": [3],
-    #     "coverages": [10],
-    #     "read_length": 150,
-    #     "mean_insert_length": 800,
-    #     "std_insert_length": 150
-    #     }
 
     # simulate_na12878()
     simulate_awri()

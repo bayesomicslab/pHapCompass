@@ -15,7 +15,7 @@ from algorithm.inference import *
 from algorithm.chordal_contraction import *
 import graph_tool.all as gt
 from collections import defaultdict, deque
-from evaluation.evaluation import compute_vector_error_rate
+from evaluation.evaluation import compute_vector_error_rate, calculate_accuracy, calculate_mismatch_error, mec
 
 
 def permute_rows(a):
@@ -764,8 +764,30 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
             poss = [p - 1 for p in poss]
             # print('Edge:', edge, 'Matched phasings:', matched_phasings, 'Positions:', poss)
             if predicted_haplotypes.loc[:, poss].isna().any().any():
-                predicted_haplotypes.loc[:, poss] = sampled_key_np
-                print('Poss', poss, 'Predicted haplotypes:', predicted_haplotypes)
+                # Extract the current values for the already filled positions
+                existing_cols = [pos for pos in poss if not predicted_haplotypes.loc[:, pos].isna().all()]
+                existing_values = predicted_haplotypes.loc[:, existing_cols].values
+                
+                # Extract corresponding positions in sampled_key_np
+                existing_indices = [poss.index(pos) for pos in existing_cols]
+                
+                # Generate permutations and find the matching one
+                sampled_permuted = None
+                for permuted_key in itertools.permutations(sampled_key_np):
+                    permuted_key_np = np.array(permuted_key)
+                    if np.array_equal(permuted_key_np[:, existing_indices], existing_values):
+                        sampled_permuted = permuted_key_np
+                        break
+
+                if sampled_permuted is None:
+                    raise ValueError("No valid permutation found for the given positions.")
+                
+                # Update the dataframe with the permuted sampled key
+                predicted_haplotypes.loc[:, poss] = sampled_permuted
+
+                # predicted_haplotypes.loc[:, poss] = sampled_key_np
+                print('Edge:', edge, 'Poss', poss, '\nSampled key:\n', sampled_key_np, '\nSampled permuted:\n', sampled_permuted, 
+                      '\nPredicted haplotypes:\n', predicted_haplotypes, '\nkeys:', keys, 'probs:', probs)
                 # print('nan detected.')
             # else:
             #     print('These positions were already phased.', poss)
@@ -774,8 +796,8 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
 
     return predicted_haplotypes
 
-# Run an example
-if __name__ == '__main__':
+# # Run an example
+# if __name__ == '__main__':
 
     frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
     # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
@@ -866,5 +888,8 @@ if __name__ == '__main__':
     true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()
 
     vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes)
+    accuracy, best_permutation = calculate_accuracy(predicted_haplotypes_np, true_haplotypes)
+    mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes)
+    mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
 
 

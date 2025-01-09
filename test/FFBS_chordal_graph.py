@@ -514,11 +514,11 @@ def get_chordless_cycles(subgraph_copy):
 
 if __name__ == '__main__':
 
-    # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
-    frag_path = '/labs/Aguiar/pHapCompass/test/test.frag'
+    frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
+    # frag_path = '/labs/Aguiar/pHapCompass/test/test.frag'
     ploidy= 3
-    # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
-    genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
+    genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
+    # genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
 
     class Args:
         def __init__(self):
@@ -581,4 +581,5 @@ if __name__ == '__main__':
     gt.graph_draw(chordal_graph, output_size=(500, 500), vertex_text=v_labels_c, edge_text=e_labels_c, vertex_font_size=14,  
     edge_font_size=12)
 
+    
 

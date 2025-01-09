@@ -737,7 +737,7 @@ def compute_edge_weight(new_vertex_name, v_label, source_phasings, target_phasin
     for ffstr in source_phasings:
         for sfstr in target_phasings:
             
-            matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, 3), str_2_phas_1(sfstr, 3), common_ff, common_sf, new_vertex_name, v_label)
+            matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, config.ploidy), str_2_phas_1(sfstr, config.ploidy), common_ff, common_sf, new_vertex_name, v_label)
             
             sorted_phasings = []
             for mtx in matched_phasings:

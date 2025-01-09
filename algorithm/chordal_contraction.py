@@ -649,7 +649,6 @@ def chordal_contraction_graph_tool_approx(inp):
     for cyc_id, cyc in enumerate(chordless_cycles):
         
         # print(cyc_id)
-        
         edges = [new_graph.edge(cyc[-1], cyc[0])]
         for i in range(len(cyc) - 1):
             edges += [new_graph.edge(cyc[i], cyc[i+1])]
