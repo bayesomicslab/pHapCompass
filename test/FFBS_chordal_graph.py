@@ -581,5 +581,45 @@ if __name__ == '__main__':
     gt.graph_draw(chordal_graph, output_size=(500, 500), vertex_text=v_labels_c, edge_text=e_labels_c, vertex_font_size=14,  
     edge_font_size=12)
 
+    # Step 1: Find maximal cliques using graph_tool
+    cliques = []
+    for clique in gt.max_cliques(chordal_graph):
+        cliques.append(set(clique))
+
+
+    # Step 2: Create the clique graph
+    clique_graph = gt.Graph(directed=False)
+    clique_map = {i: clique for i, clique in enumerate(cliques)}
+    clique_indices = list(clique_map.keys())
+    clique_vertices = {}
     
+    vertex_labels = clique_graph.new_vertex_property("string")
+    clique_vertex_reversed = {}
+    for idx in clique_indices:
+        indices_in_quotient = list(clique_map[idx])
+        v_names_quo = [quotient_g.graph.vertex_properties["v_label"][ii] for ii in indices_in_quotient]
+        v_names_quo2 = [ii.split('-') for ii in v_names_quo]
+        flattened_list = sorted(set([item for sublist in v_names_quo2 for item in sublist]))
+        v_name = '-'.join([str(nnn) for nnn in flattened_list])
+        clique_vertices[idx] = clique_graph.add_vertex()
+        vertex_labels[clique_vertices[idx]] = v_name
+        clique_vertex_reversed[v_name] = int(clique_vertices[idx])
+
+    # Add edges weighted by intersection size
+    edge_weights = clique_graph.new_edge_property("double")
+    for i in clique_indices:
+        for j in clique_indices:
+            if i < j:
+                weight = len(clique_map[i] & clique_map[j])
+                if weight > 0:  # Only add edges for cliques with shared variables
+                    e = clique_graph.add_edge(clique_vertices[i], clique_vertices[j])
+                    edge_weights[e] = weight
+
+    clique_graph.ep['intersection'] = edge_weights
+    clique_graph.vp['v_label'] = vertex_labels
+
+
+
+
+
 

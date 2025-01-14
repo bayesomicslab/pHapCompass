@@ -20,11 +20,11 @@ class Configuration:
     def get_algorithm_type(self):
         return self.algorithm_type
 
-    def set_setting(self, key, value):
-        self.settings[key] = value
+    # def set_setting(self, key, value):
+    #     self.settings[key] = value
 
-    def get_setting(self, key):
-        return self.settings.get(key)
+    # def get_setting(self, key):
+    #     return self.settings.get(key)
 
     def initialization2(self):
         # ploidy = 3
@@ -72,6 +72,7 @@ class Configuration:
         # error_rate = 0.01
     
         for n_positions in range(2, max_snp + 1):
+            # print(n_positions)
             global_phasings[n_positions] = {}
             # global_likelihoods[n_positions] = {}
             global_likelihoods[n_positions] = {}
@@ -79,6 +80,7 @@ class Configuration:
             this_genotypes = [''.join(list(com)) for com in list(itertools.product(all_genotypes, repeat=n_positions))]
             this_observations = [''.join(list(com)) for com in list(itertools.product(all_alleles, repeat=n_positions))]
             for gen in this_genotypes:
+                # print(gen)
                 global_phasings[n_positions][gen] = [phas_2_str(phas) for phas in
                                                      generate_phasings_ploidy_long(self.ploidy, gen)]
                 pos_phasings = generate_phasings_ploidy_long(self.ploidy, gen)
@@ -86,7 +88,9 @@ class Configuration:
                 global_likelihoods[n_positions][gen] = {}
             
                 for phas in pos_phasings:
+                    # print(phas)
                     global_likelihoods[n_positions][gen][phas_2_str(phas)] = {}
+                    
                     for obs in this_observations:
                         obs_np = np.array([int(po) for po in obs])
                         global_likelihoods[n_positions][gen][phas_2_str(phas)][obs] = compute_likelihood(obs_np, phas,

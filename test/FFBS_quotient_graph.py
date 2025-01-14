@@ -17,6 +17,30 @@ import graph_tool.all as gt
 from collections import defaultdict, deque
 from evaluation.evaluation import compute_vector_error_rate, calculate_accuracy, calculate_mismatch_error, mec
 
+def select_max_prob_key(probabilities):
+    """
+    Selects the key with the highest probability from a dictionary.
+    If multiple keys have the same max probability, selects one randomly.
+    
+    Parameters:
+        probabilities (dict): A dictionary where keys are options and values are probabilities.
+
+    Returns:
+        The key with the highest probability.
+    """
+    if not probabilities:
+        raise ValueError("The probabilities dictionary is empty.")
+
+    # Get the maximum probability value
+    max_prob = max(probabilities.values())
+
+    # Find all keys with the maximum probability
+    max_keys = [key for key, prob in probabilities.items() if prob == max_prob]
+
+    # Randomly select a key if there are ties
+    return random.choice(max_keys)
+
+
 
 def permute_rows(a):
     # Generate all permutations of the rows
@@ -721,6 +745,102 @@ def sample_states_no_resample_optimized(slices, edges, forward_messages, backwar
     return sampled_states
 
 
+def sample_states_book(slices, edges, forward_messages, transitions_dict):
+    """
+    Sample states using forward messages and transition probabilities without backward messages.
+    This matches the recursive sampling process described in the theory.
+    
+    Parameters:
+    - slices: Dictionary of slices {t: list of nodes in slice t}.
+    - edges: List of directed edges (source, target).
+    - forward_messages: Precomputed forward messages {t: {node: {state: log probability}}}.
+    - transitions_dict: Dictionary of transition probabilities.
+
+    Returns:
+    - sampled_states: Dictionary of sampled states for each node in each slice.
+    """
+    sampled_states = {}
+
+    # **Step 1:** Sample Z_T from the final forward distribution (only uses alpha_T).
+    t = len(slices)
+    sampled_states[t] = {}
+    for node in slices[t]:
+        state_space = list(forward_messages[t][node].keys())
+        log_probs = np.array([forward_messages[t][node][state] for state in state_space])
+        probs = np.exp(log_probs - np.max(log_probs))  # Prevent numerical underflow
+        probs /= np.sum(probs)  # Normalize
+        sampled_states[t][node] = random.choices(state_space, weights=probs, k=1)[0]
+
+    # **Step 2:** Recursively sample Z_t for t = T-1, ..., 1 based only on alpha_t and transitions
+    for t in range(len(slices) - 1, 0, -1):
+        sampled_states[t] = {}
+        for node in slices[t]:
+            state_space = list(forward_messages[t][node].keys())
+            children_in_next_t = [child for _, child in edges if _ == node and child in slices[t + 1]]
+
+            log_probs = []
+            for state in state_space:
+                log_alpha = forward_messages[t][node][state]
+                log_transition_sum = 0
+
+                # Add contributions from the sampled states of children
+                for child in children_in_next_t:
+                    sampled_child_state = sampled_states[t + 1][child]
+                    transition_prob = transitions_dict[f"{node}--{child}"][
+                        state_space.index(state), list(forward_messages[t + 1][child].keys()).index(sampled_child_state)
+                    ]
+                    log_transition_sum += np.log(transition_prob)
+
+                # Final log probability of state
+                log_probs.append(log_alpha + log_transition_sum)
+
+            probs = np.exp(log_probs - np.max(log_probs))  # Prevent numerical underflow
+            probs /= np.sum(probs)  # Normalize
+            sampled_states[t][node] = random.choices(state_space, weights=probs, k=1)[0]
+
+    return sampled_states
+
+
+def sample_states(slices, edges, forward_messages, transitions_dict):
+    """
+    Sample states using forward messages and transition probabilities without backward messages.
+    This matches the recursive sampling process described in the theory.
+    """
+    sampled_states = {}
+
+    # **Step 1:** Sample Z_T from the final forward distribution (only uses alpha_T).
+    t = len(slices)
+    sampled_states[t] = {}
+    for node in slices[t]:
+        state_space = list(forward_messages[t][node].keys())
+        log_probs = np.array([forward_messages[t][node][state] for state in state_space])
+        probs = np.exp(log_probs - np.max(log_probs))  # Prevent numerical underflow
+        probs /= np.sum(probs)  # Normalize
+        sampled_states[t][node] = random.choices(state_space, weights=probs, k=1)[0]
+
+    # **Step 2:** Recursively sample Z_t for t = T-1, ..., 1
+    for t in range(len(slices) - 1, 0, -1):
+        sampled_states[t] = {}
+        for node in slices[t]:
+            state_space = list(forward_messages[t][node].keys())
+            child_node = [child for _, child in edges if _ == node and child in slices[t + 1]][0]  # Single child node
+            sampled_child_state = sampled_states[t + 1][child_node]
+
+            log_probs = []
+            for state in state_space:
+                log_alpha = forward_messages[t][node][state]
+                transition_prob = transitions_dict[f"{node}--{child_node}"][
+                    state_space.index(state), list(forward_messages[t + 1][child_node].keys()).index(sampled_child_state)
+                ]
+                log_probs.append(log_alpha + np.log(transition_prob))
+
+            probs = np.exp(log_probs - np.max(log_probs))  # Prevent numerical underflow
+            probs /= np.sum(probs)  # Normalize
+            sampled_states[t][node] = random.choices(state_space, weights=probs, k=1)[0]
+
+    return sampled_states
+
+
 def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy):
     samples_brief = {}
     for t in samples.keys():
@@ -755,9 +875,12 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
             probs = list(probabilities.values())
             # sampled_key = random.choices(keys, weights=probs, k=1)[0]
 
-            # Sample 100 times and pick the most frequent sample
-            samples_100 = random.choices(keys, weights=probs, k=100)
-            sampled_key = Counter(samples_100).most_common(1)[0][0]
+            # # Sample 100 times and pick the most frequent sample
+            # samples_100 = random.choices(keys, weights=probs, k=100)
+            # sampled_key = Counter(samples_100).most_common(1)[0][0]
+
+            # Sample the key with the maximum probability
+            sampled_key = select_max_prob_key(probabilities)
 
             sampled_key_np = str_2_phas_1(sampled_key, ploidy)
             poss = sorted(list(set([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])))
@@ -786,8 +909,8 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
                 predicted_haplotypes.loc[:, poss] = sampled_permuted
 
                 # predicted_haplotypes.loc[:, poss] = sampled_key_np
-                print('Edge:', edge, 'Poss', poss, '\nSampled key:\n', sampled_key_np, '\nSampled permuted:\n', sampled_permuted, 
-                      '\nPredicted haplotypes:\n', predicted_haplotypes, '\nkeys:', keys, 'probs:', probs)
+                # print('Edge:', edge, 'Poss', poss, '\nSampled key:\n', sampled_key_np, '\nSampled permuted:\n', sampled_permuted, 
+                #       '\nPredicted haplotypes:\n', predicted_haplotypes, '\nkeys:', keys, 'probs:', probs)
                 # print('nan detected.')
             # else:
             #     print('These positions were already phased.', poss)
@@ -798,7 +921,7 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
 
 # # Run an example
 # if __name__ == '__main__':
-
+def main():
     frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
     # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
     ploidy= 3
@@ -872,7 +995,8 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
 
     backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path)
 
-    samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
+    # samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
+    samples = sample_states_no_resample_aligned_with_theory(slices, edges, forward_messages, transitions_dict)
     # samples_brief = {}
     # for t in samples.keys():
     #     for nn in samples[t].keys():
@@ -891,5 +1015,6 @@ def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes,
     accuracy, best_permutation = calculate_accuracy(predicted_haplotypes_np, true_haplotypes)
     mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes)
     mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
+
 
 

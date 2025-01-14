@@ -7,8 +7,8 @@ from matplotlib import pyplot as plt
 agg_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
 sim_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri'
 metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
-contigs = ['10'] # 100, 1000
-ploidies = ['3', '4', '6', '8', '10']
+contigs = ['10', '100'] # 100, 1000
+ploidies = ['3', '4', '6', '8']
 coverages = ['10', '20', '30', '40', '50']
 results_dfs = []
 for contig in contigs:
@@ -38,14 +38,16 @@ for contig in contigs:
 results_df = pd.concat(results_dfs, ignore_index=True)
 results_df.to_csv(os.path.join(agg_results_path, 'sim_awri_results.csv'), index=False)
 
+# results_df_100 = results_df[results_df['contig'] == '100'].reset_index(drop=True)
+results_df_10 = results_df[results_df['contig'] == '10'].reset_index(drop=True)
 
 for metric in metrics:
     print('Metric:', metric)
-    metric_df = results_df[results_df['metric'] == metric].reset_index(drop=True)
-    sns.catplot(x="coverage", y="value",hue="ploidy", data=metric_df, kind="box", height=6, aspect=1.5)
+    metric_df = results_df_10[results_df_10['metric'] == metric].reset_index(drop=True)
+    sns.catplot(x="coverage", y="value",hue="ploidy", data=metric_df, kind="violin", height=6, aspect=1.5)
     plt.title(f"{metric.capitalize()}")
     plt.xlabel("Coverage")
     plt.ylabel("Value")
     plt.tight_layout()
-    plt.savefig(os.path.join(agg_results_path, f"{metric}.png"))
+    plt.savefig(os.path.join(agg_results_path, f"{metric}_10.png"))
     plt.close()

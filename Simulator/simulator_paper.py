@@ -1145,6 +1145,8 @@ class SimulatorAWRI:
 
 def make_inputs_for_generate_qoutient_graph(simulator):
     inputs = []
+    simulator.contig_lens = [100]
+    simulator.ploidies = [3, 4, 6, 8]
     for contig_len in simulator.contig_lens:
         for ploidy in simulator.ploidies:
             # stop
@@ -1179,7 +1181,7 @@ def make_inputs_for_generate_qoutient_graph(simulator):
 
 
 def make_inputs_for_running_FFBS(simulator):
-    simulator.contig_lens = [10]
+    simulator.contig_lens = [100]
     inputs = []
     for contig_len in simulator.contig_lens:
         for ploidy in simulator.ploidies:
@@ -1209,8 +1211,8 @@ def make_inputs_for_running_FFBS(simulator):
                 # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
                 # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
                 # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
-                # existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
-                existing_results = []
+                existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
+                # existing_results = []
                 for rd in range(simulator.n_samples):
                     if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
                         '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
@@ -1223,7 +1225,7 @@ def make_inputs_for_running_FFBS(simulator):
 
 
 def make_inputs_for_chordal_contraction(simulator):
-    simulator.contig_lens = [10]
+    simulator.contig_lens = [100]
     k = 10
     inputs = []
     for contig_len in simulator.contig_lens:
@@ -1505,7 +1507,7 @@ def run_FFBS_quotient(inp):
 
     backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, args.data_path)
 
-    samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
+    samples = sample_states(slices, edges, forward_messages, transitions_dict)
     # for k in samples.keys():
     #     kedges = samples[k].keys()
     #     for e in kedges:
@@ -1630,12 +1632,16 @@ def simulate_awri():
     simulator = SimulatorAWRI(beagle_config_AWRI)
     # simulator.generate_genomes_fasta()
 
-    # simulator.simulate()
+    # # simulator.simulate()
     
     # inputs = make_inputs_for_generate_qoutient_graph(simulator)
-
+    # print('number of inputs:', len(inputs))
     # pool = Pool(30)
     # pool.map(generate_quotient_graph, inputs)
+
+    # for inp in inputs:
+    #     print(inp[4])
+    #     generate_quotient_graph(inp)
 
     next_inputs = make_inputs_for_running_FFBS(simulator)
     print('number of inputs:', len(next_inputs))
@@ -1655,5 +1661,5 @@ def simulate_awri():
 
 if __name__ == '__main__':
 
-    # simulate_na12878()
+#     # simulate_na12878()
     simulate_awri()
