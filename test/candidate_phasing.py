@@ -12,11 +12,11 @@ import graph_tool.all as gt
 
 
 def main():
-    frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
-    # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
-    ploidy= 3
-    genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
-    # genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
+    # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
+    frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_100/ploidy_8/cov_50/frag/93.frag'
+    ploidy= 8
+    # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
+    genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_100/ploidy_8/haplotypes.csv'
 
     class Args:
         def __init__(self):
@@ -24,7 +24,7 @@ def main():
             self.data_path = frag_path
             self.bam_path = 'example/example.bam'
             self.genotype_path = genotype_path
-            self.ploidy = 3
+            self.ploidy = ploidy
             self.error_rate = 0.001
             self.epsilon = 0.0001
             self.output_path = 'output'
@@ -43,3 +43,8 @@ def main():
 
     fragment_model.construct(input_handler, config)
     print('Fragment Graph constructed.')
+
+    fragment_list = fragment_model.fragment_list
+
+    obs_positions = fragment_list[::2]
+    obs_reads = fragment_list[1::2]
