@@ -908,292 +908,7 @@ def sample_states(slices, edges, forward_messages, transitions_dict):
     return sampled_states
 
 
-def predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy):
-    samples_brief = {}
-    for t in samples.keys():
-        for nn in samples[t].keys():
-            if nn not in samples_brief.keys():
-                samples_brief[nn] = samples[t][nn]
-                # samples_brief.update({nn: samples[t][nn]})
-
-    # sorted_nodes = sort_nodes(nodes)
-    genotype_df = pd.read_csv(genotype_path).T
-    # positions = genotype_df.columns + 1 
-    predicted_haplotypes = pd.DataFrame(index=['haplotype_'+str(p+1) for p in range(ploidy)], columns=genotype_df.columns)
-
-    edges_names = list(transitions_dict.keys())
-    sorted_edges = sort_edges(edges_names)
-
-    for edge in sorted_edges:
-        source, target = edge.split('--')
-        # common_ff, common_sf = find_common_element_and_index(source, target)
-        source_sample = samples_brief[source]
-        target_sample = samples_brief[target]
-        edge_phasings = transitions_dict_extra[edge]
-        for key, value in edge_phasings.items():
-                # print(key, 'source', value['source_phasing'], source_sample, 'target', value['target_phasing'], target_sample)
-                if value['source_phasing'] == source_sample and value['target_phasing'] == target_sample:
-                    matched_phasings = value['matched_phasings']
-                    break
-        if matched_phasings:
-            total = sum(matched_phasings.values())
-            probabilities = {key: value / total for key, value in matched_phasings.items()}
-            keys = list(probabilities.keys())
-            probs = list(probabilities.values())
-            # sampled_key = random.choices(keys, weights=probs, k=1)[0]
-
-            # # Sample 100 times and pick the most frequent sample
-            # samples_100 = random.choices(keys, weights=probs, k=100)
-            # sampled_key = Counter(samples_100).most_common(1)[0][0]
-
-            # Sample the key with the maximum probability
-            sampled_key = select_max_prob_key(probabilities)
-
-            sampled_key_np = str_2_phas_1(sampled_key, ploidy)
-            poss = sorted(list(set([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])))
-            poss = [p - 1 for p in poss]
-            # print('Edge:', edge, 'Matched phasings:', matched_phasings, 'Positions:', poss)
-            if predicted_haplotypes.loc[:, poss].isna().any().any():
-                # Extract the current values for the already filled positions
-                existing_cols = [pos for pos in poss if not predicted_haplotypes.loc[:, pos].isna().all()]
-                existing_values = predicted_haplotypes.loc[:, existing_cols].values
-                
-                # Extract corresponding positions in sampled_key_np
-                existing_indices = [poss.index(pos) for pos in existing_cols]
-                
-                # Generate permutations and find the matching one
-                sampled_permuted = None
-                for permuted_key in itertools.permutations(sampled_key_np):
-                    permuted_key_np = np.array(permuted_key)
-                    if np.array_equal(permuted_key_np[:, existing_indices], existing_values):
-                        sampled_permuted = permuted_key_np
-                        break
-
-                if sampled_permuted is None:
-                    raise ValueError("No valid permutation found for the given positions.")
-                
-                # Update the dataframe with the permuted sampled key
-                predicted_haplotypes.loc[:, poss] = sampled_permuted
-
-                # predicted_haplotypes.loc[:, poss] = sampled_key_np
-                # print('Edge:', edge, 'Poss', poss, '\nSampled key:\n', sampled_key_np, '\nSampled permuted:\n', sampled_permuted, 
-                #       '\nPredicted haplotypes:\n', predicted_haplotypes, '\nkeys:', keys, 'probs:', probs)
-                # print('nan detected.')
-            # else:
-            #     print('These positions were already phased.', poss)
-        else:
-            print('No matched phasings found for the edge:', edge)
-
-    return predicted_haplotypes
-
-
-def predict_haplotypes2(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy):
-    samples_brief = {}
-    for t in samples.keys():
-        for nn in samples[t].keys():
-            if nn not in samples_brief.keys():
-                samples_brief[nn] = samples[t][nn]
-                # samples_brief.update({nn: samples[t][nn]})
-
-    # sorted_nodes = sort_nodes(nodes)
-    genotype_df = pd.read_csv(genotype_path).T
-    # positions = genotype_df.columns + 1 
-    predicted_haplotypes = pd.DataFrame(index=['haplotype_'+str(p+1) for p in range(ploidy)], columns=genotype_df.columns)
-
-    edges_names = list(transitions_dict.keys())
-    sorted_edges = sort_edges(edges_names)
-
-
-    sorted_nodes_pa, parent_dict = topological_sort_and_get_parents(nodes, edges)
-    for nn in sorted_nodes_pa:
-        parents = parent_dict[nn]
-        nn_sample = samples_brief[nn]
-        nn_sample_np = str_2_phas_1(nn_sample, ploidy)
-        poss = sorted(list(set([int(ss) for ss in nn.split('-')]))) # only this node
-        poss = [p - 1 for p in poss]
-        parents_poss = [sorted(list(set([int(ss) for ss in pp.split('-')]))) for pp in parents]
-        parents_poss = list(set([item for sublist in parents_poss for item in sublist]))
-        parents_poss = [p - 1 for p in parents_poss]
-        edges_pa = [pp + '--' + nn for pp in parents]
-        all_poss = sorted(list(set(poss + parents_poss)))
-        min_pos = all_poss[0]
-        max_pos = all_poss[-1]
-        # temp_np = np.zeros((ploidy, max - min + 1), dtype=int)
-
-        temps = []
-        for pa_edge in edges_pa:
-            source, target = pa_edge.split('--')
-            this_ege_pos = sorted(list(set([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])))
-            this_ege_pos = [p - 1 for p in this_ege_pos]
-            this_ege_pos_min = [p - min_pos for p in this_ege_pos]
-            edge_phasings = transitions_dict_extra[pa_edge]
-            for key, value in edge_phasings.items():
-                if value['source_phasing'] == samples_brief[source] and value['target_phasing'] == samples_brief[target]:
-                    matched_phasings = value['matched_phasings']
-                    break
-            if matched_phasings:
-                # print(pa_edge, matched_phasings)
-                for match_phas in matched_phasings.keys():
-                    match_phas_np = str_2_phas_1(match_phas, ploidy)
-                    temp_np = np.zeros((ploidy, max_pos - min_pos + 1), dtype=int)
-                    temp_np[:, this_ege_pos_min] = match_phas_np
-                    temps.append(temp_np)
-        matched_phasings_str = [phas_2_str(temp) for temp in temps]
-        matched_phasings_str = list(set(matched_phasings_str))
-        temps = [str_2_phas_1(temp, ploidy) for temp in matched_phasings_str]
-        matched_phasings_str_dict = {phas: 0 for phas in matched_phasings_str}
-        if len(temps) == 0:
-            predicted_haplotypes.loc[:, poss] = nn_sample_np
-            # go next !!!!!!!!!!!!!
-        
-        if len(temps) == 1:
-            sampled_key_pa = temps[0]
-        if len(temps) > 1:
-
-            real_poss = [p + 1 for p in all_poss]
-            match_reads = get_matching_reads_for_positions([int(i) for i in real_poss], fragment_model.fragment_list)
-            for phas in matched_phasings_str:
-                this_phas_weight = 0
-                for indc, this_po, obs in match_reads:
-                    this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), str_2_phas_1(phas, ploidy), indc, list(range(len(indc))), config.error_rate)
-                    # wei += this_phas_read_weight
-                    this_phas_weight += this_phas_read_weight
-                matched_phasings_str_dict[phas] = this_phas_weight
-            total = sum(matched_phasings_str_dict.values())
-            probabilities = {key: value / total for key, value in matched_phasings_str_dict.items()}
-            sampled_key = select_max_prob_key(probabilities)
-            sampled_key_np = str_2_phas_1(sampled_key, ploidy)
-
-
-            existing_cols = predicted_haplotypes.columns[predicted_haplotypes.notna().all()].tolist()
-            existing_cols_no_pa = [p for p in existing_cols if p not in all_poss]
-            new_cols = [p for p in poss if p not in all_poss]
-            only_parent_cols = [p for p in all_poss if p not in poss]
-
-
-
-
-
-            sampled_key_pa = random.choice(temps)
-
-
-        for pp in parents:
-            pp_sample = samples_brief[pp]
-            pa_edge = pp + '--' + nn
-            edge_phasings = transitions_dict_extra[pa_edge]
-            for key, value in edge_phasings.items():
-                # print(key, 'source', value['source_phasing'], source_sample, 'target', value['target_phasing'], target_sample)
-                if value['source_phasing'] == pp_sample and value['target_phasing'] == nn_sample:
-                    matched_phasings = value['matched_phasings']
-                    break
-            if matched_phasings:
-                total = sum(matched_phasings.values())
-                probabilities = {key: value / total for key, value in matched_phasings.items()}
-                # keys = list(probabilities.keys())
-                # probs = list(probabilities.values())
-                sampled_key_pa = select_max_prob_key(probabilities)
-
-
-
-                existing_cols = predicted_haplotypes.columns[predicted_haplotypes.notna().all()].tolist()
-                existing_values = predicted_haplotypes.loc[:, existing_cols].values
-                
-                # Extract corresponding positions in sampled_key_np
-                shared_positions = list(set(existing_cols).intersection(set(poss))) # shared positions between the parent and the child
-                existing_indices = [poss.index(pos) for pos in shared_positions] # indices of the shared positions in the child
-                previous_values = predicted_haplotypes.loc[:, shared_positions].values
-
-                sampled_permuted = None
-                for permuted_key in itertools.permutations(nn_sample_np):
-                    permuted_key_np = np.array(permuted_key)
-                    # print(permuted_key_np)
-                    if np.array_equal(permuted_key_np[:, existing_indices], previous_values):
-                        print(existing_values)
-                        sampled_permuted = permuted_key_np
-                        break
-
-                predicted_haplotypes.loc[:, poss] = sampled_permuted
-
-
-
-        pa_edge = []
-        print(nn, parent_dict[nn])
-
-        poss = sorted(list(set([int(ss) for ss in nn.split('-')])))
-        poss = [p - 1 for p in poss]
-        if predicted_haplotypes.loc[:, poss].isna().any().any():
-            sampled_key = samples_brief[nn]
-            sampled_key_np = str_2_phas_1(sampled_key, ploidy)
-                        
-
-            predicted_haplotypes.loc[:, poss] = sampled_key_np
-
-
-
-    for edge in sorted_edges:
-        source, target = edge.split('--')
-        # common_ff, common_sf = find_common_element_and_index(source, target)
-        source_sample = samples_brief[source]
-        target_sample = samples_brief[target]
-        edge_phasings = transitions_dict_extra[edge]
-        for key, value in edge_phasings.items():
-                # print(key, 'source', value['source_phasing'], source_sample, 'target', value['target_phasing'], target_sample)
-                if value['source_phasing'] == source_sample and value['target_phasing'] == target_sample:
-                    matched_phasings = value['matched_phasings']
-                    break
-        if matched_phasings:
-            total = sum(matched_phasings.values())
-            probabilities = {key: value / total for key, value in matched_phasings.items()}
-            keys = list(probabilities.keys())
-            probs = list(probabilities.values())
-            # sampled_key = random.choices(keys, weights=probs, k=1)[0]
-
-            # # Sample 100 times and pick the most frequent sample
-            # samples_100 = random.choices(keys, weights=probs, k=100)
-            # sampled_key = Counter(samples_100).most_common(1)[0][0]
-
-            # Sample the key with the maximum probability
-            sampled_key = select_max_prob_key(probabilities)
-
-            sampled_key_np = str_2_phas_1(sampled_key, ploidy)
-            poss = sorted(list(set([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])))
-            poss = [p - 1 for p in poss]
-            # print('Edge:', edge, 'Matched phasings:', matched_phasings, 'Positions:', poss)
-            if predicted_haplotypes.loc[:, poss].isna().any().any():
-                # Extract the current values for the already filled positions
-                existing_cols = [pos for pos in poss if not predicted_haplotypes.loc[:, pos].isna().all()]
-                existing_values = predicted_haplotypes.loc[:, existing_cols].values
-                
-                # Extract corresponding positions in sampled_key_np
-                existing_indices = [poss.index(pos) for pos in existing_cols]
-                
-                # Generate permutations and find the matching one
-                sampled_permuted = None
-                for permuted_key in itertools.permutations(sampled_key_np):
-                    permuted_key_np = np.array(permuted_key)
-                    if np.array_equal(permuted_key_np[:, existing_indices], existing_values):
-                        sampled_permuted = permuted_key_np
-                        break
-
-                if sampled_permuted is None:
-                    raise ValueError("No valid permutation found for the given positions.")
-                
-                # Update the dataframe with the permuted sampled key
-                predicted_haplotypes.loc[:, poss] = sampled_permuted
-
-                # predicted_haplotypes.loc[:, poss] = sampled_key_np
-                # print('Edge:', edge, 'Poss', poss, '\nSampled key:\n', sampled_key_np, '\nSampled permuted:\n', sampled_permuted, 
-                #       '\nPredicted haplotypes:\n', predicted_haplotypes, '\nkeys:', keys, 'probs:', probs)
-                # print('nan detected.')
-            # else:
-            #     print('These positions were already phased.', poss)
-        else:
-            print('No matched phasings found for the edge:', edge)
-
-    return predicted_haplotypes
-
-
-def predict_haplotypes5(nodes, edges, samples, ploidy, transitions_dict, genotype_path, fragment_model, transitions_dict_extra, config):
+def predict_haplotypes(nodes, edges, samples, ploidy, transitions_dict, genotype_path, fragment_model, transitions_dict_extra, config):
     samples_brief = {}
     for t in samples.keys():
         for nn in samples[t].keys():
@@ -1255,7 +970,7 @@ def predict_haplotypes5(nodes, edges, samples, ploidy, transitions_dict, genotyp
         # Step 4: Select the unphased position with the highest connections
         selected_position = max(position_connections, key=lambda p: position_connections[p]["count"])
         relevant_edges = position_connections[selected_position]["edges"]
-        print('selected_position:', selected_position, '\nrelevant_edges:', relevant_edges)
+        # print('selected_position:', selected_position, '\nrelevant_edges:', relevant_edges)
 
         #TODO: fill the selected_position - 1 of the df with correct order of rows
         all_poss = []
@@ -1389,6 +1104,8 @@ def predict_haplotypes5(nodes, edges, samples, ploidy, transitions_dict, genotyp
                         matched_phasings_np = str_2_phas_1(match, ploidy)
                         # print(fixed_values_edge)
                         correct_permuted = None
+                        # target_positions = [int(pos) for pos in target.split('-')]  # Extract positions of the target node
+                        # target_positions_indices = [all_poss.index(pos) for pos in target_positions]
                         for permuted_key in itertools.permutations(matched_phasings_np):
                             permuted_key_np = np.array(permuted_key)
                             # print(permuted_key_np[:, fixed_ids_this_poss], '\n', fixed_values_edge)
@@ -1473,17 +1190,19 @@ def predict_haplotypes5(nodes, edges, samples, ploidy, transitions_dict, genotyp
 
             correct_permuted = None
             for max_np in sorted_nps:
+                # print(max_np)
                 valid_columns_max = np.all(~np.isnan(max_np), axis=0)  # Boolean mask of valid columns
                 non_nan_ind_max = np.where(valid_columns_max)[0]  
 
                 shared_idxs = sorted(set(non_nan_ind_max).intersection(set(fixed_positions_ids)))
-
+                shared_idx_in_df_fixed = [all_poss[p] - 1 for p in shared_idxs]
+                shared_fixed = predicted_haplotypes.loc[:, shared_idx_in_df_fixed].values
                 for permuted_key in itertools.permutations(max_np):
                     
                     permuted_key_np = np.array(permuted_key)
                     # print(fixed_values[:, shared_idxs], '\n', permuted_key_np[:, shared_idxs])
                     # print('---------------------------------')
-                    if np.array_equal(fixed_values[:, shared_idxs], permuted_key_np[:, shared_idxs]):
+                    if np.array_equal(shared_fixed, permuted_key_np[:, shared_idxs]):
                         correct_permuted = permuted_key_np
                         break
                 if correct_permuted is not None:
@@ -1514,7 +1233,8 @@ def predict_haplotypes5(nodes, edges, samples, ploidy, transitions_dict, genotyp
     return predicted_haplotypes
 
 
-def predict_haplotypes6(nodes, edges, samples, ploidy, transitions_dict, genotype_path, fragment_model, transitions_dict_extra, config):
+
+def predict_haplotypes1(nodes, edges, samples, ploidy, transitions_dict, genotype_path, fragment_model, transitions_dict_extra, config):
     samples_brief = {}
     for t in samples.keys():
         for nn in samples[t].keys():
@@ -1576,7 +1296,7 @@ def predict_haplotypes6(nodes, edges, samples, ploidy, transitions_dict, genotyp
         # Step 4: Select the unphased position with the highest connections
         selected_position = max(position_connections, key=lambda p: position_connections[p]["count"])
         relevant_edges = position_connections[selected_position]["edges"]
-        print('selected_position:', selected_position, '\nrelevant_edges:', relevant_edges)
+        # print('selected_position:', selected_position, '\nrelevant_edges:', relevant_edges)
 
         #TODO: fill the selected_position - 1 of the df with correct order of rows
         all_poss = []
@@ -1710,14 +1430,35 @@ def predict_haplotypes6(nodes, edges, samples, ploidy, transitions_dict, genotyp
                         matched_phasings_np = str_2_phas_1(match, ploidy)
                         # print(fixed_values_edge)
                         correct_permuted = None
+                        target_positions = [int(pos) for pos in target.split('-')]  # Extract positions of the target node
+                        target_positions_indices = [this_edge_positions.index(pos) for pos in target_positions]
+                        target_phasing_permutations = np.array(list(itertools.permutations(str_2_phas_1(target_phasing, ploidy))))
+
+                        # for permuted_key in itertools.permutations(matched_phasings_np):
+                        #     permuted_key_np = np.array(permuted_key)
+                        #     # print(permuted_key_np[:, fixed_ids_this_poss], '\n', fixed_values_edge)
+                        #     # print('-----------------------')
+                        #     if np.array_equal(fixed_values_edge, permuted_key_np[:, fixed_ids_this_poss]):
+                        #         # print('oooooooooooooo')
+                        #         correct_permuted = permuted_key_np
+                        #         break
                         for permuted_key in itertools.permutations(matched_phasings_np):
                             permuted_key_np = np.array(permuted_key)
-                            # print(permuted_key_np[:, fixed_ids_this_poss], '\n', fixed_values_edge)
-                            # print('-----------------------')
-                            if np.array_equal(fixed_values_edge, permuted_key_np[:, fixed_ids_this_poss]):
-                                # print('oooooooooooooo')
-                                correct_permuted = permuted_key_np
-                                break
+
+                            # Check fixed positions first
+                            if not np.array_equal(fixed_values_edge, permuted_key_np[:, fixed_ids_this_poss]):
+                                continue
+
+                            # Check if any permutation of target_phasing matches target positions
+                            if not any(
+                                np.array_equal(permuted_key_np[:, target_positions_indices], perm)
+                                for perm in target_phasing_permutations):
+                                continue
+
+                            # If both conditions are true, break with the valid permutation
+                            correct_permuted = permuted_key_np
+                            break
+
                         temp_np = np.full((ploidy, len(all_poss)), np.nan)
                         temp_np[:, this_edge_ind_in_all_poss] = fixed_values_edge
                         # this_edge_temp_ids =  [p - min_pos for p in this_edge_positions]
@@ -1745,7 +1486,7 @@ def predict_haplotypes6(nodes, edges, samples, ploidy, transitions_dict, genotyp
             probs = []
             # counter = 0
             for np1, np2 in candidate_phasings:
-                if np.array_equal(np1,np2, equal_nan=True) and np.isnan(np1).any():
+                if np.array_equal(np1, np2, equal_nan=True) and np.isnan(np1).any():
                     # print('equal')
                     continue
                 # print(counter)
@@ -1794,17 +1535,19 @@ def predict_haplotypes6(nodes, edges, samples, ploidy, transitions_dict, genotyp
 
             correct_permuted = None
             for max_np in sorted_nps:
+                # print(max_np)
                 valid_columns_max = np.all(~np.isnan(max_np), axis=0)  # Boolean mask of valid columns
                 non_nan_ind_max = np.where(valid_columns_max)[0]  
 
                 shared_idxs = sorted(set(non_nan_ind_max).intersection(set(fixed_positions_ids)))
-
+                shared_idx_in_df_fixed = [all_poss[p] - 1 for p in shared_idxs]
+                shared_fixed = predicted_haplotypes.loc[:, shared_idx_in_df_fixed].values
                 for permuted_key in itertools.permutations(max_np):
                     
                     permuted_key_np = np.array(permuted_key)
                     # print(fixed_values[:, shared_idxs], '\n', permuted_key_np[:, shared_idxs])
                     # print('---------------------------------')
-                    if np.array_equal(fixed_values[:, shared_idxs], permuted_key_np[:, shared_idxs]):
+                    if np.array_equal(shared_fixed, permuted_key_np[:, shared_idxs]):
                         correct_permuted = permuted_key_np
                         break
                 if correct_permuted is not None:
@@ -1834,475 +1577,6 @@ def predict_haplotypes6(nodes, edges, samples, ploidy, transitions_dict, genotyp
     print("Phasing complete.")
     return predicted_haplotypes
 
-
-def predict_haplotypes3(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy, edges):
-    samples_brief = {}
-    for t in samples.keys():
-        for nn in samples[t].keys():
-            if nn not in samples_brief.keys():
-                samples_brief[nn] = samples[t][nn]
-                # samples_brief.update({nn: samples[t][nn]})
-
-    # sorted_nodes = sort_nodes(nodes)
-    genotype_df = pd.read_csv(genotype_path).T
-    # positions = genotype_df.columns + 1 
-    predicted_haplotypes = pd.DataFrame(index=['haplotype_'+str(p+1) for p in range(ploidy)], columns=genotype_df.columns)
-
-    edges_names = list(transitions_dict.keys())
-    sorted_edges = sort_edges(edges_names)
-
-
-    sorted_nodes_pa, parent_dict = topological_sort_and_get_parents(nodes, edges)
-    children_dict = build_children_dict(edges)
-    phased_positions = []
-    phased_nodes = []
-    not_phased_nodes = sorted_nodes_pa.copy()
-    first_node = sorted_nodes_pa[0]
-    first_node_sample = samples_brief[first_node]
-    first_sample_np = str_2_phas_1(first_node_sample, ploidy)
-    poss = sorted(list(set([int(ss) for ss in first_node.split('-')]))) # only this node
-    df_poss = [p - 1 for p in poss]
-    predicted_haplotypes.loc[:, df_poss] = nn_sample_np
-    phased_nodes.append(first_node)
-    not_phased_nodes.remove(first_node)
-    while len(not_phased_nodes) > 0:
-        immediate_children = [child for child in children_dict[first_node] if child not in phased_nodes]
-        
-
-    for nn in sorted_nodes_pa:
-        parents = parent_dict[nn]
-        nn_sample = samples_brief[nn]
-        nn_sample_np = str_2_phas_1(nn_sample, ploidy)
-        poss = sorted(list(set([int(ss) for ss in nn.split('-')]))) # only this node
-        poss = [p - 1 for p in poss]
-        parents_poss = [sorted(list(set([int(ss) for ss in pp.split('-')]))) for pp in parents]
-        parents_poss = list(set([item for sublist in parents_poss for item in sublist]))
-        parents_poss = [p - 1 for p in parents_poss]
-        edges_pa = [pp + '--' + nn for pp in parents]
-        all_poss = sorted(list(set(poss + parents_poss)))
-        min = all_poss[0]
-        max = all_poss[-1]
-        # temp_np = np.zeros((ploidy, max - min + 1), dtype=int)
-
-        temps = []
-        for pa_edge in edges_pa:
-            source, target = pa_edge.split('--')
-            this_ege_pos = sorted(list(set([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])))
-            this_ege_pos = [p - 1 for p in this_ege_pos]
-            this_ege_pos_min = [p - min for p in this_ege_pos]
-            edge_phasings = transitions_dict_extra[pa_edge]
-            for key, value in edge_phasings.items():
-                if value['source_phasing'] == samples_brief[source] and value['target_phasing'] == samples_brief[target]:
-                    matched_phasings = value['matched_phasings']
-                    break
-            if matched_phasings:
-                # print(pa_edge, matched_phasings)
-                for match_phas in matched_phasings.keys():
-                    match_phas_np = str_2_phas_1(match_phas, ploidy)
-                    temp_np = np.zeros((ploidy, max - min + 1), dtype=int)
-                    temp_np[:, this_ege_pos_min] = match_phas_np
-                    temps.append(temp_np)
-        matched_phasings_str = [phas_2_str(temp) for temp in temps]
-        matched_phasings_str = list(set(matched_phasings_str))
-        temps = [str_2_phas_1(temp, ploidy) for temp in matched_phasings_str]
-        matched_phasings_str_dict = {phas: 0 for phas in matched_phasings_str}
-        if len(temps) == 0:
-            predicted_haplotypes.loc[:, poss] = nn_sample_np
-            # go next !!!!!!!!!!!!!
-        
-        if len(temps) == 1:
-            sampled_key_pa = temps[0]
-        if len(temps) > 1:
-
-            real_poss = [p + 1 for p in all_poss]
-            match_reads = get_matching_reads_for_positions([int(i) for i in real_poss], fragment_model.fragment_list)
-            for phas in matched_phasings_str:
-                this_phas_weight = 0
-                for indc, this_po, obs in match_reads:
-                    this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), str_2_phas_1(phas, ploidy), indc, list(range(len(indc))), config.error_rate)
-                    # wei += this_phas_read_weight
-                    this_phas_weight += this_phas_read_weight
-                matched_phasings_str_dict[phas] = this_phas_weight
-            total = sum(matched_phasings_str_dict.values())
-            probabilities = {key: value / total for key, value in matched_phasings_str_dict.items()}
-            sampled_key = select_max_prob_key(probabilities)
-            sampled_key_np = str_2_phas_1(sampled_key, ploidy)
-
-
-            existing_cols = predicted_haplotypes.columns[predicted_haplotypes.notna().all()].tolist()
-            existing_cols_no_pa = [p for p in existing_cols if p not in all_poss]
-            new_cols = [p for p in poss if p not in all_poss]
-            only_parent_cols = [p for p in all_poss if p not in poss]
-
-            sampled_key_pa = random.choice(temps)
-
-
-        for pp in parents:
-            pp_sample = samples_brief[pp]
-            pa_edge = pp + '--' + nn
-            edge_phasings = transitions_dict_extra[pa_edge]
-            for key, value in edge_phasings.items():
-                # print(key, 'source', value['source_phasing'], source_sample, 'target', value['target_phasing'], target_sample)
-                if value['source_phasing'] == pp_sample and value['target_phasing'] == nn_sample:
-                    matched_phasings = value['matched_phasings']
-                    break
-            if matched_phasings:
-                total = sum(matched_phasings.values())
-                probabilities = {key: value / total for key, value in matched_phasings.items()}
-                # keys = list(probabilities.keys())
-                # probs = list(probabilities.values())
-                sampled_key_pa = select_max_prob_key(probabilities)
-
-
-
-                existing_cols = predicted_haplotypes.columns[predicted_haplotypes.notna().all()].tolist()
-                existing_values = predicted_haplotypes.loc[:, existing_cols].values
-                
-                # Extract corresponding positions in sampled_key_np
-                shared_positions = list(set(existing_cols).intersection(set(poss))) # shared positions between the parent and the child
-                existing_indices = [poss.index(pos) for pos in shared_positions] # indices of the shared positions in the child
-                previous_values = predicted_haplotypes.loc[:, shared_positions].values
-
-                sampled_permuted = None
-                for permuted_key in itertools.permutations(nn_sample_np):
-                    permuted_key_np = np.array(permuted_key)
-                    # print(permuted_key_np)
-                    if np.array_equal(permuted_key_np[:, existing_indices], previous_values):
-                        print(existing_values)
-                        sampled_permuted = permuted_key_np
-                        break
-
-                predicted_haplotypes.loc[:, poss] = sampled_permuted
-
-
-
-        pa_edge = []
-        print(nn, parent_dict[nn])
-
-        poss = sorted(list(set([int(ss) for ss in nn.split('-')])))
-        poss = [p - 1 for p in poss]
-        if predicted_haplotypes.loc[:, poss].isna().any().any():
-            sampled_key = samples_brief[nn]
-            sampled_key_np = str_2_phas_1(sampled_key, ploidy)
-                        
-
-            predicted_haplotypes.loc[:, poss] = sampled_key_np
-
-
-
-    for edge in sorted_edges:
-        source, target = edge.split('--')
-        # common_ff, common_sf = find_common_element_and_index(source, target)
-        source_sample = samples_brief[source]
-        target_sample = samples_brief[target]
-        edge_phasings = transitions_dict_extra[edge]
-        for key, value in edge_phasings.items():
-                # print(key, 'source', value['source_phasing'], source_sample, 'target', value['target_phasing'], target_sample)
-                if value['source_phasing'] == source_sample and value['target_phasing'] == target_sample:
-                    matched_phasings = value['matched_phasings']
-                    break
-        if matched_phasings:
-            total = sum(matched_phasings.values())
-            probabilities = {key: value / total for key, value in matched_phasings.items()}
-            keys = list(probabilities.keys())
-            probs = list(probabilities.values())
-            # sampled_key = random.choices(keys, weights=probs, k=1)[0]
-
-            # # Sample 100 times and pick the most frequent sample
-            # samples_100 = random.choices(keys, weights=probs, k=100)
-            # sampled_key = Counter(samples_100).most_common(1)[0][0]
-
-            # Sample the key with the maximum probability
-            sampled_key = select_max_prob_key(probabilities)
-
-            sampled_key_np = str_2_phas_1(sampled_key, ploidy)
-            poss = sorted(list(set([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])))
-            poss = [p - 1 for p in poss]
-            # print('Edge:', edge, 'Matched phasings:', matched_phasings, 'Positions:', poss)
-            if predicted_haplotypes.loc[:, poss].isna().any().any():
-                # Extract the current values for the already filled positions
-                existing_cols = [pos for pos in poss if not predicted_haplotypes.loc[:, pos].isna().all()]
-                existing_values = predicted_haplotypes.loc[:, existing_cols].values
-                
-                # Extract corresponding positions in sampled_key_np
-                existing_indices = [poss.index(pos) for pos in existing_cols]
-                
-                # Generate permutations and find the matching one
-                sampled_permuted = None
-                for permuted_key in itertools.permutations(sampled_key_np):
-                    permuted_key_np = np.array(permuted_key)
-                    if np.array_equal(permuted_key_np[:, existing_indices], existing_values):
-                        sampled_permuted = permuted_key_np
-                        break
-
-                if sampled_permuted is None:
-                    raise ValueError("No valid permutation found for the given positions.")
-                
-                # Update the dataframe with the permuted sampled key
-                predicted_haplotypes.loc[:, poss] = sampled_permuted
-
-                # predicted_haplotypes.loc[:, poss] = sampled_key_np
-                # print('Edge:', edge, 'Poss', poss, '\nSampled key:\n', sampled_key_np, '\nSampled permuted:\n', sampled_permuted, 
-                #       '\nPredicted haplotypes:\n', predicted_haplotypes, '\nkeys:', keys, 'probs:', probs)
-                # print('nan detected.')
-            # else:
-            #     print('These positions were already phased.', poss)
-        else:
-            print('No matched phasings found for the edge:', edge)
-
-    return predicted_haplotypes
-
-
-
-
-
-def predict_haplotypes4(nodes, edges, samples, ploidy, transitions_dict, genotype_path, fragment_model, transitions_dict_extra, config):
-    samples_brief = {}
-    for t in samples.keys():
-        for nn in samples[t].keys():
-            if nn not in samples_brief.keys():
-                samples_brief[nn] = samples[t][nn]
-                # samples_brief.update({nn: samples[t][nn]})
-
-    # sorted_nodes = sort_nodes(nodes)
-    genotype_df = pd.read_csv(genotype_path).T
-    # positions = genotype_df.columns + 1 
-    predicted_haplotypes = pd.DataFrame(index=['haplotype_'+str(p+1) for p in range(ploidy)], columns=genotype_df.columns)
-
-    # edges_names = list(transitions_dict.keys())
-
-    # Initial sets
-    phased_nodes = set()   # Set to store phased nodes
-    phased_positions = set()  # Set to store phased positions
-    unphased_nodes = set(nodes)  # Initially all nodes are unphased
-    unphased_positions = set(int(pos) for node in nodes for pos in node.split('-'))  # Positions
-
-    # Step 1: Start with the first node
-    first_node = nodes[0]
-
-    # fill the poss - 1 of the df
-    poss = sorted(list(set([int(ss) for ss in first_node.split('-')]))) # only this node
-    poss = [p - 1 for p in poss]
-
-    first_node_sample = samples_brief[first_node]
-    first_sample_np = str_2_phas_1(first_node_sample, ploidy)
-
-    predicted_haplotypes.loc[:, poss] = first_sample_np
-    
-
-    phased_nodes.add(first_node)
-    unphased_nodes.remove(first_node)
-    pos1, pos2 = map(int, first_node.split('-'))
-    phased_positions.update([pos1, pos2])
-    unphased_positions -= {pos1, pos2}
-
-    while unphased_positions:
-        # Step 2: Find neighbor nodes connected to phased nodes
-        neighbor_nodes = set()
-        for node1, node2 in edges:
-            if node1 in phased_nodes and node2 in unphased_nodes:
-                neighbor_nodes.add(node2)
-            elif node2 in phased_nodes and node1 in unphased_nodes:
-                neighbor_nodes.add(node1)
-
-        # Step 3: Count connections and store associated edges for unphased positions
-        position_connections = defaultdict(lambda: {"count": 0, "edges": []})
-        for node1, node2 in edges:
-            if (node1 in phased_nodes and node2 in neighbor_nodes) or (node2 in phased_nodes and node1 in neighbor_nodes):
-                for pos in map(int, node1.split('-') + node2.split('-')):
-                    if pos in unphased_positions:
-                        position_connections[pos]["count"] += 1
-                        position_connections[pos]["edges"].append((node1, node2))
-
-        # Step 4: Select the unphased position with the highest connections
-        selected_position = max(position_connections, key=lambda p: position_connections[p]["count"])
-        relevant_edges = position_connections[selected_position]["edges"]
-        
-        #TODO: fill the selected_position - 1 of the df with correct order of rows
-        all_poss = []
-        for edge in relevant_edges:
-            source, target = edge
-            all_poss.extend([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])
-        all_poss = sorted(list(set(all_poss))) # 1 2 3
-        
-        fixed_positions = [p for p in all_poss if p in phased_positions]
-        fixed_positions_df = [p - 1 for p in fixed_positions]
-        # existing_indices = [all_poss_id.index(p) for p in fixed_positions_df]
-        fixed_values = predicted_haplotypes.loc[:, fixed_positions_df].values
-        # sel_pos_index = all_poss_id.index(selected_position - 1)
-        fixed_positions_ids = [all_poss.index(p) for p in fixed_positions]
-        unphased_position_id = all_poss.index(selected_position)
-        match_reads = get_matching_reads_for_positions([int(i) for i in all_poss], fragment_model.fragment_list)
-
-        matched_phasings_str = {}
-        matched_phasings_all_conn = {}
-        # temp_np = np.empty((ploidy, len(all_poss)))
-        # temp_np = np.full((ploidy, len(all_poss)), np.nan)
-        min_pos = all_poss[0]
-        # max_pos = all_poss[-1]
-        for edge in relevant_edges:
-
-            source, target = edge
-            edge_label = source + '--' + target
-            matched_phasings_all_conn[edge_label] = []
-            this_edge_positions = sorted(set(int(x) for part in edge_label.split('--') for x in part.split('-')))
-            this_edge_positions_df = [p - 1 for p in this_edge_positions]
-
-            fixed_positions_edge = [p for p in this_edge_positions if p in all_poss and p in phased_positions] # oonayee ke dar all_poss hastan va phased hastan 
-            fixed_positions_edge_df = [p - 1 for p in fixed_positions_edge]
-
-            # fixed_ids_this_poss = [all_poss.index(p) for p in fixed_positions_edge] # index of the fixed positions in the edge
-            fixed_ids_this_poss = [this_edge_positions.index(p) for p in fixed_positions_edge] # index of the fixed positions in the edge
-            
-            fixed_values_edge = predicted_haplotypes.loc[:, fixed_positions_edge_df].values
-            # this_ege_pos = sorted(list(set([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])))
-            # this_ege_pos = [p - 1 for p in this_ege_pos]
-            # this_ege_pos_min = [p - min for p in this_ege_pos]
-            edge_phasings = transitions_dict_extra[edge_label]
-            for key, value in edge_phasings.items():
-                if value['source_phasing'] == samples_brief[source] and value['target_phasing'] == samples_brief[target]:
-                    matched_phasings = value['matched_phasings']
-                    break
-            if matched_phasings:
-                for match in matched_phasings.keys():
-                    matched_phasings_np = str_2_phas_1(match, ploidy)
-                    correct_permuted = None
-                    for permuted_key in itertools.permutations(matched_phasings_np):
-                        permuted_key_np = np.array(permuted_key)
-
-                        if np.array_equal(fixed_values_edge, matched_phasings_np[:, fixed_ids_this_poss]):
-                            correct_permuted = permuted_key_np
-                            break
-                    temp_np = np.full((ploidy, len(all_poss)), np.nan)
-                    temp_np[:, fixed_positions_edge_df] = fixed_values_edge
-                    # this_edge_temp_ids =  [p - min_pos for p in this_edge_positions]
-                    this_edge_temp_ids =  [all_poss.index(p) for p in this_edge_positions]
-                    temp_np[:, this_edge_temp_ids] = correct_permuted
-                    this_temp_str = phas_2_str(temp_np.astype(int))
-                    if this_temp_str not in matched_phasings_str:
-                        this_phas_weight = 0
-                        for indc, this_po, obs in match_reads:
-                            # rd_poss_ids_in_all_poss = [all_poss.index(p) for p in this_po]
-                            rd_poss_ids_in_this_edge = [this_edge_positions.index(p) for p in this_po]
-                            this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), temp_np, indc, rd_poss_ids_in_this_edge, config.error_rate)
-                            # wei += this_phas_read_weight
-                            this_phas_weight += this_phas_read_weight
-                    
-                        # matched_phasings_str_dict[phas] = this_phas_weight
-                        matched_phasings_str[this_temp_str] = this_phas_weight
-        
-        total = sum(matched_phasings_str.values())
-        probabilities = {key: value / total for key, value in matched_phasings_str.items()}
-        sampled_key = select_max_prob_key(probabilities)
-        sampled_key_np = str_2_phas_1(sampled_key, ploidy)
-
-        correct_permuted = None
-        for permuted_key in itertools.permutations(sampled_key_np):
-            permuted_key_np = np.array(permuted_key)
-
-            if np.array_equal(fixed_values, permuted_key_np[:, fixed_positions_ids]):
-                correct_permuted = permuted_key_np
-                break
-        predicted_haplotypes.loc[:, selected_position - 1] = correct_permuted[:, unphased_position_id]
-
-
-    #             matched_phasings_all_conn[edge_label] = matched_phasings
-
-
-    #             # print(pa_edge, matched_phasings)
-    #             for match_phas in matched_phasings.keys():
-    #                 # match_phas_np = str_2_phas_1(match_phas, ploidy)
-    #                 # temp_np = np.zeros((ploidy, max - min + 1), dtype=int)
-    #                 # temp_np[:, this_ege_pos_min] = match_phas_np
-    #                 matched_phasings_str.append(match_phas)
-    #                 # up here
-    #                 matched_phasings_all_conn[edge_label].append(match_phas)
-
-    #     # Initialize variables to track the maximum value and corresponding keys
-    #     max_edge = None
-    #     max_phasing = None
-    #     max_likelihood = float('-inf')  # Start with the smallest possible value
-
-    #     # Iterate through the nested dictionary to find the global maximum value
-    #     for outer_key, inner_dict in matched_phasings_all_conn.items():
-    #         for inner_key, value in inner_dict.items():
-    #             if value > max_likelihood:
-    #                 max_likelihood = value
-    #                 max_edge = outer_key
-    #                 max_phasing = inner_key
-
-    # sampled_key_np = str_2_phas_1(max_phasing, ploidy)
-    
-    # max_edge_positions = sorted(set(int(x) for part in max_edge.split('--') for x in part.split('-')))
-    # # max_edge_positions = [p - 1 for p in max_edge_positions]
-    # this_edge_fixed_ids = [p for p in max_edge_positions if p in phased_positions]
-    # existing_indices_edge = [max_edge_positions.index(p) for p in this_edge_fixed_ids]
-    # sel_pos_index = max_edge_positions.index(selected_position)
-    # this_edge_fixed_ids = [p - 1 for p in this_edge_fixed_ids]
-    # this_edge_fixed_values = predicted_haplotypes.loc[:, this_edge_fixed_ids].values
-    
-    # sampled_permuted = None
-    # for permuted_key in itertools.permutations(sampled_key_np):
-    #     permuted_key_np = np.array(permuted_key)
-    #     # print(permuted_key_np)
-    #     if np.array_equal(permuted_key_np[:, existing_indices_edge], this_edge_fixed_values):
-    #         # print(fixed_values)
-    #         sampled_permuted = permuted_key_np
-    #         break
-
-    # predicted_haplotypes.loc[:, selected_position - 1] = sampled_permuted[:, sel_pos_index]
-
-       # # from here
-        # # matched_phasings_str = [phas_2_str(temp) for temp in temps]
-        # matched_phasings_str = list(set(matched_phasings_str))
-        # # matched_phasings_np = [str_2_phas_1(temp, ploidy) for temp in matched_phasings_str]
-        # matched_phasings_str_dict = {phas: 0 for phas in matched_phasings_str}
-
-
-        # for phas in matched_phasings_str:
-        #     this_phas_weight = 0
-        #     for indc, this_po, obs in match_reads:
-        #         this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), str_2_phas_1(phas, ploidy), indc, list(range(len(indc))), config.error_rate)
-        #         # wei += this_phas_read_weight
-        #         this_phas_weight += this_phas_read_weight
-        #     matched_phasings_str_dict[phas] = this_phas_weight
-        # total = sum(matched_phasings_str_dict.values())
-        # probabilities = {key: value / total for key, value in matched_phasings_str_dict.items()}
-        # sampled_key = select_max_prob_key(probabilities)
-
-        # sampled_key_np = str_2_phas_1(sampled_key, ploidy)
-
-        # sampled_permuted = None
-        # for permuted_key in itertools.permutations(sampled_key_np):
-        #     permuted_key_np = np.array(permuted_key)
-        #     # print(permuted_key_np)
-        #     if np.array_equal(permuted_key_np[:, existing_indices], fixed_values):
-        #         # print(fixed_values)
-        #         sampled_permuted = permuted_key_np
-        #         break
-        
-        # predicted_haplotypes.loc[:, selected_position - 1] = sampled_permuted[:, sel_pos_index]
-
-        # Step 5: Add nodes containing the selected position to phased nodes
-        for edge in relevant_edges:
-            node1, node2 = edge
-            if node1 in neighbor_nodes:
-                phased_nodes.add(node1)
-                unphased_nodes.discard(node1)
-            if node2 in neighbor_nodes:
-                phased_nodes.add(node2)
-                unphased_nodes.discard(node2)
-
-        # Update phased positions and remove from unphased
-        phased_positions.add(selected_position)
-        unphased_positions.remove(selected_position)
-
-        # Output the selected position and relevant edges for this iteration
-        print(f"Selected position: {selected_position}")
-        print(f"Relevant edges: {relevant_edges}")
-
-    print("Phasing complete.")
-    return predicted_haplotypes
 
 
 def match_np(np1,np2):
@@ -2327,237 +1601,6 @@ def match_np(np1,np2):
             premutations.append(correct_permuted)
     return premutations
 
-
-def predict_haplotypes3(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy):
-    samples_brief = {}
-    for t in samples.keys():
-        for nn in samples[t].keys():
-            if nn not in samples_brief.keys():
-                samples_brief[nn] = samples[t][nn]
-                # samples_brief.update({nn: samples[t][nn]})
-
-    # sorted_nodes = sort_nodes(nodes)
-    genotype_df = pd.read_csv(genotype_path).T
-    # positions = genotype_df.columns + 1 
-    predicted_haplotypes = pd.DataFrame(index=['haplotype_'+str(p+1) for p in range(ploidy)], columns=genotype_df.columns)
-
-    edges_names = list(transitions_dict.keys())
-    sorted_edges = sort_edges(edges_names)
-
-
-    sorted_nodes_pa, parent_dict = topological_sort_and_get_parents(nodes, edges)
-    children_dict = build_children_dict(edges)
-    phased_positions = []
-    phased_nodes = []
-    not_phased_nodes = sorted_nodes_pa.copy()
-    first_node = sorted_nodes_pa[0]
-    first_node_sample = samples_brief[first_node]
-    first_sample_np = str_2_phas_1(first_node_sample, ploidy)
-    poss = sorted(list(set([int(ss) for ss in first_node.split('-')]))) # only this node
-    df_poss = [p - 1 for p in poss]
-    predicted_haplotypes.loc[:, df_poss] = nn_sample_np
-    phased_nodes.append(first_node)
-    not_phased_nodes.remove(first_node)
-    while len(not_phased_nodes) > 0:
-        immediate_children = [child for child in children_dict[first_node] if child not in phased_nodes]
-        
-            
-
-
-
-
-
-
-
-
-
-
-    for nn in sorted_nodes_pa:
-        parents = parent_dict[nn]
-        nn_sample = samples_brief[nn]
-        nn_sample_np = str_2_phas_1(nn_sample, ploidy)
-        poss = sorted(list(set([int(ss) for ss in nn.split('-')]))) # only this node
-        poss = [p - 1 for p in poss]
-        parents_poss = [sorted(list(set([int(ss) for ss in pp.split('-')]))) for pp in parents]
-        parents_poss = list(set([item for sublist in parents_poss for item in sublist]))
-        parents_poss = [p - 1 for p in parents_poss]
-        edges_pa = [pp + '--' + nn for pp in parents]
-        all_poss = sorted(list(set(poss + parents_poss)))
-        min = all_poss[0]
-        max = all_poss[-1]
-        # temp_np = np.zeros((ploidy, max - min + 1), dtype=int)
-
-        temps = []
-        for pa_edge in edges_pa:
-            source, target = pa_edge.split('--')
-            this_ege_pos = sorted(list(set([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])))
-            this_ege_pos = [p - 1 for p in this_ege_pos]
-            this_ege_pos_min = [p - min for p in this_ege_pos]
-            edge_phasings = transitions_dict_extra[pa_edge]
-            for key, value in edge_phasings.items():
-                if value['source_phasing'] == samples_brief[source] and value['target_phasing'] == samples_brief[target]:
-                    matched_phasings = value['matched_phasings']
-                    break
-            if matched_phasings:
-                # print(pa_edge, matched_phasings)
-                for match_phas in matched_phasings.keys():
-                    match_phas_np = str_2_phas_1(match_phas, ploidy)
-                    temp_np = np.zeros((ploidy, max - min + 1), dtype=int)
-                    temp_np[:, this_ege_pos_min] = match_phas_np
-                    temps.append(temp_np)
-        matched_phasings_str = [phas_2_str(temp) for temp in temps]
-        matched_phasings_str = list(set(matched_phasings_str))
-        temps = [str_2_phas_1(temp, ploidy) for temp in matched_phasings_str]
-        matched_phasings_str_dict = {phas: 0 for phas in matched_phasings_str}
-        if len(temps) == 0:
-            predicted_haplotypes.loc[:, poss] = nn_sample_np
-            # go next !!!!!!!!!!!!!
-        
-        if len(temps) == 1:
-            sampled_key_pa = temps[0]
-        if len(temps) > 1:
-
-            real_poss = [p + 1 for p in all_poss]
-            match_reads = get_matching_reads_for_positions([int(i) for i in real_poss], fragment_model.fragment_list)
-            for phas in matched_phasings_str:
-                this_phas_weight = 0
-                for indc, this_po, obs in match_reads:
-                    this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), str_2_phas_1(phas, ploidy), indc, list(range(len(indc))), config.error_rate)
-                    # wei += this_phas_read_weight
-                    this_phas_weight += this_phas_read_weight
-                matched_phasings_str_dict[phas] = this_phas_weight
-            total = sum(matched_phasings_str_dict.values())
-            probabilities = {key: value / total for key, value in matched_phasings_str_dict.items()}
-            sampled_key = select_max_prob_key(probabilities)
-            sampled_key_np = str_2_phas_1(sampled_key, ploidy)
-
-
-            existing_cols = predicted_haplotypes.columns[predicted_haplotypes.notna().all()].tolist()
-            existing_cols_no_pa = [p for p in existing_cols if p not in all_poss]
-            new_cols = [p for p in poss if p not in all_poss]
-            only_parent_cols = [p for p in all_poss if p not in poss]
-
-
-
-
-
-            sampled_key_pa = random.choice(temps)
-
-
-        for pp in parents:
-            pp_sample = samples_brief[pp]
-            pa_edge = pp + '--' + nn
-            edge_phasings = transitions_dict_extra[pa_edge]
-            for key, value in edge_phasings.items():
-                # print(key, 'source', value['source_phasing'], source_sample, 'target', value['target_phasing'], target_sample)
-                if value['source_phasing'] == pp_sample and value['target_phasing'] == nn_sample:
-                    matched_phasings = value['matched_phasings']
-                    break
-            if matched_phasings:
-                total = sum(matched_phasings.values())
-                probabilities = {key: value / total for key, value in matched_phasings.items()}
-                # keys = list(probabilities.keys())
-                # probs = list(probabilities.values())
-                sampled_key_pa = select_max_prob_key(probabilities)
-
-
-
-                existing_cols = predicted_haplotypes.columns[predicted_haplotypes.notna().all()].tolist()
-                existing_values = predicted_haplotypes.loc[:, existing_cols].values
-                
-                # Extract corresponding positions in sampled_key_np
-                shared_positions = list(set(existing_cols).intersection(set(poss))) # shared positions between the parent and the child
-                existing_indices = [poss.index(pos) for pos in shared_positions] # indices of the shared positions in the child
-                previous_values = predicted_haplotypes.loc[:, shared_positions].values
-
-                sampled_permuted = None
-                for permuted_key in itertools.permutations(nn_sample_np):
-                    permuted_key_np = np.array(permuted_key)
-                    # print(permuted_key_np)
-                    if np.array_equal(permuted_key_np[:, existing_indices], previous_values):
-                        print(existing_values)
-                        sampled_permuted = permuted_key_np
-                        break
-
-                predicted_haplotypes.loc[:, poss] = sampled_permuted
-
-
-
-        pa_edge = []
-        print(nn, parent_dict[nn])
-
-        poss = sorted(list(set([int(ss) for ss in nn.split('-')])))
-        poss = [p - 1 for p in poss]
-        if predicted_haplotypes.loc[:, poss].isna().any().any():
-            sampled_key = samples_brief[nn]
-            sampled_key_np = str_2_phas_1(sampled_key, ploidy)
-                        
-
-            predicted_haplotypes.loc[:, poss] = sampled_key_np
-
-
-
-    for edge in sorted_edges:
-        source, target = edge.split('--')
-        # common_ff, common_sf = find_common_element_and_index(source, target)
-        source_sample = samples_brief[source]
-        target_sample = samples_brief[target]
-        edge_phasings = transitions_dict_extra[edge]
-        for key, value in edge_phasings.items():
-                # print(key, 'source', value['source_phasing'], source_sample, 'target', value['target_phasing'], target_sample)
-                if value['source_phasing'] == source_sample and value['target_phasing'] == target_sample:
-                    matched_phasings = value['matched_phasings']
-                    break
-        if matched_phasings:
-            total = sum(matched_phasings.values())
-            probabilities = {key: value / total for key, value in matched_phasings.items()}
-            keys = list(probabilities.keys())
-            probs = list(probabilities.values())
-            # sampled_key = random.choices(keys, weights=probs, k=1)[0]
-
-            # # Sample 100 times and pick the most frequent sample
-            # samples_100 = random.choices(keys, weights=probs, k=100)
-            # sampled_key = Counter(samples_100).most_common(1)[0][0]
-
-            # Sample the key with the maximum probability
-            sampled_key = select_max_prob_key(probabilities)
-
-            sampled_key_np = str_2_phas_1(sampled_key, ploidy)
-            poss = sorted(list(set([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])))
-            poss = [p - 1 for p in poss]
-            # print('Edge:', edge, 'Matched phasings:', matched_phasings, 'Positions:', poss)
-            if predicted_haplotypes.loc[:, poss].isna().any().any():
-                # Extract the current values for the already filled positions
-                existing_cols = [pos for pos in poss if not predicted_haplotypes.loc[:, pos].isna().all()]
-                existing_values = predicted_haplotypes.loc[:, existing_cols].values
-                
-                # Extract corresponding positions in sampled_key_np
-                existing_indices = [poss.index(pos) for pos in existing_cols]
-                
-                # Generate permutations and find the matching one
-                sampled_permuted = None
-                for permuted_key in itertools.permutations(sampled_key_np):
-                    permuted_key_np = np.array(permuted_key)
-                    if np.array_equal(permuted_key_np[:, existing_indices], existing_values):
-                        sampled_permuted = permuted_key_np
-                        break
-
-                if sampled_permuted is None:
-                    raise ValueError("No valid permutation found for the given positions.")
-                
-                # Update the dataframe with the permuted sampled key
-                predicted_haplotypes.loc[:, poss] = sampled_permuted
-
-                # predicted_haplotypes.loc[:, poss] = sampled_key_np
-                # print('Edge:', edge, 'Poss', poss, '\nSampled key:\n', sampled_key_np, '\nSampled permuted:\n', sampled_permuted, 
-                #       '\nPredicted haplotypes:\n', predicted_haplotypes, '\nkeys:', keys, 'probs:', probs)
-                # print('nan detected.')
-            # else:
-            #     print('These positions were already phased.', poss)
-        else:
-            print('No matched phasings found for the edge:', edge)
-
-    return predicted_haplotypes
 
 
 def build_children_dict(edges):
@@ -2705,18 +1748,18 @@ def main():
     #         if nn not in samples_brief.keys():
     #             samples_brief[nn] = samples[t][nn]
 
-    # predicted_haplotypes = predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy)
-    predicted_haplotypes = predict_haplotypes5(nodes, edges, samples, ploidy, transitions_dict, genotype_path, fragment_model, transitions_dict_extra, config)
+    predicted_haplotypes = predict_haplotypes1(nodes, edges, samples, ploidy, transitions_dict, genotype_path, fragment_model, transitions_dict_extra, config)
     print('Predicted Haplotypes:\n', predicted_haplotypes)
     print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
 
     predicted_haplotypes_np = predicted_haplotypes.to_numpy()
     true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()
 
+    predicted_haplotypes_np = predicted_haplotypes_np[:,0: -1]
+    true_haplotypes = true_haplotypes[:,0: -1]
+
     vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes)
     accuracy, best_permutation = calculate_accuracy(predicted_haplotypes_np, true_haplotypes)
     mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes)
     mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
-
-
-
+    print('Vector Error Rate:', vector_error_rate, '\nVector Error:', vector_error, '\nAccuracy:', accuracy, '\nMismatch Error:', mismatch_error, '\nMEC:', mec_)
