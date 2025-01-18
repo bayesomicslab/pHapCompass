@@ -15,6 +15,8 @@ from multiprocessing import Pool
 import matplotlib.pyplot as plt
 import graph_tool.all as gt
 from test.FFBS_quotient_graph import *
+import time
+
 
 def emissions_v2(ploidy, quotient_g, quotient_g_v_label_reversed, error_rate):
     """
@@ -1181,7 +1183,7 @@ def make_inputs_for_generate_qoutient_graph(simulator):
 
 
 def make_inputs_for_running_FFBS(simulator):
-    simulator.contig_lens = [100]
+    simulator.contig_lens = [10]
     inputs = []
     for contig_len in simulator.contig_lens:
         for ploidy in simulator.ploidies:
@@ -1194,7 +1196,7 @@ def make_inputs_for_running_FFBS(simulator):
                 frag_graph_path = os.path.join(this_cov_path, 'fgraph')
                 quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
                 qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
-                results_path = os.path.join(this_cov_path, 'results')
+                results_path = os.path.join(this_cov_path, 'results_algorithm')
 
                 if not os.path.exists(frag_graph_path):
                     os.makedirs(frag_graph_path)
@@ -1493,6 +1495,8 @@ def run_FFBS_quotient(inp):
     with open(quotient_g_v_label_reversed_path, 'rb') as f:
         quotient_g_v_label_reversed = pickle.load(f)
 
+    start_time = time.time()
+
     transitions_dict, transitions_dict_extra = transition_matrices_v2(quotient_g, edges_map_quotient, ploidy, config, fragment_model)
     emission_dict = emissions_v2(ploidy, quotient_g, quotient_g_v_label_reversed, config.error_rate)
 
@@ -1512,8 +1516,11 @@ def run_FFBS_quotient(inp):
     #     kedges = samples[k].keys()
     #     for e in kedges:
     #         print(e, samples[k][e])
+    predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config)
 
-    predicted_haplotypes = predict_haplotypes(samples, transitions_dict, transitions_dict_extra, nodes, genotype_path, ploidy)
+    end_time = time.time()
+    elapsed_time = round(end_time - start_time, 2)
+
 
     # print('Predicted Haplotypes:\n', predicted_haplotypes)
     # print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T)
@@ -1542,6 +1549,7 @@ def run_FFBS_quotient(inp):
     results['slices'] = slices
     results['best_permutation'] = best_permutation
     results['fragment_list'] = fragment_model.fragment_list
+    results['time'] = elapsed_time
 
     with open(os.path.join(results_path, results_name), 'wb') as f:
         pickle.dump(results, f)
