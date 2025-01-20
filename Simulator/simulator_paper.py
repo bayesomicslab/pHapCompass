@@ -1597,6 +1597,26 @@ def simulate_na12878():
 
 def simulate_awri():
 
+    server3_config_AWRI = {
+        "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
+        "input_vcf_path": '/mnt/research/aguiarlab/proj/HaplOrbit/SRR942191/vcf_files/SRR942191_AHIQ01000001.1.vcf',
+        # "contig_fasta": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/AWRI1499/contigs_noamb/contig_AHIQ01000001.1.fa',
+        "contig_fasta": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/AWRI1499/contigs/contig_AHIQ01000001.1.fa',
+        "main_path": '/home/mok23003/BML/HaplOrbit/simulated_data_awri',
+        "art_path": 'art_illumina',
+        "extract_hairs_path": 'extractHAIRS',
+        "n_samples": 100, 
+        "target_spacing": 100,
+        "densify_snps": False, 
+        "contig_lens": [10, 100, 1000], 
+        "ploidies": [3, 4, 6, 8, 10],
+        "coverages": [10, 20, 30, 40, 50],
+        "read_length": 75,
+        "mean_insert_length": 300,
+        "std_insert_length": 30, 
+        "sbatch_str": ''
+        }
+
     beagle_config_AWRI = {
         "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
         "input_vcf_path": '/mnt/research/aguiarlab/proj/HaplOrbit/SRR942191/vcf_files/SRR942191_AHIQ01000001.1.vcf',
@@ -1638,7 +1658,8 @@ def simulate_awri():
         }
 
     # simulator = SimulatorAWRI(xanadu_config_AWRI)
-    simulator = SimulatorAWRI(beagle_config_AWRI)
+    # simulator = SimulatorAWRI(beagle_config_AWRI)
+    simulator = SimulatorAWRI(server3_config_AWRI)
     # simulator.generate_genomes_fasta()
 
     # # simulator.simulate()
