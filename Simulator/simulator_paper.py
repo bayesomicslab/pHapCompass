@@ -4,7 +4,7 @@ import random
 import pysam
 import sys
 import numpy as np
-sys.path.append('/home/mok23003/BML/HaplOrbit')
+# sys.path.append('/home/mok23003/BML/HaplOrbit')
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import pickle
 # from ..generate_simulated_graphs import generate_quotient_graph
@@ -1184,7 +1184,7 @@ def make_inputs_for_generate_qoutient_graph(simulator):
 
 
 def make_inputs_for_running_FFBS(simulator):
-    simulator.contig_lens = [100]
+    simulator.contig_lens = [10]
     inputs = []
     for contig_len in simulator.contig_lens:
         for ploidy in simulator.ploidies:
