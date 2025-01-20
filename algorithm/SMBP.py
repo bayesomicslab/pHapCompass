@@ -2,12 +2,21 @@ import mrftools
 import IndependentTorchMatrixBeliefPropagator
 import graph_tool.all as gt
 import pgmpy
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from data.input_handler import InputHandler
+from data.configuration import Configuration
+from models.fragment_graph import FragmentGraph
+from models.quotient_graph import QuotientGraph
+import matplotlib.pyplot as plt
 import torch
 import numpy as np
 import time
 import gzip
-import pickle as cPickle
+import pickle
 import scipy
+from Simulator.simulator_paper import transition_matrices_v2, emissions_v2
 
 # Create an mrftools Markov Network
 def create_markov_net(q_graph, transitions):
@@ -140,26 +149,70 @@ def inference(q_graph, transitions, method="smbp"):
         bp = pgmpy_belief_propagation(mn)
     return
 
+
 if __name__ == "__main__":
+
     t0 = time.time()
+    this_frag_path = "/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/cov_10/frag"
+    this_quotient_coverage_path = "/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/cov_10/qgraph"
+    this_reverse_maps_path = "/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/cov_10/reverse_maps"
+    frag_file = "00.frag"
+    ploidy = 3
+    genotype_path = "/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/haplotypes.csv"
+    results_path = "/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/cov_10/results"
 
-    # Initialize Quotient Graph
-    quotient_graph = gt.Graph()
-    print("Q Graph initialized")
+    # this_frag_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path, results_path = inp
+    print('Working on:', os.path.join(this_frag_path, frag_file))
+    # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
+    # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
+    # ploidy= 3
+    # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
+    # genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
 
-    # Load Quotient Graph
-    # quotient_graph.load("/home/tgbergendahl/research/hap_assembly/HaplOrbit/example/ART_0_quotient_graph.gt.gz")
-    quotient_graph.load("/Users/tgbergendahl/Research/HaplOrbit/example/ART_0_quotient_graph.gt.gz")
-    print("Q Graph loaded")
+    class Args:
+        def __init__(self):
+            self.vcf_path = 'example/62_ID0.vcf'
+            self.data_path = os.path.join(this_frag_path, frag_file)
+            # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
+            self.bam_path = 'example/example.bam'
+            self.genotype_path = genotype_path
+            self.ploidy = ploidy
+            self.error_rate = 0.001
+            self.epsilon = 0.0001
+            self.output_path = 'output'
+            self.root_dir = 'D:/UCONN/HaplOrbit'
+            self.alleles = [0, 1]
 
-    # Load Transitions Matrix
-    transitions_path = '/Users/tgbergendahl/Research/HaplOrbit/example/ART_0.pkl.gz'
-    with gzip.open(transitions_path, 'rb') as f:
-        transitions = cPickle.load(f)
-    print("Transitions Loaded")
+    # Create the mock args object
+    args = Args()
+
+    # Initialize classes with parsed arguments
+    input_handler = InputHandler(args)
+
+    config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+
+    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
+    fragment_model.construct(input_handler, config)
+
+    quotient_g_path = os.path.join(this_quotient_coverage_path, frag_file.split('.')[0] + '.gt.gz')
+    quotient_g = gt.load_graph(quotient_g_path)
+
+    edge_map_path = os.path.join(this_reverse_maps_path, 'qg_e_label_' + frag_file.split('.')[0] + '.pkl')
+    with open(edge_map_path, 'rb') as f:
+        edges_map_quotient = pickle.load(f)
+        
+    quotient_g_v_label_reversed_path = os.path.join(this_reverse_maps_path, 'qg_v_label_' + frag_file.split('.')[0] + '.pkl')
+    with open(quotient_g_v_label_reversed_path, 'rb') as f:
+        quotient_g_v_label_reversed = pickle.load(f)
+
+    transitions_dict, transitions_dict_extra = transition_matrices_v2(quotient_g, edges_map_quotient, ploidy, config, fragment_model)
+    emission_dict = emissions_v2(ploidy, quotient_g, quotient_g_v_label_reversed, config.error_rate)
+
+    # frag_graph_path = os.path.join(this_frag_graph_path, frag_file.split('.')[0] + '.gt.gz')
+    # frag_graph = gt.load_graph(frag_graph_path)
 
     # Initialize Markov Network
-    mn = create_markov_net(quotient_graph, transitions=transitions) # Creates mrftools TorchMarkovNetwork
+    mn = create_markov_net(quotient_g, transitions=transitions_dict) # Creates mrftools TorchMarkovNetwork
     t1 = time.time()
     print("Markov Network Created")
     print(f"Time elapsed: {t1-t0}")
@@ -188,4 +241,10 @@ if __name__ == "__main__":
     #     print(e)
     # t1 = time.time()
     # print(f"Time elapsed: {t1-t0}")
+
+    # translate mrftools beliefs into graph tool graph ?
+
+    update_entropies(quotient_g, torch_bp)
+
+    # get path to sample
     print("done")

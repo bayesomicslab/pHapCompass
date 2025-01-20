@@ -1183,7 +1183,7 @@ def make_inputs_for_generate_qoutient_graph(simulator):
 
 
 def make_inputs_for_running_FFBS(simulator):
-    simulator.contig_lens = [10]
+    simulator.contig_lens = [100]
     inputs = []
     for contig_len in simulator.contig_lens:
         for ploidy in simulator.ploidies:
@@ -1196,7 +1196,7 @@ def make_inputs_for_running_FFBS(simulator):
                 frag_graph_path = os.path.join(this_cov_path, 'fgraph')
                 quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
                 qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
-                results_path = os.path.join(this_cov_path, 'results_algorithm')
+                results_path = os.path.join(this_cov_path, 'results_algorithm_v2')
 
                 if not os.path.exists(frag_graph_path):
                     os.makedirs(frag_graph_path)
@@ -1509,15 +1509,16 @@ def run_FFBS_quotient(inp):
 
     forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, args.data_path)
 
-    backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, args.data_path)
+    # backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, args.data_path)
 
-    samples = sample_states(slices, edges, forward_messages, transitions_dict)
+    samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
+    # samples = sample_states(slices, edges, forward_messages, transitions_dict)
     # for k in samples.keys():
     #     kedges = samples[k].keys()
     #     for e in kedges:
     #         print(e, samples[k][e])
+    
     predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config)
-
     end_time = time.time()
     elapsed_time = round(end_time - start_time, 2)
 
@@ -1540,7 +1541,7 @@ def run_FFBS_quotient(inp):
     results['predicted_haplotypes'] = predicted_haplotypes_np
     results['true_haplotypes'] = true_haplotypes
     results['forward_messages'] = forward_messages
-    results['backward_messages'] = backward_messages
+    # results['backward_messages'] = backward_messages
     results['transitions_dict'] = transitions_dict
     results['transitions_dict_extra'] = transitions_dict_extra
     results['emission_dict'] = emission_dict
@@ -1655,7 +1656,9 @@ def simulate_awri():
     print('number of inputs:', len(next_inputs))
     pool = Pool(30)
     pool.map(run_FFBS_quotient, next_inputs)
-
+    # for inp in next_inputs:
+    #     # print(inp[3])
+    #     run_FFBS_quotient(inp)
 
     # next_next_inputs = make_inputs_for_chordal_contraction(simulator)
     # print('number of inputs:', len(next_next_inputs))

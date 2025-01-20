@@ -908,7 +908,427 @@ def sample_states(slices, edges, forward_messages, transitions_dict):
     return sampled_states
 
 
-def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config):
+
+def get_combinations_with_probabilities(phased_nodes, relevant_edges, transitions_dict_extra, samples_brief, ploidy, predicted_haplotypes, config, fragment_model):
+    """
+    Collapse information from all phased nodes and their outgoing edges, 
+    returning all valid phasing combinations and their probabilities.
+
+    Parameters:
+        phased_nodes (set): Nodes already phased.
+        relevant_edges (list): Relevant edges for the selected position.
+        transitions_dict_extra (dict): Contains phasing information for edges.
+        samples_brief (dict): Phasing samples for nodes.
+        ploidy (int): Ploidy level.   
+        predicted_haplotypes (pd.DataFrame): Current phased haplotypes.
+        config: Configuration object (e.g., error rate).
+
+    Returns:
+        list: Valid combinations of phasings.
+        list: Probabilities for the combinations.
+    """
+    all_combinations = {}  # Store valid combinations
+    probabilities = {}     # Store probabilities for each combination
+
+    # Iterate over all phased nodes
+    for source_node in phased_nodes:
+        # Get edges originating from the source node
+        all_combinations[source_node] = []
+        probabilities[source_node] = []
+        combination_set = set()
+
+        outgoing_edges = [edge for edge in relevant_edges if edge[0] == source_node or edge[1] == source_node]
+        
+        for edge in outgoing_edges:
+            source, target = edge if edge[0] == source_node else edge[::-1]
+            # source, target = edge
+            edge_label = f"{source}--{target}"
+
+            this_edge_positions = sorted(set(int(pos) for part in [source, target] for pos in part.split('-')))
+
+            match_reads = get_matching_reads_for_positions(this_edge_positions, fragment_model.fragment_list)
+
+            if edge_label not in transitions_dict_extra:
+                continue
+
+            # Retrieve matched phasings for the edge
+            edge_phasings = transitions_dict_extra[edge_label]
+            matched_phasings = None
+            for key, value in edge_phasings.items():
+                if (
+                    value["source_phasing"] == samples_brief[source] and
+                    value["target_phasing"] == samples_brief[target]
+                ):
+                    matched_phasings = value["matched_phasings"]
+                    break
+
+            if not matched_phasings:
+                continue
+
+            # Get fixed positions and their values
+            fixed_positions = [int(pos) for pos in source.split("-")]
+            fixed_positions_indices = [int(pos) - 1 for pos in fixed_positions]
+            fixed_values = predicted_haplotypes.loc[:, fixed_positions_indices].values
+
+            # Get target node positions and phasing
+            target_positions = [int(pos) for pos in target.split("-")]
+            target_phasing = str_2_phas_1(samples_brief[target], ploidy)
+            target_phasing_permutations = np.array(list(itertools.permutations(target_phasing)))
+
+            target_positions_indices = [this_edge_positions.index(pos) for pos in target_positions if pos in this_edge_positions]
+
+
+            # Iterate over all matched phasings for the edge
+            for matchp in matched_phasings.keys():
+                matched_phasings_np = str_2_phas_1(matchp, ploidy)
+
+                for permuted_key in itertools.permutations(matched_phasings_np):
+                    permuted_key_np = np.array(permuted_key)
+                    # print(permuted_key_np)
+                    # Check fixed positions match
+                    if not np.array_equal(fixed_values, permuted_key_np[:, fixed_positions_indices]):
+                        continue
+
+                    # Check if rows match a permutation of the target node phasing
+                    if not any(
+                        np.array_equal(permuted_key_np[:, target_positions_indices], perm)
+                        for perm in target_phasing_permutations):
+                        continue
+                    
+                    # Flatten the array and convert to tuple for hashable representation
+                    flattened_key = tuple(permuted_key_np.flatten())
+
+                    # Skip if the combination is already processed
+                    if flattened_key in combination_set:
+                        continue
+
+                    # Compute likelihood for the valid permutation
+                    this_phas_weight = 0
+                    for indc, this_po, obs in match_reads:
+                        # Find shared indices between observed positions and the current phasing array
+                        shared_indices = [this_edge_positions.index(pos) for pos in this_po if pos in this_edge_positions]
+
+                        # Compute the likelihood for the shared positions
+                        this_phas_read_weight = compute_likelihood_generalized_plus(
+                            observed=np.array(obs),
+                            phasing=permuted_key_np,
+                            obs_pos=indc,            # Observed indices in the read
+                            phas_pos=shared_indices, # Indices in the phasing array
+                            error_rate=config.error_rate
+                        )
+                        this_phas_weight += this_phas_read_weight
+
+                    combination_set.add(flattened_key)  # Add to set for future lookup
+
+                    # Store the valid combination and its likelihood
+                    all_combinations[source_node].append(permuted_key_np)
+                    probabilities[source_node].append(this_phas_weight)
+
+    return all_combinations, probabilities
+
+
+def compute_candidate_phasings_target_based(
+    selected_position, relevant_edges, phased_positions, transitions_dict_extra,
+    samples_brief, ploidy, predicted_haplotypes, config, fragment_model
+):
+    """
+    Compute candidate phasings and probabilities for nodes connected to the selected position.
+
+    Parameters:
+        selected_position (int): The position to be phased.
+        relevant_edges (list): Edges connected to the selected position.
+        phased_positions (set): Positions already phased.
+        transitions_dict_extra (dict): Contains phasing information for edges.
+        samples_brief (dict): Phasing samples for nodes.
+        ploidy (int): Ploidy level.
+        predicted_haplotypes (pd.DataFrame): Current phased haplotypes.
+        config: Configuration object (e.g., error rate).
+        fragment_model: Contains fragment information.
+
+    Returns:
+        dict: Candidate phasings for each node (keys are nodes, values are arrays of phasings).
+        dict: Probabilities for each phasing (keys are nodes, values are lists of probabilities).
+    """
+    candidate_phasings = {}
+    probabilities = {}
+
+    # Find nodes containing the selected position
+    target_nodes = {edge[1] for edge in relevant_edges if str(selected_position) in edge[1].split('-')}
+
+    # Collect all positions involved in the relevant edges
+    all_positions = sorted(set(
+        int(pos) for edge in relevant_edges for node in edge for pos in node.split('-')
+    ))
+
+    for target_node in target_nodes:
+        # Initialize candidate lists for the target node
+        candidate_phasings[target_node] = []
+        probabilities[target_node] = []
+
+        # Reset combination_set for this target node
+        combination_set = set()
+
+        # Get all edges connected to the target node
+        incoming_edges = [edge for edge in relevant_edges if edge[1] == target_node or edge[0] == target_node]
+
+        for edge in incoming_edges:
+            source, target = edge if edge[1] == target_node else edge[::-1]
+            edge_label = f"{source}--{target}"
+
+            if edge_label not in transitions_dict_extra:
+                continue
+
+            edge_phasings = transitions_dict_extra[edge_label]
+            matched_phasings = None
+            for key, value in edge_phasings.items():
+                if (
+                    value["source_phasing"] == samples_brief[source] and
+                    value["target_phasing"] == samples_brief[target]
+                ):
+                    matched_phasings = value["matched_phasings"]
+                    break
+
+            if not matched_phasings:
+                continue
+
+            # Compute positions and values specific to this edge
+            this_edge_positions = sorted(set(int(pos) for part in [source, target] for pos in part.split('-')))
+            fixed_positions = [pos for pos in this_edge_positions if pos != selected_position and pos in phased_positions]
+            fixed_positions_indices = [this_edge_positions.index(pos) for pos in fixed_positions]
+            fixed_values = predicted_haplotypes.loc[:, [pos - 1 for pos in fixed_positions]].values
+
+            # Retrieve matching reads for all positions in these edges
+            match_reads = get_matching_reads_for_positions(this_edge_positions, fragment_model.fragment_list)
+
+            # Iterate over matched phasings for this edge
+            for matchp in matched_phasings.keys():
+                matched_phasings_np = str_2_phas_1(matchp, ploidy)
+
+                for permuted_key in itertools.permutations(matched_phasings_np):
+                    permuted_key_np = np.array(permuted_key)
+
+                    # Ensure fixed positions match for this edge
+                    if not np.array_equal(fixed_values, permuted_key_np[:, fixed_positions_indices]):
+                        continue
+
+                    # Ensure at least one permutation of the target phasing matches
+                    target_positions_indices = [
+                        all_positions.index(pos) for pos in [int(i) for i in target.split('-')]
+                    ]
+                    target_phasing = str_2_phas_1(samples_brief[target], ploidy)
+                    target_phasing_permutations = np.array(list(itertools.permutations(target_phasing)))
+                    if not any(
+                        np.array_equal(permuted_key_np[:, target_positions_indices], perm)
+                        for perm in target_phasing_permutations
+                    ):
+                        continue
+
+                    # Create a full array with NaN for all positions
+                    aligned_key_np = np.full((ploidy, len(all_positions)), np.nan)
+                    this_edge_indices = [all_positions.index(pos) for pos in this_edge_positions]
+                    aligned_key_np[:, this_edge_indices] = permuted_key_np
+
+                    # Flatten and deduplicate
+                    flattened_key = tuple(aligned_key_np.flatten())
+                    if flattened_key in combination_set:
+                        continue
+
+                    # Compute likelihood
+                    this_phas_weight = 0
+                    for indc, this_po, obs in match_reads:
+                        shared_indices = [all_positions.index(pos) for pos in this_po if pos in all_positions]
+                        this_phas_read_weight = compute_likelihood_generalized_plus(
+                            observed=np.array(obs),
+                            phasing=aligned_key_np,
+                            obs_pos=indc,
+                            phas_pos=shared_indices,
+                            error_rate=config.error_rate
+                        )
+                        this_phas_weight += this_phas_read_weight
+
+                    # Store valid phasing and likelihood
+                    candidate_phasings[target_node].append(aligned_key_np)
+                    probabilities[target_node].append(this_phas_weight)
+                    combination_set.add(flattened_key)
+
+    return candidate_phasings, probabilities
+
+
+def compute_candidate_phasings(
+    selected_position, relevant_edges, phased_positions, transitions_dict_extra,
+    samples_brief, ploidy, predicted_haplotypes, config, fragment_model
+):
+    """
+    Compute candidate phasings and probabilities for nodes connected to the selected position.
+
+    Parameters:
+        selected_position (int): The position to be phased.
+        relevant_edges (list): Edges connected to the selected position.
+        phased_positions (set): Positions already phased.
+        transitions_dict_extra (dict): Contains phasing information for edges.
+        samples_brief (dict): Phasing samples for nodes.
+        ploidy (int): Ploidy level.
+        predicted_haplotypes (pd.DataFrame): Current phased haplotypes.
+        config: Configuration object (e.g., error rate).
+        fragment_model: Contains fragment information.
+
+    Returns:
+        list: All candidate phasings (NumPy arrays of uniform size).
+        list: Probabilities associated with each candidate phasing.
+    """
+    all_combinations = []
+    all_probabilities = []
+    candidate_counts = []
+    # Collect all positions involved in the relevant edges
+    all_positions = sorted(set(
+        int(pos) for edge in relevant_edges for node in edge for pos in node.split('-')
+    ))
+
+    # Reset combination_set for deduplication across all edges
+    combination_set = set()
+
+    for edge in relevant_edges:
+        source, target = edge
+        edge_label = f"{source}--{target}"
+
+        if edge_label not in transitions_dict_extra:
+            continue
+
+        edge_phasings = transitions_dict_extra[edge_label]
+        matched_phasings = None
+        for key, value in edge_phasings.items():
+            if (
+                value["source_phasing"] == samples_brief[source] and
+                value["target_phasing"] == samples_brief[target]
+            ):
+                matched_phasings = value["matched_phasings"]
+                break
+
+        if not matched_phasings:
+            continue
+
+        # Compute positions and values specific to this edge
+        this_edge_positions = sorted(set(int(pos) for part in [source, target] for pos in part.split('-')))
+        fixed_positions = [pos for pos in this_edge_positions if pos != selected_position and pos in phased_positions]
+        fixed_positions_indices = [this_edge_positions.index(pos) for pos in fixed_positions]
+        fixed_values = predicted_haplotypes.loc[:, [pos - 1 for pos in fixed_positions]].values
+
+        # Precompute target phasing permutations (fixed for the edge)
+        target_positions_indices = [
+            this_edge_positions.index(pos) for pos in [int(i) for i in target.split('-')] if pos in this_edge_positions
+        ]
+        target_phasing = str_2_phas_1(samples_brief[target], ploidy)
+        target_phasing_permutations = np.array(list(itertools.permutations(target_phasing)))
+
+        # Retrieve matching reads for all positions in these edges
+        match_reads = get_matching_reads_for_positions(this_edge_positions, fragment_model.fragment_list)
+
+        # Iterate over matched phasings for this edge
+        for matchp in matched_phasings.keys():
+            matched_phasings_np = str_2_phas_1(matchp, ploidy)
+
+            for permuted_key in itertools.permutations(matched_phasings_np):
+                permuted_key_np = np.array(permuted_key)
+
+                # Ensure fixed positions match for this edge
+                if not np.array_equal(fixed_values, permuted_key_np[:, fixed_positions_indices]):
+                    continue
+
+                # Ensure at least one permutation of the target phasing matches
+                if not any(
+                    np.array_equal(permuted_key_np[:, target_positions_indices], perm)
+                    for perm in target_phasing_permutations
+                ):
+                    continue
+
+                # Compute likelihood
+                this_phas_weight = 0
+                for indc, this_po, obs in match_reads:
+                    shared_indices = [this_edge_positions.index(pos) for pos in this_po if pos in this_edge_positions]
+                    this_phas_read_weight = compute_likelihood_generalized_plus(
+                        observed=np.array(obs),
+                        phasing=permuted_key_np,
+                        obs_pos=indc,
+                        phas_pos=shared_indices,
+                        error_rate=config.error_rate
+                    )
+                    this_phas_weight += this_phas_read_weight
+
+                # Create a full array with NaN for all positions
+                aligned_key_np = np.full((ploidy, len(all_positions)), np.nan)
+
+                # Fill positions in the current edge
+                this_edge_indices = [all_positions.index(pos) for pos in this_edge_positions]
+                aligned_key_np[:, this_edge_indices] = permuted_key_np
+
+                # Fill remaining columns with values from predicted_haplotypes
+                remaining_positions = [pos for pos in all_positions if pos not in this_edge_positions]
+                for pos in remaining_positions:
+                    if pos in phased_positions:
+                        col_index = all_positions.index(pos)
+                        aligned_key_np[:, col_index] = predicted_haplotypes.loc[:, pos - 1].values
+
+                # Flatten and deduplicate
+                flattened_key = tuple(aligned_key_np.flatten())
+                if flattened_key in combination_set:
+                    continue
+
+                # Store valid phasing and likelihood
+                all_combinations.append(aligned_key_np)
+                all_probabilities.append(this_phas_weight)
+                combination_set.add(flattened_key)
+
+    # Count how many target nodes match each candidate
+    for candidate in all_combinations:
+        count = 0
+        for edge in relevant_edges:
+            target = edge[1]
+            target_positions = [int(pos) for pos in target.split('-')]
+            target_indices = [all_positions.index(pos) for pos in target_positions]
+            target_phasing = str_2_phas_1(samples_brief[target], ploidy)
+            target_phasing_permutations = np.array(list(itertools.permutations(target_phasing)))
+            if any(
+                np.array_equal(candidate[:, target_indices], perm)
+                for perm in target_phasing_permutations
+            ):
+                count += 1
+        candidate_counts.append(count)
+
+    return all_combinations, all_probabilities, candidate_counts, all_positions
+
+
+def select_best_candidate(candidates, prioritize="counts"):
+    """
+    Select the best candidate based on the chosen priority (counts or probabilities).
+    
+    Parameters:
+        candidates (list): List of tuples (candidate_array, probability, count).
+        prioritize (str): Primary criterion to prioritize ("counts" or "probabilities").
+    
+    Returns:
+        tuple: The best candidate (candidate_array, probability, count).
+    """
+    if prioritize == "counts":
+        # Sort by count first, then probability
+        candidates.sort(key=lambda x: (x[2], x[1]), reverse=True)
+    elif prioritize == "probabilities":
+        # Sort by probability first, then count
+        candidates.sort(key=lambda x: (x[1], x[2]), reverse=True)
+    else:
+        raise ValueError("Invalid priority. Choose 'counts' or 'probabilities'.")
+
+    # Find all candidates tied for the best criteria
+    best_candidates = [
+        c for c in candidates
+        if (c[2] == candidates[0][2] and c[1] == candidates[0][1])
+    ]
+
+    # Pick randomly among tied candidates
+    return random.choice(best_candidates)
+
+
+
+def predict_haplotypes_old(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config):
     samples_brief = {}
     for t in samples.keys():
         for nn in samples[t].keys():
@@ -1252,6 +1672,136 @@ def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_mo
     return predicted_haplotypes
 
 
+def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config):
+    samples_brief = {}
+    for t in samples.keys():
+        for nn in samples[t].keys():
+            if nn not in samples_brief.keys():
+                samples_brief[nn] = samples[t][nn]
+                # samples_brief.update({nn: samples[t][nn]})
+
+    sorted_nodes = sort_nodes(nodes)
+    genotype_df = pd.read_csv(genotype_path).T
+    # positions = genotype_df.columns + 1 
+    predicted_haplotypes = pd.DataFrame(index=['haplotype_'+str(p+1) for p in range(ploidy)], columns=genotype_df.columns)
+
+    # edges_names = list(transitions_dict.keys())
+
+    # Initial sets
+    phased_nodes = set()   # Set to store phased nodes
+    phased_positions = set()  # Set to store phased positions
+    unphased_nodes = set(nodes)  # Initially all nodes are unphased
+    unphased_positions = set(int(pos) for node in nodes for pos in node.split('-'))  # Positions
+
+    # Step 1: Start with the first node
+    first_node = sorted_nodes[0]
+
+    # fill the poss - 1 of the df
+    poss = sorted(list(set([int(ss) for ss in first_node.split('-')]))) # only this node
+    poss = [p - 1 for p in poss]
+
+    first_node_sample = samples_brief[first_node]
+    first_sample_np = str_2_phas_1(first_node_sample, ploidy)
+
+    predicted_haplotypes.loc[:, poss] = first_sample_np
+    
+
+    phased_nodes.add(first_node)
+    unphased_nodes.remove(first_node)
+    pos1, pos2 = map(int, first_node.split('-'))
+    phased_positions.update([pos1, pos2])
+    unphased_positions -= {pos1, pos2}
+
+    while unphased_positions:
+        # print('unphased_positions:', unphased_positions)
+        # Step 2: Find neighbor nodes connected to phased nodes
+        neighbor_nodes = set()
+        for node1, node2 in edges:
+            if node1 in phased_nodes and node2 in unphased_nodes:
+                neighbor_nodes.add(node2)
+            elif node2 in phased_nodes and node1 in unphased_nodes:
+                neighbor_nodes.add(node1)
+
+        # Step 3: Count connections and store associated edges for unphased positions
+        position_connections = defaultdict(lambda: {"count": 0, "edges": []})
+        for node1, node2 in edges:
+            if (node1 in phased_nodes and node2 in neighbor_nodes) or (node2 in phased_nodes and node1 in neighbor_nodes):
+                for pos in map(int, node1.split('-') + node2.split('-')):
+                    if pos in unphased_positions:
+                        position_connections[pos]["count"] += 1
+                        position_connections[pos]["edges"].append((node1, node2))
+
+        # Step 4: Select the unphased position with the highest connections
+        selected_position = max(position_connections, key=lambda p: position_connections[p]["count"])
+        relevant_edges = position_connections[selected_position]["edges"]
+        # print('selected_position:', selected_position, '\nrelevant_edges:', relevant_edges)
+
+        #TODO: fill the selected_position - 1 of the df with correct order of rows
+        # collapsed_edges, collapsed_probs =  get_combinations_with_probabilities(phased_nodes, relevant_edges, transitions_dict_extra, samples_brief, ploidy, predicted_haplotypes, config, fragment_model)
+        # Compute candidates for the selected position
+        all_combinations, all_probabilities, candidate_counts, all_positions = compute_candidate_phasings(
+            selected_position, relevant_edges, phased_positions, transitions_dict_extra,
+            samples_brief, ploidy, predicted_haplotypes, config, fragment_model
+        )
+
+        # Select the best candidate
+        if all_combinations:
+            candidates = list(zip(all_combinations, all_probabilities, candidate_counts))
+            best_candidate = select_best_candidate(candidates, prioritize="counts")  # Change "counts" to "probabilities" if needed
+            best_combination = best_candidate[0]
+            best_probability = best_candidate[1]
+            best_count = best_candidate[2]
+
+            # print('best_probability:', best_probability, 'best_count:', best_count)
+            # Find the index of the unphased variant (selected_position) in all_positions
+            selected_position_index = all_positions.index(selected_position)
+
+            # Update the predicted haplotypes DataFrame
+
+
+            best_combination = best_combination.astype(int)
+            predicted_haplotypes.loc[:, selected_position - 1] = best_combination[:, selected_position_index]
+            # print('predicted_haplotypes:', predicted_haplotypes)
+
+            # print(f"Updated position {selected_position} with best candidate.")
+        else:
+            print(f"No valid candidates found for position {selected_position}.")
+            for edge in relevant_edges:
+                target_node = edge[1]
+                if str(selected_position) in target_node.split('-'):
+                    target_positions = [int(pos) for pos in target_node.split('-')]
+                    target_phasing = str_2_phas_1(samples_brief[target_node], ploidy)
+                    
+                    # Find the index of the selected position in target positions
+                    target_position_index = target_positions.index(selected_position)
+
+                    # Update the column for selected_position in the DataFrame
+                    predicted_haplotypes.loc[:, selected_position - 1] = target_phasing[:, target_position_index]
+
+                    # print(f"Updated position {selected_position} using target phasing from node {target_node}.")
+                    break
+
+        # Step 5: Add nodes containing the selected position to phased nodes
+        for edge in relevant_edges:
+            node1, node2 = edge
+            if node1 in neighbor_nodes:
+                phased_nodes.add(node1)
+                unphased_nodes.discard(node1)
+            if node2 in neighbor_nodes:
+                phased_nodes.add(node2)
+                unphased_nodes.discard(node2)
+
+        # Update phased positions and remove from unphased
+        phased_positions.add(selected_position)
+        unphased_positions.remove(selected_position)
+
+        # # Output the selected position and relevant edges for this iteration
+        # print(f"Selected position: {selected_position}")
+        # print(f"Relevant edges: {relevant_edges}")
+
+    # print("Phasing complete.")
+    return predicted_haplotypes
+
 
 def match_np(np1,np2):
     np1_cols = np.all(~np.isnan(np1), axis=0)
@@ -1336,101 +1886,102 @@ def topological_sort_and_get_parents(nodes, edges):
 
 # # Run an example
 # if __name__ == '__main__':
-# def main():
-#     # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
-#     # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
-#     frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/cov_10/frag/00.frag'
-#     ploidy= 3
-#     # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
-#     # genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
-#     genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/haplotypes.csv'
+def main():
+    # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
+    # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
+    frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/cov_10/frag/00.frag'
+    ploidy= 3
+    # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
+    # genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
+    genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/haplotypes.csv'
 
-#     class Args:
-#         def __init__(self):
-#             self.vcf_path = 'example/62_ID0.vcf'
-#             self.data_path = frag_path
-#             self.bam_path = 'example/example.bam'
-#             self.genotype_path = genotype_path
-#             self.ploidy = 3
-#             self.error_rate = 0.001
-#             self.epsilon = 0.0001
-#             self.output_path = 'output'
-#             self.root_dir = 'D:/UCONN/HaplOrbit'
-#             self.alleles = [0, 1]
+    class Args:
+        def __init__(self):
+            self.vcf_path = 'example/62_ID0.vcf'
+            self.data_path = frag_path
+            self.bam_path = 'example/example.bam'
+            self.genotype_path = genotype_path
+            self.ploidy = 3
+            self.error_rate = 0.001
+            self.epsilon = 0.0001
+            self.output_path = 'output'
+            self.root_dir = 'D:/UCONN/HaplOrbit'
+            self.alleles = [0, 1]
 
-#     # Create the mock args object
-#     args = Args()
+    # Create the mock args object
+    args = Args()
 
-#     # Initialize classes with parsed arguments
-#     input_handler = InputHandler(args)
+    # Initialize classes with parsed arguments
+    input_handler = InputHandler(args)
 
-#     config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+    config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
 
-#     fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
+    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
 
-#     fragment_model.construct(input_handler, config)
-#     print('Fragment Graph constructed.')
+    fragment_model.construct(input_handler, config)
+    print('Fragment Graph constructed.')
 
-#     e_labels = fragment_model.graph.edge_properties["e_label"]
-#     v_labels = fragment_model.graph.vertex_properties["v_label"]
-#     gt.graph_draw(fragment_model.graph, output_size=(500, 500), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=14,  
-#     edge_font_size=12)
+    e_labels = fragment_model.graph.edge_properties["e_label"]
+    v_labels = fragment_model.graph.vertex_properties["v_label"]
+    gt.graph_draw(fragment_model.graph, output_size=(500, 500), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=14,  
+    edge_font_size=12)
 
-#     fragment_model_v_label_reversed = fragment_model.v_label_reversed
+    fragment_model_v_label_reversed = fragment_model.v_label_reversed
 
-#     edges_map_fragment = {}
-#     for k in fragment_model.e_label_reversed.keys():
-#         edges_map_fragment[k] = [int(fragment_model.e_label_reversed[k].source()), int(fragment_model.e_label_reversed[k].target())]
-
-
-#     # create quotient graph
-#     quotient_g = QuotientGraph(fragment_model)
-#     quotient_g.construct(input_handler, config)
-
-#     e_labels_q = quotient_g.graph.edge_properties["e_label"]
-#     v_labels_q = quotient_g.graph.vertex_properties["v_label"]
-#     gt.graph_draw(quotient_g.graph, output_size=(500, 500), vertex_text=v_labels_q, edge_text=e_labels_q, vertex_font_size=14,  
-#     edge_font_size=12)
-
-#     quotient_g_v_label_reversed = quotient_g.v_label_reversed
-
-#     edges_map_quotient = {}
-#     for k in quotient_g.e_label_reversed.keys():
-#         edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
-
-#     transitions_dict, transitions_dict_extra = transition_matrices(quotient_g, edges_map_quotient, ploidy, fragment_model)
-#     emission_dict = emissions(ploidy, quotient_g, quotient_g_v_label_reversed, config.error_rate)
-
-#     nodes = list(emission_dict.keys())
-#     edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
-
-#     slices, interfaces =  assign_slices_and_interfaces(nodes, edges)
-
-#     assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, frag_path)
-
-#     forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path)
-
-#     backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path)
-
-#     # samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
-#     # samples = sample_states(slices, edges, forward_messages, transitions_dict)
-#     samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
-#     # samples_brief = {}
-#     # for t in samples.keys():
-#     #     for nn in samples[t].keys():
-#     #         if nn not in samples_brief.keys():
-#     #             samples_brief[nn] = samples[t][nn]
-
-#     predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config)
-#     print('Predicted Haplotypes:\n', predicted_haplotypes)
-#     print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
-
-#     predicted_haplotypes_np = predicted_haplotypes.to_numpy()
-#     true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()
+    edges_map_fragment = {}
+    for k in fragment_model.e_label_reversed.keys():
+        edges_map_fragment[k] = [int(fragment_model.e_label_reversed[k].source()), int(fragment_model.e_label_reversed[k].target())]
 
 
-#     vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes)
-#     accuracy, best_permutation = calculate_accuracy(predicted_haplotypes_np, true_haplotypes)
-#     mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes)
-#     mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
-#     print('Vector Error Rate:', vector_error_rate, '\nVector Error:', vector_error, '\nAccuracy:', accuracy, '\nMismatch Error:', mismatch_error, '\nMEC:', mec_)
+    # create quotient graph
+    quotient_g = QuotientGraph(fragment_model)
+    quotient_g.construct(input_handler, config)
+
+    e_labels_q = quotient_g.graph.edge_properties["e_label"]
+    v_labels_q = quotient_g.graph.vertex_properties["v_label"]
+    gt.graph_draw(quotient_g.graph, output_size=(500, 500), vertex_text=v_labels_q, edge_text=e_labels_q, vertex_font_size=14,  
+    edge_font_size=12)
+
+    quotient_g_v_label_reversed = quotient_g.v_label_reversed
+
+    edges_map_quotient = {}
+    for k in quotient_g.e_label_reversed.keys():
+        edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
+
+    transitions_dict, transitions_dict_extra = transition_matrices(quotient_g, edges_map_quotient, ploidy, fragment_model)
+    emission_dict = emissions(ploidy, quotient_g, quotient_g_v_label_reversed, config.error_rate)
+
+    nodes = list(emission_dict.keys())
+    edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
+
+    slices, interfaces =  assign_slices_and_interfaces(nodes, edges)
+
+    assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, frag_path)
+
+    forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path)
+
+    # backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, frag_path)
+
+    # samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
+    # samples = sample_states(slices, edges, forward_messages, transitions_dict)
+    samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
+    # samples_brief = {}
+    # for t in samples.keys():
+    #     for nn in samples[t].keys():
+    #         if nn not in samples_brief.keys():
+    #             samples_brief[nn] = samples[t][nn]
+
+    # predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config)
+    predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config)
+    print('Predicted Haplotypes:\n', predicted_haplotypes)
+    print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
+
+    predicted_haplotypes_np = predicted_haplotypes.to_numpy()
+    true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()
+
+
+    vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes)
+    accuracy, best_permutation = calculate_accuracy(predicted_haplotypes_np, true_haplotypes)
+    mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes)
+    mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
+    print('Vector Error Rate:', vector_error_rate, '\nVector Error:', vector_error, '\nAccuracy:', accuracy, '\nMismatch Error:', mismatch_error, '\nMEC:', mec_)
