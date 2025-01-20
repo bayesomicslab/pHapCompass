@@ -4,6 +4,7 @@ import random
 import pysam
 import sys
 import numpy as np
+sys.path.append('/home/mok23003/BML/HaplOrbit')
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import pickle
 # from ..generate_simulated_graphs import generate_quotient_graph
