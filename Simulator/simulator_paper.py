@@ -1231,7 +1231,7 @@ def make_inputs_for_run_count(simulator):
 
 
 def make_inputs_for_run_likelihood(simulator):
-    simulator.contig_lens = [10]
+    simulator.contig_lens = [100]
     inputs = []
     for contig_len in simulator.contig_lens:
         for ploidy in simulator.ploidies:
@@ -2006,8 +2006,8 @@ def simulate_awri():
         }
 
     # simulator = SimulatorAWRI(xanadu_config_AWRI)
-    # simulator = SimulatorAWRI(beagle_config_AWRI)
-    simulator = SimulatorAWRI(server3_config_AWRI)
+    simulator = SimulatorAWRI(beagle_config_AWRI)
+    # simulator = SimulatorAWRI(server3_config_AWRI)
     # simulator.generate_genomes_fasta()
     # # simulator.simulate()
     
@@ -2016,15 +2016,15 @@ def simulate_awri():
     # pool = Pool(30)
     # pool.map(run_FFBS_quotient, next_inputs)
 
-    next_inputs = make_inputs_for_run_count(simulator)
-    print('number of inputs:', len(next_inputs))
-    pool = Pool(30)
-    pool.map(run_FFBS_quotient_count, next_inputs)
-
-    # next_inputs = make_inputs_for_run_likelihood(simulator)
+    # next_inputs = make_inputs_for_run_count(simulator)
     # print('number of inputs:', len(next_inputs))
     # pool = Pool(30)
-    # pool.map(run_FFBS_quotient_likelihood, next_inputs)
+    # pool.map(run_FFBS_quotient_count, next_inputs)
+
+    next_inputs = make_inputs_for_run_likelihood(simulator)
+    print('number of inputs:', len(next_inputs))
+    pool = Pool(40)
+    pool.map(run_FFBS_quotient_likelihood, next_inputs)
 
 if __name__ == '__main__':
 
