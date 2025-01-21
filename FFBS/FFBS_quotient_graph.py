@@ -218,7 +218,7 @@ def generate_all_possible_emissions(unique_node_lengths):
     return all_emissions
 
 
-def transition_matrices(quotient_g, edges_map_quotient, ploidy, fragment_model):
+def transition_matrices(quotient_g, edges_map_quotient, ploidy, fragment_model, config):
     transitions_dict = {}
     transitions_dict_extra = {}
     for edge in edges_map_quotient.keys():
@@ -1297,7 +1297,7 @@ def compute_candidate_phasings(
     return all_combinations, all_probabilities, candidate_counts, all_positions
 
 
-def select_best_candidate(candidates, prioritize="counts"):
+def select_best_candidate(candidates, prioritize="probabilities"):
     """
     Select the best candidate based on the chosen priority (counts or probabilities).
     
@@ -1307,6 +1307,7 @@ def select_best_candidate(candidates, prioritize="counts"):
     
     Returns:
         tuple: The best candidate (candidate_array, probability, count).
+        candidates = [('a', 0.9, 5), ('b',0.9, 5), ('c',0.9, 4), ('d',0.8, 10), ('e',0.9, 10), ('f',0.9, 10)]
     """
     if prioritize == "counts":
         # Sort by count first, then probability
@@ -1317,362 +1318,366 @@ def select_best_candidate(candidates, prioritize="counts"):
     else:
         raise ValueError("Invalid priority. Choose 'counts' or 'probabilities'.")
 
-    # Find all candidates tied for the best criteria
-    best_candidates = [
-        c for c in candidates
-        if (c[2] == candidates[0][2] and c[1] == candidates[0][1])
-    ]
+    # Get the best criteria based on the priority
+    best_criteria = candidates[0][1 if prioritize == "probabilities" else 2]
+    
+    # Filter candidates with the best primary criterion
+    filtered_candidates = [c for c in candidates if c[1 if prioritize == "probabilities" else 2] == best_criteria]
+    
+    # If there are still ties, use the secondary criterion to filter
+    if len(filtered_candidates) > 1:
+        secondary_criteria = filtered_candidates[0][2 if prioritize == "probabilities" else 1]
+        filtered_candidates = [c for c in filtered_candidates if c[2 if prioritize == "probabilities" else 1] == secondary_criteria]
+    
+    # If there are still ties, pick one randomly
+    return random.choice(filtered_candidates)
 
-    # Pick randomly among tied candidates
-    return random.choice(best_candidates)
 
+# def predict_haplotypes_old_old(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config):
+#     samples_brief = {}
+#     for t in samples.keys():
+#         for nn in samples[t].keys():
+#             if nn not in samples_brief.keys():
+#                 samples_brief[nn] = samples[t][nn]
+#                 # samples_brief.update({nn: samples[t][nn]})
 
+#     sorted_nodes = sort_nodes(nodes)
+#     genotype_df = pd.read_csv(genotype_path).T
+#     # positions = genotype_df.columns + 1 
+#     predicted_haplotypes = pd.DataFrame(index=['haplotype_'+str(p+1) for p in range(ploidy)], columns=genotype_df.columns)
 
-def predict_haplotypes_old(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config):
-    samples_brief = {}
-    for t in samples.keys():
-        for nn in samples[t].keys():
-            if nn not in samples_brief.keys():
-                samples_brief[nn] = samples[t][nn]
-                # samples_brief.update({nn: samples[t][nn]})
+#     # edges_names = list(transitions_dict.keys())
 
-    sorted_nodes = sort_nodes(nodes)
-    genotype_df = pd.read_csv(genotype_path).T
-    # positions = genotype_df.columns + 1 
-    predicted_haplotypes = pd.DataFrame(index=['haplotype_'+str(p+1) for p in range(ploidy)], columns=genotype_df.columns)
+#     # Initial sets
+#     phased_nodes = set()   # Set to store phased nodes
+#     phased_positions = set()  # Set to store phased positions
+#     unphased_nodes = set(nodes)  # Initially all nodes are unphased
+#     unphased_positions = set(int(pos) for node in nodes for pos in node.split('-'))  # Positions
 
-    # edges_names = list(transitions_dict.keys())
+#     # Step 1: Start with the first node
+#     first_node = sorted_nodes[0]
 
-    # Initial sets
-    phased_nodes = set()   # Set to store phased nodes
-    phased_positions = set()  # Set to store phased positions
-    unphased_nodes = set(nodes)  # Initially all nodes are unphased
-    unphased_positions = set(int(pos) for node in nodes for pos in node.split('-'))  # Positions
+#     # fill the poss - 1 of the df
+#     poss = sorted(list(set([int(ss) for ss in first_node.split('-')]))) # only this node
+#     poss = [p - 1 for p in poss]
 
-    # Step 1: Start with the first node
-    first_node = sorted_nodes[0]
+#     first_node_sample = samples_brief[first_node]
+#     first_sample_np = str_2_phas_1(first_node_sample, ploidy)
 
-    # fill the poss - 1 of the df
-    poss = sorted(list(set([int(ss) for ss in first_node.split('-')]))) # only this node
-    poss = [p - 1 for p in poss]
-
-    first_node_sample = samples_brief[first_node]
-    first_sample_np = str_2_phas_1(first_node_sample, ploidy)
-
-    predicted_haplotypes.loc[:, poss] = first_sample_np
+#     predicted_haplotypes.loc[:, poss] = first_sample_np
     
 
-    phased_nodes.add(first_node)
-    unphased_nodes.remove(first_node)
-    pos1, pos2 = map(int, first_node.split('-'))
-    phased_positions.update([pos1, pos2])
-    unphased_positions -= {pos1, pos2}
+#     phased_nodes.add(first_node)
+#     unphased_nodes.remove(first_node)
+#     pos1, pos2 = map(int, first_node.split('-'))
+#     phased_positions.update([pos1, pos2])
+#     unphased_positions -= {pos1, pos2}
 
-    while unphased_positions:
-        # print('unphased_positions:', unphased_positions)
-        # Step 2: Find neighbor nodes connected to phased nodes
-        neighbor_nodes = set()
-        for node1, node2 in edges:
-            if node1 in phased_nodes and node2 in unphased_nodes:
-                neighbor_nodes.add(node2)
-            elif node2 in phased_nodes and node1 in unphased_nodes:
-                neighbor_nodes.add(node1)
+#     while unphased_positions:
+#         # print('unphased_positions:', unphased_positions)
+#         # Step 2: Find neighbor nodes connected to phased nodes
+#         neighbor_nodes = set()
+#         for node1, node2 in edges:
+#             if node1 in phased_nodes and node2 in unphased_nodes:
+#                 neighbor_nodes.add(node2)
+#             elif node2 in phased_nodes and node1 in unphased_nodes:
+#                 neighbor_nodes.add(node1)
 
-        # Step 3: Count connections and store associated edges for unphased positions
-        position_connections = defaultdict(lambda: {"count": 0, "edges": []})
-        for node1, node2 in edges:
-            if (node1 in phased_nodes and node2 in neighbor_nodes) or (node2 in phased_nodes and node1 in neighbor_nodes):
-                for pos in map(int, node1.split('-') + node2.split('-')):
-                    if pos in unphased_positions:
-                        position_connections[pos]["count"] += 1
-                        position_connections[pos]["edges"].append((node1, node2))
+#         # Step 3: Count connections and store associated edges for unphased positions
+#         position_connections = defaultdict(lambda: {"count": 0, "edges": []})
+#         for node1, node2 in edges:
+#             if (node1 in phased_nodes and node2 in neighbor_nodes) or (node2 in phased_nodes and node1 in neighbor_nodes):
+#                 for pos in map(int, node1.split('-') + node2.split('-')):
+#                     if pos in unphased_positions:
+#                         position_connections[pos]["count"] += 1
+#                         position_connections[pos]["edges"].append((node1, node2))
 
-        # Step 4: Select the unphased position with the highest connections
-        selected_position = max(position_connections, key=lambda p: position_connections[p]["count"])
-        relevant_edges = position_connections[selected_position]["edges"]
-        # print('selected_position:', selected_position, '\nrelevant_edges:', relevant_edges)
+#         # Step 4: Select the unphased position with the highest connections
+#         selected_position = max(position_connections, key=lambda p: position_connections[p]["count"])
+#         relevant_edges = position_connections[selected_position]["edges"]
+#         # print('selected_position:', selected_position, '\nrelevant_edges:', relevant_edges)
 
-        #TODO: fill the selected_position - 1 of the df with correct order of rows
-        all_poss = []
-        for edge in relevant_edges:
-            source, target = edge
-            all_poss.extend([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])
-        all_poss = sorted(list(set(all_poss))) 
+#         #TODO: fill the selected_position - 1 of the df with correct order of rows
+#         all_poss = []
+#         for edge in relevant_edges:
+#             source, target = edge
+#             all_poss.extend([int(ss) for ss in source.split('-')] + [int(tt) for tt in target.split('-')])
+#         all_poss = sorted(list(set(all_poss))) 
         
-        fixed_positions = [p for p in all_poss if p in phased_positions]
-        fixed_positions_df = [p - 1 for p in fixed_positions]
-        # existing_indices = [all_poss_id.index(p) for p in fixed_positions_df]
-        fixed_values = predicted_haplotypes.loc[:, fixed_positions_df].values
-        # sel_pos_index = all_poss_id.index(selected_position - 1)
-        fixed_positions_ids = [all_poss.index(p) for p in fixed_positions]
-        unphased_position_id = all_poss.index(selected_position)
-        match_reads = get_matching_reads_for_positions([int(i) for i in all_poss], fragment_model.fragment_list)
+#         fixed_positions = [p for p in all_poss if p in phased_positions]
+#         fixed_positions_df = [p - 1 for p in fixed_positions]
+#         # existing_indices = [all_poss_id.index(p) for p in fixed_positions_df]
+#         fixed_values = predicted_haplotypes.loc[:, fixed_positions_df].values
+#         # sel_pos_index = all_poss_id.index(selected_position - 1)
+#         fixed_positions_ids = [all_poss.index(p) for p in fixed_positions]
+#         unphased_position_id = all_poss.index(selected_position)
+#         match_reads = get_matching_reads_for_positions([int(i) for i in all_poss], fragment_model.fragment_list)
 
-        matched_phasings_str = {}
-        matched_phasings_all_conn = {}
-        # temp_np = np.empty((ploidy, len(all_poss)))
-        # temp_np = np.full((ploidy, len(all_poss)), np.nan)
-        # min_pos = all_poss[0]
-        # max_pos = all_poss[-1]
+#         matched_phasings_str = {}
+#         matched_phasings_all_conn = {}
+#         # temp_np = np.empty((ploidy, len(all_poss)))
+#         # temp_np = np.full((ploidy, len(all_poss)), np.nan)
+#         # min_pos = all_poss[0]
+#         # max_pos = all_poss[-1]
         
-        # edges_as_sets = [set(edge[0].split('-') + edge[1].split('-')) for edge in relevant_edges]
-        all_temp_np = []
-        # Find shared positions between edges
-        # shared_positions = [p for p in [int(i) for i in list(set.intersection(*edges_as_sets))] if p in phased_positions]
+#         # edges_as_sets = [set(edge[0].split('-') + edge[1].split('-')) for edge in relevant_edges]
+#         all_temp_np = []
+#         # Find shared positions between edges
+#         # shared_positions = [p for p in [int(i) for i in list(set.intersection(*edges_as_sets))] if p in phased_positions]
 
-        if len(relevant_edges) == 1:
-            edge = relevant_edges[0]
-            source, target = edge
-            edge_label = source + '--' + target
-            matched_phasings_all_conn[edge_label] = []
-            this_edge_positions = sorted(set(int(x) for part in edge_label.split('--') for x in part.split('-')))
-            this_edge_positions_df = [p - 1 for p in this_edge_positions]
+#         if len(relevant_edges) == 1:
+#             edge = relevant_edges[0]
+#             source, target = edge
+#             edge_label = source + '--' + target
+#             matched_phasings_all_conn[edge_label] = []
+#             this_edge_positions = sorted(set(int(x) for part in edge_label.split('--') for x in part.split('-')))
+#             this_edge_positions_df = [p - 1 for p in this_edge_positions]
 
-            fixed_positions_edge = [p for p in this_edge_positions if p in all_poss and p in phased_positions] # oonayee ke dar all_poss hastan va phased hastan 
-            fixed_positions_edge_df = [p - 1 for p in fixed_positions_edge]
+#             fixed_positions_edge = [p for p in this_edge_positions if p in all_poss and p in phased_positions] # oonayee ke dar all_poss hastan va phased hastan 
+#             fixed_positions_edge_df = [p - 1 for p in fixed_positions_edge]
 
-            fixed_ids_this_poss = [this_edge_positions.index(p) for p in fixed_positions_edge] # index of the fixed positions in the edge
-            this_edge_ind_in_all_poss = [all_poss.index(p) for p in this_edge_positions if p in phased_positions]
-            fixed_values_edge = predicted_haplotypes.loc[:, fixed_positions_edge_df].values
+#             fixed_ids_this_poss = [this_edge_positions.index(p) for p in fixed_positions_edge] # index of the fixed positions in the edge
+#             this_edge_ind_in_all_poss = [all_poss.index(p) for p in this_edge_positions if p in phased_positions]
+#             fixed_values_edge = predicted_haplotypes.loc[:, fixed_positions_edge_df].values
 
-            edge_phasings = transitions_dict_extra[edge_label]
-            for key, value in edge_phasings.items():
-                if value['source_phasing'] == samples_brief[source] and value['target_phasing'] == samples_brief[target]:
-                    matched_phasings = value['matched_phasings']
-                    break
-            if matched_phasings:
-                # matched_phasings_all_conn[edge_label] = matched_phasings
-                # sampled_key = select_max_prob_key(probabilities)
-                for match in matched_phasings.keys():
-                    matched_phasings_np = str_2_phas_1(match, ploidy)
-                    # print(fixed_values_edge)
-                    correct_permuted = None
-                    for permuted_key in itertools.permutations(matched_phasings_np):
-                        permuted_key_np = np.array(permuted_key)
-                        # print(permuted_key_np[:, fixed_ids_this_poss], '\n', fixed_values_edge)
-                        # print('-----------------------')
-                        if np.array_equal(fixed_values_edge, permuted_key_np[:, fixed_ids_this_poss]):
-                            # print('oooooooooooooo')
-                            correct_permuted = permuted_key_np
-                            break
-                    temp_np = np.full((ploidy, len(all_poss)), np.nan)
-                    temp_np[:, this_edge_ind_in_all_poss] = fixed_values_edge
-                    # this_edge_temp_ids =  [p - min_pos for p in this_edge_positions]
-                    this_edge_temp_ids =  [all_poss.index(p) for p in this_edge_positions]
-                    temp_np[:, this_edge_temp_ids] = correct_permuted
-                    all_temp_np.append(temp_np)
-                    matched_phasings_all_conn[edge_label].append(temp_np)          
+#             edge_phasings = transitions_dict_extra[edge_label]
+#             for key, value in edge_phasings.items():
+#                 if value['source_phasing'] == samples_brief[source] and value['target_phasing'] == samples_brief[target]:
+#                     matched_phasings = value['matched_phasings']
+#                     break
+#             if matched_phasings:
+#                 # matched_phasings_all_conn[edge_label] = matched_phasings
+#                 # sampled_key = select_max_prob_key(probabilities)
+#                 for match in matched_phasings.keys():
+#                     matched_phasings_np = str_2_phas_1(match, ploidy)
+#                     # print(fixed_values_edge)
+#                     correct_permuted = None
+#                     for permuted_key in itertools.permutations(matched_phasings_np):
+#                         permuted_key_np = np.array(permuted_key)
+#                         # print(permuted_key_np[:, fixed_ids_this_poss], '\n', fixed_values_edge)
+#                         # print('-----------------------')
+#                         if np.array_equal(fixed_values_edge, permuted_key_np[:, fixed_ids_this_poss]):
+#                             # print('oooooooooooooo')
+#                             correct_permuted = permuted_key_np
+#                             break
+#                     temp_np = np.full((ploidy, len(all_poss)), np.nan)
+#                     temp_np[:, this_edge_ind_in_all_poss] = fixed_values_edge
+#                     # this_edge_temp_ids =  [p - min_pos for p in this_edge_positions]
+#                     this_edge_temp_ids =  [all_poss.index(p) for p in this_edge_positions]
+#                     temp_np[:, this_edge_temp_ids] = correct_permuted
+#                     all_temp_np.append(temp_np)
+#                     matched_phasings_all_conn[edge_label].append(temp_np)          
             
-            merged_nps = []
-            probs = []
-            for np1 in all_temp_np:
-                non_nan_ind = np.where(~np.isnan(np1[0]))[0]
-                this_phas_weight = 0
-                for indc, this_po, obs in match_reads:
-                    rd_poss_ids_in_all_poss = [all_poss.index(p) for p in this_po] # index in temp_np for reads
-                    shared_indices = sorted(set(rd_poss_ids_in_all_poss).intersection(set(non_nan_ind)))
-                    # [this_po.index(p) for p in shared_indices]
-                    # rd_poss_ids_in_this_edge = [this_edge_positions.index(p) for p in this_po]
-                    this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), np1, indc, shared_indices, config.error_rate)
-                    # wei += this_phas_read_weight
-                    this_phas_weight += this_phas_read_weight
-                merged_nps.append(np1)
-                probs.append(this_phas_weight)
-            # max_np = merged_nps[probs.index(max(probs))]
-            max_prob = max(probs)
-            max_indices = [i for i, p in enumerate(probs) if p == max_prob]
-            chosen_index = random.choice(max_indices)
-            max_np = merged_nps[chosen_index]
+#             merged_nps = []
+#             probs = []
+#             for np1 in all_temp_np:
+#                 non_nan_ind = np.where(~np.isnan(np1[0]))[0]
+#                 this_phas_weight = 0
+#                 for indc, this_po, obs in match_reads:
+#                     rd_poss_ids_in_all_poss = [all_poss.index(p) for p in this_po] # index in temp_np for reads
+#                     shared_indices = sorted(set(rd_poss_ids_in_all_poss).intersection(set(non_nan_ind)))
+#                     # [this_po.index(p) for p in shared_indices]
+#                     # rd_poss_ids_in_this_edge = [this_edge_positions.index(p) for p in this_po]
+#                     this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), np1, indc, shared_indices, config.error_rate)
+#                     # wei += this_phas_read_weight
+#                     this_phas_weight += this_phas_read_weight
+#                 merged_nps.append(np1)
+#                 probs.append(this_phas_weight)
+#             # max_np = merged_nps[probs.index(max(probs))]
+#             max_prob = max(probs)
+#             max_indices = [i for i, p in enumerate(probs) if p == max_prob]
+#             chosen_index = random.choice(max_indices)
+#             max_np = merged_nps[chosen_index]
 
-            correct_permuted = None
-            for permuted_key in itertools.permutations(max_np):
-                permuted_key_np = np.array(permuted_key)
-                if np.array_equal(fixed_values, permuted_key_np[:, fixed_positions_ids]):
-                    correct_permuted = permuted_key_np
-                    break
-            correct_permuted_int = correct_permuted.astype(int)
-            predicted_haplotypes.loc[:, selected_position - 1] = correct_permuted_int[:, unphased_position_id]
-
-
-        if len(relevant_edges) > 1:
-
-            for edge in relevant_edges:
-                # print('------------- edge:', edge)
-                source, target = edge
-                target_phasing = samples_brief[target]
-                edge_label = source + '--' + target
-                matched_phasings_all_conn[edge_label] = []
-                this_edge_positions = sorted(set(int(x) for part in edge_label.split('--') for x in part.split('-')))
-                this_edge_positions_df = [p - 1 for p in this_edge_positions]
-
-                fixed_positions_edge = [p for p in this_edge_positions if p in all_poss and p in phased_positions] # oonayee ke dar all_poss hastan va phased hastan 
-                fixed_positions_edge_df = [p - 1 for p in fixed_positions_edge]
-
-                fixed_ids_this_poss = [this_edge_positions.index(p) for p in fixed_positions_edge] # index of the fixed positions in the edge
-                this_edge_ind_in_all_poss = [all_poss.index(p) for p in this_edge_positions if p in phased_positions]
-                fixed_values_edge = predicted_haplotypes.loc[:, fixed_positions_edge_df].values
-
-                edge_phasings = transitions_dict_extra[edge_label]
-                for key, value in edge_phasings.items():
-                    if value['source_phasing'] == samples_brief[source] and value['target_phasing'] == samples_brief[target]:
-                        matched_phasings = value['matched_phasings']
-                        break
-                if matched_phasings:
-                    # matched_phasings_all_conn[edge_label] = matched_phasings
-                    # sampled_key = select_max_prob_key(probabilities)
-                    for match in matched_phasings.keys():
-                        matched_phasings_np = str_2_phas_1(match, ploidy)
-                        # print(fixed_values_edge)
-                        correct_permuted = None
-                        target_positions = [int(pos) for pos in target.split('-')]  # Extract positions of the target node
-                        target_positions_indices = [this_edge_positions.index(pos) for pos in target_positions]
-                        target_phasing_permutations = np.array(list(itertools.permutations(str_2_phas_1(target_phasing, ploidy))))
-
-                        # for permuted_key in itertools.permutations(matched_phasings_np):
-                        #     permuted_key_np = np.array(permuted_key)
-                        #     # print(permuted_key_np[:, fixed_ids_this_poss], '\n', fixed_values_edge)
-                        #     # print('-----------------------')
-                        #     if np.array_equal(fixed_values_edge, permuted_key_np[:, fixed_ids_this_poss]):
-                        #         # print('oooooooooooooo')
-                        #         correct_permuted = permuted_key_np
-                        #         break
-                        for permuted_key in itertools.permutations(matched_phasings_np):
-                            permuted_key_np = np.array(permuted_key)
-
-                            # Check fixed positions first
-                            if not np.array_equal(fixed_values_edge, permuted_key_np[:, fixed_ids_this_poss]):
-                                continue
-
-                            # Check if any permutation of target_phasing matches target positions
-                            if not any(
-                                np.array_equal(permuted_key_np[:, target_positions_indices], perm)
-                                for perm in target_phasing_permutations):
-                                continue
-
-                            # If both conditions are true, break with the valid permutation
-                            correct_permuted = permuted_key_np
-                            break
-
-                        temp_np = np.full((ploidy, len(all_poss)), np.nan)
-                        temp_np[:, this_edge_ind_in_all_poss] = fixed_values_edge
-                        # this_edge_temp_ids =  [p - min_pos for p in this_edge_positions]
-                        this_edge_temp_ids =  [all_poss.index(p) for p in this_edge_positions]
-                        temp_np[:, this_edge_temp_ids] = correct_permuted
-                        all_temp_np.append(temp_np)
-                        matched_phasings_all_conn[edge_label].append(temp_np)
-
-            # # candidate_phasings = list(itertools.product(*matched_phasings_all_conn.values()))
-            # candidate_phasings = list(itertools.combinations(matched_phasings_all_conn.values(), 2))
-
-            # Generate combinations of keys
-            key_combinations = itertools.combinations(matched_phasings_all_conn.keys(), 2)
-
-            # Generate combinations of NumPy arrays where each comes from a different key
-            candidate_phasings = []
-            for key1, key2 in key_combinations:
-                arrays1 = matched_phasings_all_conn[key1]
-                arrays2 = matched_phasings_all_conn[key2]
-                # Cartesian product of arrays from the two keys
-                candidate_phasings.extend(itertools.product(arrays1, arrays2))
+#             correct_permuted = None
+#             for permuted_key in itertools.permutations(max_np):
+#                 permuted_key_np = np.array(permuted_key)
+#                 if np.array_equal(fixed_values, permuted_key_np[:, fixed_positions_ids]):
+#                     correct_permuted = permuted_key_np
+#                     break
+#             correct_permuted_int = correct_permuted.astype(int)
+#             predicted_haplotypes.loc[:, selected_position - 1] = correct_permuted_int[:, unphased_position_id]
 
 
-            merged_nps = []
-            probs = []
-            # counter = 0
-            for np1, np2 in candidate_phasings:
-                if np.array_equal(np1, np2, equal_nan=True) and np.isnan(np1).any():
-                    # print('equal')
-                    continue
-                # print(counter)
-                # counter += 1
-                merge_list = match_np(np1, np2)
-                for this_merge in merge_list:
-                    # print(this_merge)
-                    valid_columns_merge = np.all(~np.isnan(this_merge), axis=0)  # Boolean mask of valid columns
-                    non_nan_ind_merge = np.where(valid_columns_merge)[0]  
-                    this_phas_weight = 0
-                    for indc, this_po, obs in match_reads:
+#         if len(relevant_edges) > 1:
+
+#             for edge in relevant_edges:
+#                 # print('------------- edge:', edge)
+#                 source, target = edge
+#                 target_phasing = samples_brief[target]
+#                 edge_label = source + '--' + target
+#                 matched_phasings_all_conn[edge_label] = []
+#                 this_edge_positions = sorted(set(int(x) for part in edge_label.split('--') for x in part.split('-')))
+#                 this_edge_positions_df = [p - 1 for p in this_edge_positions]
+
+#                 fixed_positions_edge = [p for p in this_edge_positions if p in all_poss and p in phased_positions] # oonayee ke dar all_poss hastan va phased hastan 
+#                 fixed_positions_edge_df = [p - 1 for p in fixed_positions_edge]
+
+#                 fixed_ids_this_poss = [this_edge_positions.index(p) for p in fixed_positions_edge] # index of the fixed positions in the edge
+#                 this_edge_ind_in_all_poss = [all_poss.index(p) for p in this_edge_positions if p in phased_positions]
+#                 fixed_values_edge = predicted_haplotypes.loc[:, fixed_positions_edge_df].values
+
+#                 edge_phasings = transitions_dict_extra[edge_label]
+#                 for key, value in edge_phasings.items():
+#                     if value['source_phasing'] == samples_brief[source] and value['target_phasing'] == samples_brief[target]:
+#                         matched_phasings = value['matched_phasings']
+#                         break
+#                 if matched_phasings:
+#                     # matched_phasings_all_conn[edge_label] = matched_phasings
+#                     # sampled_key = select_max_prob_key(probabilities)
+#                     for match in matched_phasings.keys():
+#                         matched_phasings_np = str_2_phas_1(match, ploidy)
+#                         # print(fixed_values_edge)
+#                         correct_permuted = None
+#                         target_positions = [int(pos) for pos in target.split('-')]  # Extract positions of the target node
+#                         target_positions_indices = [this_edge_positions.index(pos) for pos in target_positions]
+#                         target_phasing_permutations = np.array(list(itertools.permutations(str_2_phas_1(target_phasing, ploidy))))
+
+#                         # for permuted_key in itertools.permutations(matched_phasings_np):
+#                         #     permuted_key_np = np.array(permuted_key)
+#                         #     # print(permuted_key_np[:, fixed_ids_this_poss], '\n', fixed_values_edge)
+#                         #     # print('-----------------------')
+#                         #     if np.array_equal(fixed_values_edge, permuted_key_np[:, fixed_ids_this_poss]):
+#                         #         # print('oooooooooooooo')
+#                         #         correct_permuted = permuted_key_np
+#                         #         break
+#                         for permuted_key in itertools.permutations(matched_phasings_np):
+#                             permuted_key_np = np.array(permuted_key)
+
+#                             # Check fixed positions first
+#                             if not np.array_equal(fixed_values_edge, permuted_key_np[:, fixed_ids_this_poss]):
+#                                 continue
+
+#                             # Check if any permutation of target_phasing matches target positions
+#                             if not any(
+#                                 np.array_equal(permuted_key_np[:, target_positions_indices], perm)
+#                                 for perm in target_phasing_permutations):
+#                                 continue
+
+#                             # If both conditions are true, break with the valid permutation
+#                             correct_permuted = permuted_key_np
+#                             break
+
+#                         temp_np = np.full((ploidy, len(all_poss)), np.nan)
+#                         temp_np[:, this_edge_ind_in_all_poss] = fixed_values_edge
+#                         # this_edge_temp_ids =  [p - min_pos for p in this_edge_positions]
+#                         this_edge_temp_ids =  [all_poss.index(p) for p in this_edge_positions]
+#                         temp_np[:, this_edge_temp_ids] = correct_permuted
+#                         all_temp_np.append(temp_np)
+#                         matched_phasings_all_conn[edge_label].append(temp_np)
+
+#             # # candidate_phasings = list(itertools.product(*matched_phasings_all_conn.values()))
+#             # candidate_phasings = list(itertools.combinations(matched_phasings_all_conn.values(), 2))
+
+#             # Generate combinations of keys
+#             key_combinations = itertools.combinations(matched_phasings_all_conn.keys(), 2)
+
+#             # Generate combinations of NumPy arrays where each comes from a different key
+#             candidate_phasings = []
+#             for key1, key2 in key_combinations:
+#                 arrays1 = matched_phasings_all_conn[key1]
+#                 arrays2 = matched_phasings_all_conn[key2]
+#                 # Cartesian product of arrays from the two keys
+#                 candidate_phasings.extend(itertools.product(arrays1, arrays2))
+
+
+#             merged_nps = []
+#             probs = []
+#             # counter = 0
+#             for np1, np2 in candidate_phasings:
+#                 if np.array_equal(np1, np2, equal_nan=True) and np.isnan(np1).any():
+#                     # print('equal')
+#                     continue
+#                 # print(counter)
+#                 # counter += 1
+#                 merge_list = match_np(np1, np2)
+#                 for this_merge in merge_list:
+#                     # print(this_merge)
+#                     valid_columns_merge = np.all(~np.isnan(this_merge), axis=0)  # Boolean mask of valid columns
+#                     non_nan_ind_merge = np.where(valid_columns_merge)[0]  
+#                     this_phas_weight = 0
+#                     for indc, this_po, obs in match_reads:
                         
-                        rd_poss_ids_in_all_poss = [all_poss.index(p) for p in this_po if p in all_poss] # index in temp_np for reads
-                        shared_indices = sorted(set(rd_poss_ids_in_all_poss).intersection(set(non_nan_ind_merge)))
-                        # this_rd_indc = [p for p in indc if p in shared_indices]
-                        this_rd_indc = [this_po.index(all_poss[p]) for p in shared_indices]
-                        # this_rd_indc = [this_po.index(p) for p in shared_indices]
-                        # [this_po.index(p) for p in shared_indices]
-                        # rd_poss_ids_in_this_edge = [this_edge_positions.index(p) for p in this_po]
-                        this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), this_merge, this_rd_indc, shared_indices, config.error_rate)
-                        # wei += this_phas_read_weight
-                        this_phas_weight += this_phas_read_weight
-                    merged_nps.append(this_merge)
-                    probs.append(this_phas_weight)
+#                         rd_poss_ids_in_all_poss = [all_poss.index(p) for p in this_po if p in all_poss] # index in temp_np for reads
+#                         shared_indices = sorted(set(rd_poss_ids_in_all_poss).intersection(set(non_nan_ind_merge)))
+#                         # this_rd_indc = [p for p in indc if p in shared_indices]
+#                         this_rd_indc = [this_po.index(all_poss[p]) for p in shared_indices]
+#                         # this_rd_indc = [this_po.index(p) for p in shared_indices]
+#                         # [this_po.index(p) for p in shared_indices]
+#                         # rd_poss_ids_in_this_edge = [this_edge_positions.index(p) for p in this_po]
+#                         this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), this_merge, this_rd_indc, shared_indices, config.error_rate)
+#                         # wei += this_phas_read_weight
+#                         this_phas_weight += this_phas_read_weight
+#                     merged_nps.append(this_merge)
+#                     probs.append(this_phas_weight)
             
-            # # max_np = merged_nps[probs.index(max(probs))]
-            # max_prob = max(probs)
-            # max_indices = [i for i, p in enumerate(probs) if p == max_prob]
-            # chosen_index = random.choice(max_indices)
-            # max_np = merged_nps[chosen_index]
+#             # # max_np = merged_nps[probs.index(max(probs))]
+#             # max_prob = max(probs)
+#             # max_indices = [i for i, p in enumerate(probs) if p == max_prob]
+#             # chosen_index = random.choice(max_indices)
+#             # max_np = merged_nps[chosen_index]
 
 
-            # Sort both lists together based on probs
-            sorted_pairs = sorted(zip(probs, merged_nps), key=lambda x: x[0], reverse=True)
-            # Separate the sorted probabilities and numpy arrays if needed
-            sorted_probs, sorted_nps = zip(*sorted_pairs)
-            # Convert back to lists if desired
-            sorted_probs = list(sorted_probs)
-            sorted_nps = list(sorted_nps)
+#             # Sort both lists together based on probs
+#             sorted_pairs = sorted(zip(probs, merged_nps), key=lambda x: x[0], reverse=True)
+#             # Separate the sorted probabilities and numpy arrays if needed
+#             sorted_probs, sorted_nps = zip(*sorted_pairs)
+#             # Convert back to lists if desired
+#             sorted_probs = list(sorted_probs)
+#             sorted_nps = list(sorted_nps)
 
 
-            # valid_columns_max = np.all(~np.isnan(max_np), axis=0)  # Boolean mask of valid columns
-            # non_nan_ind_max = np.where(valid_columns_max)[0]  
+#             # valid_columns_max = np.all(~np.isnan(max_np), axis=0)  # Boolean mask of valid columns
+#             # non_nan_ind_max = np.where(valid_columns_max)[0]  
 
-            # shared_idxs = sorted(set(non_nan_ind_max).intersection(set(fixed_positions_ids)))
+#             # shared_idxs = sorted(set(non_nan_ind_max).intersection(set(fixed_positions_ids)))
 
-            correct_permuted = None
-            for max_np in sorted_nps:
-                # print(max_np)
-                valid_columns_max = np.all(~np.isnan(max_np), axis=0)  # Boolean mask of valid columns
-                non_nan_ind_max = np.where(valid_columns_max)[0]  
+#             correct_permuted = None
+#             for max_np in sorted_nps:
+#                 # print(max_np)
+#                 valid_columns_max = np.all(~np.isnan(max_np), axis=0)  # Boolean mask of valid columns
+#                 non_nan_ind_max = np.where(valid_columns_max)[0]  
 
-                shared_idxs = sorted(set(non_nan_ind_max).intersection(set(fixed_positions_ids)))
-                shared_idx_in_df_fixed = [all_poss[p] - 1 for p in shared_idxs]
-                shared_fixed = predicted_haplotypes.loc[:, shared_idx_in_df_fixed].values
-                for permuted_key in itertools.permutations(max_np):
+#                 shared_idxs = sorted(set(non_nan_ind_max).intersection(set(fixed_positions_ids)))
+#                 shared_idx_in_df_fixed = [all_poss[p] - 1 for p in shared_idxs]
+#                 shared_fixed = predicted_haplotypes.loc[:, shared_idx_in_df_fixed].values
+#                 for permuted_key in itertools.permutations(max_np):
                     
-                    permuted_key_np = np.array(permuted_key)
-                    # print(fixed_values[:, shared_idxs], '\n', permuted_key_np[:, shared_idxs])
-                    # print('---------------------------------')
-                    if np.array_equal(shared_fixed, permuted_key_np[:, shared_idxs]):
-                        correct_permuted = permuted_key_np
-                        break
-                if correct_permuted is not None:
-                    break
+#                     permuted_key_np = np.array(permuted_key)
+#                     # print(fixed_values[:, shared_idxs], '\n', permuted_key_np[:, shared_idxs])
+#                     # print('---------------------------------')
+#                     if np.array_equal(shared_fixed, permuted_key_np[:, shared_idxs]):
+#                         correct_permuted = permuted_key_np
+#                         break
+#                 if correct_permuted is not None:
+#                     break
 
-            correct_permuted_int = correct_permuted.astype(int)
-            predicted_haplotypes.loc[:, selected_position - 1] = correct_permuted_int[:, unphased_position_id]
+#             correct_permuted_int = correct_permuted.astype(int)
+#             predicted_haplotypes.loc[:, selected_position - 1] = correct_permuted_int[:, unphased_position_id]
 
-        # Step 5: Add nodes containing the selected position to phased nodes
-        for edge in relevant_edges:
-            node1, node2 = edge
-            if node1 in neighbor_nodes:
-                phased_nodes.add(node1)
-                unphased_nodes.discard(node1)
-            if node2 in neighbor_nodes:
-                phased_nodes.add(node2)
-                unphased_nodes.discard(node2)
+#         # Step 5: Add nodes containing the selected position to phased nodes
+#         for edge in relevant_edges:
+#             node1, node2 = edge
+#             if node1 in neighbor_nodes:
+#                 phased_nodes.add(node1)
+#                 unphased_nodes.discard(node1)
+#             if node2 in neighbor_nodes:
+#                 phased_nodes.add(node2)
+#                 unphased_nodes.discard(node2)
 
-        # Update phased positions and remove from unphased
-        phased_positions.add(selected_position)
-        unphased_positions.remove(selected_position)
+#         # Update phased positions and remove from unphased
+#         phased_positions.add(selected_position)
+#         unphased_positions.remove(selected_position)
 
-        # # Output the selected position and relevant edges for this iteration
-        # print(f"Selected position: {selected_position}")
-        # print(f"Relevant edges: {relevant_edges}")
+#         # # Output the selected position and relevant edges for this iteration
+#         # print(f"Selected position: {selected_position}")
+#         # print(f"Relevant edges: {relevant_edges}")
 
-    # print("Phasing complete.")
-    return predicted_haplotypes
+#     # print("Phasing complete.")
+#     return predicted_haplotypes
 
 
-def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config):
+def predict_haplotypes_old(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, prority="counts"):
     samples_brief = {}
     for t in samples.keys():
         for nn in samples[t].keys():
@@ -1747,7 +1752,7 @@ def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_mo
         # Select the best candidate
         if all_combinations:
             candidates = list(zip(all_combinations, all_probabilities, candidate_counts))
-            best_candidate = select_best_candidate(candidates, prioritize="counts")  # Change "counts" to "probabilities" if needed
+            best_candidate = select_best_candidate(candidates, prioritize=prority)  # Change "counts" to "probabilities" if needed
             best_combination = best_candidate[0]
             best_probability = best_candidate[1]
             best_count = best_candidate[2]
@@ -1800,6 +1805,115 @@ def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_mo
         # print(f"Relevant edges: {relevant_edges}")
 
     # print("Phasing complete.")
+    return predicted_haplotypes
+
+
+
+def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="counts"):
+    """
+    Predict haplotypes iteratively by phasing one variant at a time using candidate sampling and selection.
+    """
+    # Step 1: Initialization
+    phasing_samples = {nn: samples[t][nn] for t in samples for nn in samples[t]}
+    sorted_nodes = sort_nodes(nodes)
+    genotype_df = pd.read_csv(genotype_path).T
+    predicted_haplotypes = pd.DataFrame(index=[f'haplotype_{p+1}' for p in range(ploidy)], columns=genotype_df.columns)
+
+    # Initialize phased and unphased sets
+    phased_nodes = set()
+    phased_positions = set()
+    unphased_nodes = set(nodes)
+    unphased_positions = {int(pos) for node in nodes for pos in node.split('-')}
+
+    # Start with the first node
+    first_node = sorted_nodes[0]
+    initial_positions = sorted({int(pos) for pos in first_node.split('-')})
+    initial_positions = [p - 1 for p in initial_positions]
+
+    predicted_haplotypes.loc[:, initial_positions] = str_2_phas_1(phasing_samples[first_node], ploidy)
+    phased_nodes.add(first_node)
+    unphased_nodes.remove(first_node)
+    phased_positions.update(map(int, first_node.split('-')))
+    unphased_positions -= set(map(int, first_node.split('-')))
+
+    # Step 2: Iterative Phasing
+    while unphased_positions:
+        # Find neighbors and relevant edges
+        neighbor_nodes = {n2 for n1, n2 in edges if n1 in phased_nodes and n2 in unphased_nodes} | \
+                         {n1 for n1, n2 in edges if n2 in phased_nodes and n1 in unphased_nodes}
+
+        position_connections = defaultdict(lambda: {"count": 0, "edges": []})
+        for n1, n2 in edges:
+            if (n1 in phased_nodes and n2 in neighbor_nodes) or (n2 in phased_nodes and n1 in neighbor_nodes):
+                for pos in map(int, n1.split('-') + n2.split('-')):
+                    if pos in unphased_positions:
+                        position_connections[pos]["count"] += 1
+                        position_connections[pos]["edges"].append((n1, n2))
+
+        # Check if there are no connections
+        if not position_connections:
+            print(f"No connections found for unphased positions: {unphased_positions}")
+            # Select the first unphased node from the sorted list
+            for next_node in sorted_nodes:
+                if next_node in unphased_nodes:
+                    next_positions = sorted({int(pos) for pos in next_node.split('-')})
+                    next_positions = [p - 1 for p in next_positions]
+
+                    # Extract phasing for the new node
+                    next_node_sample = phasing_samples[next_node]
+                    next_sample_np = str_2_phas_1(next_node_sample, ploidy)
+
+                    # Update predicted haplotypes
+                    predicted_haplotypes.loc[:, next_positions] = next_sample_np
+                    phased_nodes.add(next_node)
+                    unphased_nodes.remove(next_node)
+                    phased_positions.update(map(int, next_node.split('-')))
+                    unphased_positions -= set(map(int, next_node.split('-')))
+                    break
+            continue
+
+        # Select the position with the most connections
+        selected_position = max(position_connections, key=lambda p: position_connections[p]["count"])
+        relevant_edges = position_connections[selected_position]["edges"]
+
+        # Compute candidates
+        all_combinations, all_probabilities, candidate_counts, all_positions = compute_candidate_phasings(
+            selected_position, relevant_edges, phased_positions, transitions_dict_extra,
+            phasing_samples, ploidy, predicted_haplotypes, config, fragment_model
+        )
+
+        # Select and update
+        if all_combinations:
+            candidates = list(zip(all_combinations, all_probabilities, candidate_counts))
+            best_candidate = select_best_candidate(candidates, prioritize=priority)
+            best_combination, best_probability, best_count = best_candidate
+
+            selected_position_index = all_positions.index(selected_position)
+            predicted_haplotypes.loc[:, selected_position - 1] = best_combination[:, selected_position_index]
+        else:
+            # Fallback: Use target phasing
+            for edge in relevant_edges:
+                target_node = edge[1]
+                if str(selected_position) in target_node.split('-'):
+                    target_positions = [int(pos) for pos in target_node.split('-')]
+                    target_phasing = str_2_phas_1(phasing_samples[target_node], ploidy)
+                    target_position_index = target_positions.index(selected_position)
+                    predicted_haplotypes.loc[:, selected_position - 1] = target_phasing[:, target_position_index]
+                    break
+
+        # Update phased sets
+        for edge in relevant_edges:
+            node1, node2 = edge
+            if node1 in neighbor_nodes:
+                phased_nodes.add(node1)
+                unphased_nodes.discard(node1)
+            if node2 in neighbor_nodes:
+                phased_nodes.add(node2)
+                unphased_nodes.discard(node2)
+
+        phased_positions.add(selected_position)
+        unphased_positions.remove(selected_position)
+
     return predicted_haplotypes
 
 
@@ -1889,12 +2003,13 @@ def topological_sort_and_get_parents(nodes, edges):
 def main():
     # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
     # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
-    frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_100/ploidy_3/cov_10/frag/00.frag'
+    # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_100/ploidy_3/cov_10/frag/00.frag'
+    frag_path = '/home/mok23003/BML/HaplOrbit/FFBS/test.frag'
     ploidy= 3
     # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
     # genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
-    genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_100/ploidy_3/haplotypes.csv'
-
+    # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_100/ploidy_3/haplotypes.csv'
+    genotype_path = '/home/mok23003/BML/HaplOrbit/FFBS/haplotypes.csv'
     class Args:
         def __init__(self):
             self.vcf_path = 'example/62_ID0.vcf'
@@ -1971,10 +2086,19 @@ def main():
     #         if nn not in samples_brief.keys():
     #             samples_brief[nn] = samples[t][nn]
 
-    # predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config)
-    predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config)
-    print('Predicted Haplotypes:\n', predicted_haplotypes)
-    print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
+    # predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, prority="counts") # "probabilities"
+
+    # vector_error_rates = []
+    # vector_errors = []
+    # mismatch_errors = []
+    # accuracies = []
+    # mecs = []
+    # for i in range(100):
+    # print('Run:', i)
+    # predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, prority="probabilities")
+    predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, prority="counts")
+    # print('Predicted Haplotypes:\n', predicted_haplotypes)
+    # print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T) 
 
     predicted_haplotypes_np = predicted_haplotypes.to_numpy()
     true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()
@@ -1984,4 +2108,12 @@ def main():
     accuracy, best_permutation = calculate_accuracy(predicted_haplotypes_np, true_haplotypes)
     mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes)
     mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
-    print('Vector Error Rate:', vector_error_rate, '\nVector Error:', vector_error, '\nAccuracy:', accuracy, '\nMismatch Error:', mismatch_error, '\nMEC:', mec_)
+    # print('Vector Error Rate:', vector_error_rate, '\nVector Error:', vector_error, '\nMismatch Error:', mismatch_error, '\nAccuracy:', accuracy, '\nMEC:', mec_)
+    # print('---------------------------------')
+    vector_error_rates.append(vector_error_rate)
+    vector_errors.append(vector_error)
+    mismatch_errors.append(mismatch_error)
+    accuracies.append(accuracy)
+    mecs.append(mec_)
+
+    # print('Vector Error Rates:', np.mean(vector_error_rates), '\nVector Errors:', np.mean(vector_errors), '\nMismatch Errors:', np.mean(mismatch_errors), '\nAccuracies:', np.mean(accuracies), '\nMECs:', np.mean(mecs))
