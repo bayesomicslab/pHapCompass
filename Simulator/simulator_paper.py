@@ -1184,7 +1184,7 @@ def make_inputs_for_generate_qoutient_graph(simulator):
 
 
 def make_inputs_for_running_FFBS(simulator):
-    simulator.contig_lens = [10]
+    simulator.contig_lens = [100]
     inputs = []
     for contig_len in simulator.contig_lens:
         for ploidy in simulator.ploidies:

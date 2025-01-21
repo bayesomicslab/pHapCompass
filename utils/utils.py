@@ -802,7 +802,7 @@ def compute_likelihood(observed, phasing, error_rate):
     term2 = comp_diff * (1 - error_rate)
     terms = term1 + term2
     probs = np.prod(terms, axis=1)
-    likelihood = np.mean(probs)
+    likelihood = np.sum(probs)
     return likelihood
 
 
@@ -819,7 +819,7 @@ def compute_likelihood_generalized(observed, phasing, used_pos, error_rate):
     term2 = comp_diff * (1 - error_rate)
     terms = term1 + term2
     probs = np.prod(terms, axis=1)
-    likelihood = np.mean(probs)
+    likelihood = np.sum(probs)
     return likelihood
 
 # @profile
@@ -836,7 +836,7 @@ def compute_likelihood_generalized_plus(observed, phasing, obs_pos, phas_pos, er
     term2 = comp_diff * (1 - error_rate)
     terms = term1 + term2
     probs = np.prod(terms, axis=1)
-    likelihood = np.mean(probs)
+    likelihood = np.sum(probs)
     return likelihood
 
 

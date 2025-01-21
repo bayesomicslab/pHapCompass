@@ -1889,11 +1889,11 @@ def topological_sort_and_get_parents(nodes, edges):
 def main():
     # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
     # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
-    frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/cov_10/frag/00.frag'
+    frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_100/ploidy_3/cov_10/frag/00.frag'
     ploidy= 3
     # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
     # genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
-    genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/haplotypes.csv'
+    genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_100/ploidy_3/haplotypes.csv'
 
     class Args:
         def __init__(self):
