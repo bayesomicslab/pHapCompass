@@ -1852,7 +1852,7 @@ def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_mo
 
         # Check if there are no connections
         if not position_connections:
-            print(f"No connections found for unphased positions: {unphased_positions}")
+            # print(f"No connections found for unphased positions: {unphased_positions}")
             # Select the first unphased node from the sorted list
             for next_node in sorted_nodes:
                 if next_node in unphased_nodes:

@@ -1867,7 +1867,7 @@ def run_FFBS_quotient_likelihood(inp):
 
     samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
 
-    predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, prority="probabilities")
+    predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities")
 
     end_time = time.time()
 
@@ -1903,7 +1903,7 @@ def run_FFBS_quotient_likelihood(inp):
     with open(os.path.join(results_path, results_name), 'wb') as f:
         pickle.dump(results, f)
 
-    print('Saved results in {}.'.format(os.path.join(results_path, results_name)), 'vector_error_rate', vector_error_rate, 'accuracy', accuracy, 'mismatch_error', mismatch_error, 'mec', mec_)
+    print('Saved results in {}.'.format(os.path.join(results_path, results_name)), 'vector_error_rate', vector_error_rate, 'vector_error', vector_error, 'mismatch_error', mismatch_error, 'mec', mec_)
     
 
 def simulate_na12878():
@@ -2018,15 +2018,52 @@ def simulate_awri():
 
     # next_inputs = make_inputs_for_run_count(simulator)
     # print('number of inputs:', len(next_inputs))
-    # pool = Pool(30)
-    # pool.map(run_FFBS_quotient_count, next_inputs)
+    # # pool = Pool(30)
+    # # pool.map(run_FFBS_quotient_count, next_inputs)
+    # for inp in next_inputs:
+    #     print(inp[4])
+    #     run_FFBS_quotient_count(inp)
 
     next_inputs = make_inputs_for_run_likelihood(simulator)
     print('number of inputs:', len(next_inputs))
-    pool = Pool(40)
-    pool.map(run_FFBS_quotient_likelihood, next_inputs)
+    # pool = Pool(10)
+    # pool.map(run_FFBS_quotient_likelihood, next_inputs)
+    for inp in next_inputs:
+        print(inp[4])
+        run_FFBS_quotient_likelihood(inp)
+
+
+def save_inputs(inputs, output_dir):
+    """
+    Save each input as a separate pickle file in the specified output directory.
+    """
+    output_dir = '/mnt/research/aguiarlab/proj/HaplOrbit/inputs100'
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    for i, inp in enumerate(inputs):
+        input_file = os.path.join(output_dir, f"input_{i}.pkl")
+        with open(input_file, "wb") as f:
+            pickle.dump(inp, f)
+    print(f"Saved {len(inputs)} inputs to {output_dir}")
+
+
+def run_FFBS_quotient_likelihood_from_input(input_file):
+    with open(input_file, "rb") as f:
+        inp = pickle.load(f)
+
+    run_FFBS_quotient_likelihood(inp)
+
 
 if __name__ == '__main__':
 
 #     # simulate_na12878()
-    simulate_awri()
+    # simulate_awri()
+
+    
+    if len(sys.argv) != 2:
+        print("Usage: python3 myscript.py <input_file>")
+        sys.exit(1)
+    
+    input_file = sys.argv[1]
+    run_FFBS_quotient_likelihood_from_input(input_file)
