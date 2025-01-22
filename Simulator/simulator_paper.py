@@ -1263,16 +1263,18 @@ def make_inputs_for_run_likelihood(simulator):
                 # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
                 existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
                 # existing_results = []
-                for rd in range(simulator.n_samples):
+                for rd in range(10):
+                # for rd in range(simulator.n_samples):
                     if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
                         '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
                         'qg_e_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path) and \
                         'qg_v_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path):
+                        print(frag_path)
                         inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
                         # inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path]
 
                         inputs.append(inp)
-        inputs = sorted(inputs, key=lambda x: x[0])
+        inputs = sorted(inputs, key=lambda x: x[0], reverse=True)
     return inputs
 
 
@@ -2057,12 +2059,11 @@ def run_FFBS_quotient_likelihood_from_input(input_file):
 
 if __name__ == '__main__':
 
-#     # simulate_na12878()
+    # simulate_na12878()
     # simulate_awri()
 
-    
     if len(sys.argv) != 2:
-        print("Usage: python3 myscript.py <input_file>")
+        print("Usage: python3 simulator_paper.py <input_file>")
         sys.exit(1)
     
     input_file = sys.argv[1]
