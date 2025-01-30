@@ -19,313 +19,6 @@ from FFBS.FFBS_quotient_graph import *
 import time
 
 
-def emissions_v2(ploidy, quotient_g, quotient_g_v_label_reversed, error_rate):
-    """
-    The only difference in version 2 is that we are using quotient graph directly:
-    quotient_g.graph ==> quotient_g
-    """
-    emission_dict = {}
-    # Calculate emissions for each state and populate the emission probability matrix
-    for state in quotient_g_v_label_reversed.keys():
-        emission_dict[state] = {}
-
-        node_elements = state.split('-')  # For example, '1-2' -> ['1', '2']
-        node_length = len(node_elements)  # Determine the number of elements in the node
-
-        # Generate all possible combinations of 0 and 1 based on the node length
-        possible_emissions = generate_binary_combinations(node_length)
-        v = quotient_g_v_label_reversed[state]
-        phasings = quotient_g.vertex_properties["v_weights"][v]['weight'].keys()
-        for phasing in phasings:
-            emission_dict[state][phasing] = {}
-            phasing_np = str_2_phas_1(phasing, ploidy)  # Compute phasing for the state key
-            for emission in possible_emissions:
-                likelihood = compute_likelihood(np.array(emission), phasing_np, error_rate)
-                emission_dict[state][phasing][''.join([str(e) for e in emission])] = likelihood
-
-    return emission_dict
-
-
-def transition_matrices_v2(quotient_g, edges_map_quotient, ploidy, config, fragment_model):
-    """
-    The only difference in version 2 is that we are using quotient graph directly:
-    quotient_g.graph ==> quotient_g
-    """
-    transitions_dict = {}
-    transitions_dict_extra = {}
-    for edge in edges_map_quotient.keys():
-        transitions_dict_extra[edge] = {}
-        source = edges_map_quotient[edge][0]
-        target = edges_map_quotient[edge][1]
-        source_weights = quotient_g.vertex_properties["v_weights"][source]['weight']
-        target_weights = quotient_g.vertex_properties["v_weights"][target]['weight']
-        source_label = quotient_g.vertex_properties["v_label"][source]
-        target_label = quotient_g.vertex_properties["v_label"][target]
-        common_ff, common_sf = find_common_element_and_index(source_label, target_label)
-        source_phasings = list(source_weights.keys())
-        target_phasings = list(target_weights.keys())
-        # transitions_dict = {'source': source_phasings, 'target': target_phasings}
-        transitions_mtx = np.zeros((len(source_phasings), len(target_phasings)))
-
-        for i, ffstr in enumerate(source_phasings):
-            for j, sfstr in enumerate(target_phasings):
-                transitions_dict_extra[edge][str(i) + '-' + str(j)] = {}
-                transitions_dict_extra[edge][str(i) + '-' + str(j)]['source_phasing'] = ffstr
-                transitions_dict_extra[edge][str(i) + '-' + str(j)]['target_phasing'] = sfstr
-                transitions_dict_extra[edge][str(i) + '-' + str(j)]['matched_phasings'] = {}
-                matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, ploidy), str_2_phas_1(sfstr, ploidy), common_ff, common_sf, source_label, target_label)
-                sorted_phasings = []
-                for mtx in matched_phasings:
-                    sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
-                    sorted_phasings.append(sorted_matrix)
-                
-                matched_phasings_str = list(set([phas_2_str(pm) for pm in sorted_phasings]))
-                # print(i, ffstr, j, sfstr)
-                # print('matched phasings:', matched_phasings_str, len(matched_phasings_str))
-                # if len(matched_phasings_str) > 1:
-                #     print('More than one matching phasing')
-                #     # stop
-                poss = sorted(list(set([int(ss) for ss in source_label.split('-')] + [int(tt) for tt in target_label.split('-')])))
-                match_reads = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
-                wei = 0
-                for phas in matched_phasings_str:
-                    this_phas_weight = 0
-                    for indc, this_po, obs in match_reads:
-                        this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), str_2_phas_1(phas, ploidy), indc, list(range(len(indc))), 
-                                                                   config.error_rate)
-                        wei += this_phas_read_weight
-                        this_phas_weight += this_phas_read_weight
-                    transitions_dict_extra[edge][str(i) + '-' + str(j)]['matched_phasings'][phas] = this_phas_weight
-                transitions_mtx[i, j] = wei
-
-        transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
-        transitions_dict[edge] = transitions_mtx
-    return transitions_dict, transitions_dict_extra
-
-
-def extract_positions(vcf_path):
-    positions = []
-    vcf_in = pysam.VariantFile(vcf_path)  # Open the VCF file
-    for record in vcf_in.fetch():
-        positions.append(record.pos)  # Extract the position (1-based)
-    return positions
-
-
-def plot_positions_distances(positions):
-    vcf_path = '/labs/Aguiar/pHapCompass/datasets/SRR10489264/variants_freebayes.vcf'
-    positions = extract_positions(vcf_path)
-    positions = sorted(positions)
-    differences = [positions[i] - positions[i - 1] for i in range(1, len(positions))]
-    plt.figure(figsize=(12, 6))
-    plt.hist(differences, bins=50, color='blue', alpha=0.7, edgecolor='black')
-    plt.xlabel('Difference (bp)')
-    plt.ylabel('Frequency')
-    plt.title('Histogram of Differences Between Consecutive VCF Positions')
-    plt.grid(axis='y', linestyle='--', alpha=0.7)
-    plt.show()
-
-
-def extract_column_NA12878(file_path):
-    # file_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.1/windows/50000/sample_NA12878.txt'
-    df = pd.read_csv(file_path, skiprows=48, sep=' ')
-    hetero_df = df[df['NA12878'].isin(['1|0', '0|1'])].reset_index(drop=True)
-    hetero_df = hetero_df.sort_values(by='POS').reset_index(drop=True)
-    hetero_df['sim_pos'] = hetero_df.index
-    return hetero_df
-
-
-def extract_column_NA12878_v2(file_path):
-
-
-    # file_path = "/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/windows/10/hapref_chr21_filtered.vcf.bgz_sample0_len10.bcf"
-    
-    file_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz'
-    bcf_file = pysam.VariantFile(file_path)
-
-
-    output_file = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.vcf.gz'
-    output_vcf = pysam.VariantFile(output_file, 'w', header=bcf_file.header)
-
-    # Specify the sample you want to extract
-    target_sample = "NA12878"
-
-    # Create an empty list to store the records
-    records = []
-
-    # Iterate through the records in the BCF file
-    for record in bcf_file.fetch():
-        if target_sample in record.samples:
-            # Extract genotype information
-            genotype = record.samples[target_sample]["GT"]
-            # Add record to DataFrame if it's relevant
-            records.append({
-                "CHROM": record.chrom,
-                "POS": record.pos,
-                "REF": record.ref,
-                "ALT": ",".join(record.alts) if record.alts else None,
-                "GENOTYPE": genotype
-            })
-        # Write the record to the new VCF file
-        output_vcf.write(record)
-
-    # Close the output VCF file
-    output_vcf.close()
-    
-
-    # Convert the list of records into a DataFrame
-    df = pd.DataFrame(records)
-
-    # Filter for heterozygous genotypes (1|0 or 0|1)
-    df["GENOTYPE"] = df["GENOTYPE"].apply(lambda x: "|".join(map(str, x)))  # Convert tuples to string
-    # hetero_df = df[df["GENOTYPE"].isin(["1|0", "0|1"])].reset_index(drop=True)
-
-    # # Sort by position and add simulated positions
-    # hetero_df = hetero_df.sort_values(by="POS").reset_index(drop=True)
-    # hetero_df["sim_pos"] = hetero_df.index
-    # hetero_df.to_csv('/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv', index=False)
-    df = df.sort_values(by="POS").reset_index(drop=True)
-    # df['difference'] = df['POS'].diff()
-    df.to_csv('/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv', index=False)
-
-
-def check_compatibility_vcf_fasta():
-    # vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/_EGAZ00001239288_HRC.r1-1.EGA.GRCh37.chr21.haplotypes.vcf.gz'
-    vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.gz'
-
-    vcf_df = pd.read_csv(vcf_path, skiprows=48, nrows=10, sep='\t')
-
-    hetero_df = extract_column_NA12878()
-    filtered_positions = hetero_df['POS'].values
-
-    # Path to the FASTA file
-    # chr21_fasta_path = '/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21.fna'
-    chr21_fasta_path = '/mnt/research/aguiarlab/data/hg19/chr21.fa'
-    chr21_legend_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/_EGAZ00001239288_HRC.r1-1.EGA.GRCh37.chr21.legend.gz'
-    # Read the FASTA file, skipping the first line (chromosome name line)
-    with open(chr21_fasta_path, 'r') as f:
-        fasta_file = f.readlines()
-
-    # Combine the sequence lines into a single string, skipping the first line
-    fasta_sequence = "".join(line.strip() for line in fasta_file if not line.startswith(">"))
-
-    legend_df = pd.read_csv(chr21_legend_path, sep=' ', compression='gzip')
-
-    for i in range(10):
-        pos = legend_df.loc[i, 'position']
-        ref_pos = legend_df.loc[i, 'a0']
-        # alt_pos = legend_df.loc[i, 'a1']    
-        print(pos, ref_pos, fasta_sequence[pos - 1], legend_df.loc[i, 'a1'])
-        # print('----------------------------------')
-
-    legend_df = legend_df[legend_df['position'].isin(list(filtered_positions))].reset_index(drop=True)
-    for i in range(10):
-        pos = legend_df.loc[i, 'position']
-        ref_pos = legend_df.loc[i, 'a0']
-        # alt_pos = legend_df.loc[i, 'a1']
-        print(pos, ref_pos, fasta_sequence[pos - 1], legend_df.loc[i, 'a1'])
-
-
-def check_integrity_vcf_fasta_sim():
-    fasta_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/contig_10_ploidy_3.fa'
-    vcf_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/AWRI_ploidy3_contig10.vcf.gz'
-    genotypes_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/haplotypes.csv'
-
-    vcf_in = pysam.VariantFile(vcf_path)
-    # original_snps = {record.pos - 1: record for record in vcf_in.fetch()}  # Map positions to records
-    
-    def read_fasta_file(file_path):
-        haplotype_dict = {}
-        with open(file_path, 'r') as file:
-            lines = file.readlines()
-            for i in range(0, len(lines), 2):
-                key = lines[i].strip()[1:]  # Remove '>' and strip any whitespace
-                value = lines[i + 1].strip()  # Strip any whitespace
-                haplotype_dict[key] = value
-        return haplotype_dict
-
-    hap_dict = read_fasta_file(fasta_path)
-    # [len(hap_dict[k]) for k in hap_dict.keys()]
-    
-    gen_df = pd.read_csv(genotypes_path)
-    gen_df = gen_df.loc[gen_df.index.repeat(3)].reset_index(drop=True)
-    snp_counter = 0
-    for record in vcf_in.fetch():
-        pos = record.pos - 1
-        ref = record.ref
-        alts = record.alts[:1]
-        print(snp_counter, pos, 'REF:', ref, 'ALT:', alts, 'HAPs:',(hap_dict['haplotype_1'][pos], hap_dict['haplotype_2'][pos], hap_dict['haplotype_3'][pos]), 'GT:', gen_df.iloc[snp_counter].values)
-        snp_counter += 1
-
-
-def generate_quotient_graph(inp):
-    this_frag_path, this_fragment_coverage_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path = inp
-    file_name = frag_file.split('.')[0]
-    print('Working on', os.path.join(this_frag_path, frag_file))
-    fragment_v_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_v_label_' + file_name + '.pkl')
-    fragment_e_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_e_label_' + file_name + '.pkl')
-    quotient_v_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_v_label_' + file_name + '.pkl')
-    quotient_e_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_e_label_' + file_name + '.pkl')
-    
-
-
-    class Args:
-        def __init__(self):
-            self.vcf_path = 'example/62_ID0.vcf'
-            self.data_path = os.path.join(this_frag_path, frag_file)
-            # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
-            self.bam_path = 'example/example.bam'
-            self.genotype_path = genotype_path
-            self.ploidy = ploidy
-            self.error_rate = 0.001
-            self.epsilon = 0.0001
-            self.output_path = 'output'
-            self.root_dir = 'D:/UCONN/HaplOrbit'
-            self.alleles = [0, 1]
-
-
-    args = Args()
-    input_handler = InputHandler(args)
-    config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
-    
-    # create fragment graph
-    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
-    fragment_model.construct(input_handler, config)
-
-    # save fragment graph
-    frag_graph_path = os.path.join(this_fragment_coverage_path, file_name + '.gt.gz')
-    fragment_model.graph.save(frag_graph_path)
-
-    with open(fragment_v_label_revered_path, "wb") as f:
-        pickle.dump(fragment_model.v_label_reversed, f)
-
-    edges_map_fragment = {}
-    for k in fragment_model.e_label_reversed.keys():
-        edges_map_fragment[k] = [int(fragment_model.e_label_reversed[k].source()), int(fragment_model.e_label_reversed[k].target())]
-
-    with open(fragment_e_label_revered_path, "wb") as f:
-        pickle.dump(edges_map_fragment, f)
-
-
-    # create quotient graph
-    quotient_g = QuotientGraph(fragment_model)
-    quotient_g.construct(input_handler, config)
-
-    # save quotient graph
-    quot_graph_path = os.path.join(this_quotient_coverage_path, file_name + '.gt.gz')
-    quotient_g.graph.save(quot_graph_path)
-
-    with open(quotient_v_label_revered_path, "wb") as f:
-        pickle.dump(quotient_g.v_label_reversed, f)
-
-    edges_map_quotient = {}
-    for k in quotient_g.e_label_reversed.keys():
-        edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
-
-    with open(quotient_e_label_revered_path, "wb") as f:
-        pickle.dump(edges_map_quotient, f)
-
-    print('[Done]', os.path.join(this_frag_path, frag_file))
-
 
 class Simulator:
     def __init__(self, config):
@@ -1147,6 +840,314 @@ class SimulatorAWRI:
             f.write(self.main_sh)
 
 
+def emissions_v2(ploidy, quotient_g, quotient_g_v_label_reversed, error_rate):
+    """
+    The only difference in version 2 is that we are using quotient graph directly:
+    quotient_g.graph ==> quotient_g
+    """
+    emission_dict = {}
+    # Calculate emissions for each state and populate the emission probability matrix
+    for state in quotient_g_v_label_reversed.keys():
+        emission_dict[state] = {}
+
+        node_elements = state.split('-')  # For example, '1-2' -> ['1', '2']
+        node_length = len(node_elements)  # Determine the number of elements in the node
+
+        # Generate all possible combinations of 0 and 1 based on the node length
+        possible_emissions = generate_binary_combinations(node_length)
+        v = quotient_g_v_label_reversed[state]
+        phasings = quotient_g.vertex_properties["v_weights"][v]['weight'].keys()
+        for phasing in phasings:
+            emission_dict[state][phasing] = {}
+            phasing_np = str_2_phas_1(phasing, ploidy)  # Compute phasing for the state key
+            for emission in possible_emissions:
+                likelihood = compute_likelihood(np.array(emission), phasing_np, error_rate)
+                emission_dict[state][phasing][''.join([str(e) for e in emission])] = likelihood
+
+    return emission_dict
+
+
+def transition_matrices_v2(quotient_g, edges_map_quotient, ploidy, config, fragment_model):
+    """
+    The only difference in version 2 is that we are using quotient graph directly:
+    quotient_g.graph ==> quotient_g
+    """
+    transitions_dict = {}
+    transitions_dict_extra = {}
+    for edge in edges_map_quotient.keys():
+        transitions_dict_extra[edge] = {}
+        source = edges_map_quotient[edge][0]
+        target = edges_map_quotient[edge][1]
+        source_weights = quotient_g.vertex_properties["v_weights"][source]['weight']
+        target_weights = quotient_g.vertex_properties["v_weights"][target]['weight']
+        source_label = quotient_g.vertex_properties["v_label"][source]
+        target_label = quotient_g.vertex_properties["v_label"][target]
+        common_ff, common_sf = find_common_element_and_index(source_label, target_label)
+        source_phasings = list(source_weights.keys())
+        target_phasings = list(target_weights.keys())
+        # transitions_dict = {'source': source_phasings, 'target': target_phasings}
+        transitions_mtx = np.zeros((len(source_phasings), len(target_phasings)))
+
+        for i, ffstr in enumerate(source_phasings):
+            for j, sfstr in enumerate(target_phasings):
+                transitions_dict_extra[edge][str(i) + '-' + str(j)] = {}
+                transitions_dict_extra[edge][str(i) + '-' + str(j)]['source_phasing'] = ffstr
+                transitions_dict_extra[edge][str(i) + '-' + str(j)]['target_phasing'] = sfstr
+                transitions_dict_extra[edge][str(i) + '-' + str(j)]['matched_phasings'] = {}
+                matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, ploidy), str_2_phas_1(sfstr, ploidy), common_ff, common_sf, source_label, target_label)
+                sorted_phasings = []
+                for mtx in matched_phasings:
+                    sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
+                    sorted_phasings.append(sorted_matrix)
+                
+                matched_phasings_str = list(set([phas_2_str(pm) for pm in sorted_phasings]))
+                # print(i, ffstr, j, sfstr)
+                # print('matched phasings:', matched_phasings_str, len(matched_phasings_str))
+                # if len(matched_phasings_str) > 1:
+                #     print('More than one matching phasing')
+                #     # stop
+                poss = sorted(list(set([int(ss) for ss in source_label.split('-')] + [int(tt) for tt in target_label.split('-')])))
+                match_reads = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
+                wei = 0
+                for phas in matched_phasings_str:
+                    this_phas_weight = 0
+                    for indc, this_po, obs in match_reads:
+                        this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), str_2_phas_1(phas, ploidy), indc, list(range(len(indc))), 
+                                                                   config.error_rate)
+                        wei += this_phas_read_weight
+                        this_phas_weight += this_phas_read_weight
+                    transitions_dict_extra[edge][str(i) + '-' + str(j)]['matched_phasings'][phas] = this_phas_weight
+                transitions_mtx[i, j] = wei
+
+        transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
+        transitions_dict[edge] = transitions_mtx
+    return transitions_dict, transitions_dict_extra
+
+
+def extract_positions(vcf_path):
+    positions = []
+    vcf_in = pysam.VariantFile(vcf_path)  # Open the VCF file
+    for record in vcf_in.fetch():
+        positions.append(record.pos)  # Extract the position (1-based)
+    return positions
+
+
+def plot_positions_distances(positions):
+    vcf_path = '/labs/Aguiar/pHapCompass/datasets/SRR10489264/variants_freebayes.vcf'
+    positions = extract_positions(vcf_path)
+    positions = sorted(positions)
+    differences = [positions[i] - positions[i - 1] for i in range(1, len(positions))]
+    plt.figure(figsize=(12, 6))
+    plt.hist(differences, bins=50, color='blue', alpha=0.7, edgecolor='black')
+    plt.xlabel('Difference (bp)')
+    plt.ylabel('Frequency')
+    plt.title('Histogram of Differences Between Consecutive VCF Positions')
+    plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.show()
+
+
+def extract_column_NA12878(file_path):
+    # file_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.1/windows/50000/sample_NA12878.txt'
+    df = pd.read_csv(file_path, skiprows=48, sep=' ')
+    hetero_df = df[df['NA12878'].isin(['1|0', '0|1'])].reset_index(drop=True)
+    hetero_df = hetero_df.sort_values(by='POS').reset_index(drop=True)
+    hetero_df['sim_pos'] = hetero_df.index
+    return hetero_df
+
+
+def extract_column_NA12878_v2(file_path):
+
+
+    # file_path = "/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/windows/10/hapref_chr21_filtered.vcf.bgz_sample0_len10.bcf"
+    
+    file_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.bgz'
+    bcf_file = pysam.VariantFile(file_path)
+
+
+    output_file = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.vcf.gz'
+    output_vcf = pysam.VariantFile(output_file, 'w', header=bcf_file.header)
+
+    # Specify the sample you want to extract
+    target_sample = "NA12878"
+
+    # Create an empty list to store the records
+    records = []
+
+    # Iterate through the records in the BCF file
+    for record in bcf_file.fetch():
+        if target_sample in record.samples:
+            # Extract genotype information
+            genotype = record.samples[target_sample]["GT"]
+            # Add record to DataFrame if it's relevant
+            records.append({
+                "CHROM": record.chrom,
+                "POS": record.pos,
+                "REF": record.ref,
+                "ALT": ",".join(record.alts) if record.alts else None,
+                "GENOTYPE": genotype
+            })
+        # Write the record to the new VCF file
+        output_vcf.write(record)
+
+    # Close the output VCF file
+    output_vcf.close()
+    
+
+    # Convert the list of records into a DataFrame
+    df = pd.DataFrame(records)
+
+    # Filter for heterozygous genotypes (1|0 or 0|1)
+    df["GENOTYPE"] = df["GENOTYPE"].apply(lambda x: "|".join(map(str, x)))  # Convert tuples to string
+    # hetero_df = df[df["GENOTYPE"].isin(["1|0", "0|1"])].reset_index(drop=True)
+
+    # # Sort by position and add simulated positions
+    # hetero_df = hetero_df.sort_values(by="POS").reset_index(drop=True)
+    # hetero_df["sim_pos"] = hetero_df.index
+    # hetero_df.to_csv('/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv', index=False)
+    df = df.sort_values(by="POS").reset_index(drop=True)
+    # df['difference'] = df['POS'].diff()
+    df.to_csv('/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv', index=False)
+
+
+def check_compatibility_vcf_fasta():
+    # vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/_EGAZ00001239288_HRC.r1-1.EGA.GRCh37.chr21.haplotypes.vcf.gz'
+    vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.gz'
+
+    vcf_df = pd.read_csv(vcf_path, skiprows=48, nrows=10, sep='\t')
+
+    hetero_df = extract_column_NA12878()
+    filtered_positions = hetero_df['POS'].values
+
+    # Path to the FASTA file
+    # chr21_fasta_path = '/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21.fna'
+    chr21_fasta_path = '/mnt/research/aguiarlab/data/hg19/chr21.fa'
+    chr21_legend_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/_EGAZ00001239288_HRC.r1-1.EGA.GRCh37.chr21.legend.gz'
+    # Read the FASTA file, skipping the first line (chromosome name line)
+    with open(chr21_fasta_path, 'r') as f:
+        fasta_file = f.readlines()
+
+    # Combine the sequence lines into a single string, skipping the first line
+    fasta_sequence = "".join(line.strip() for line in fasta_file if not line.startswith(">"))
+
+    legend_df = pd.read_csv(chr21_legend_path, sep=' ', compression='gzip')
+
+    for i in range(10):
+        pos = legend_df.loc[i, 'position']
+        ref_pos = legend_df.loc[i, 'a0']
+        # alt_pos = legend_df.loc[i, 'a1']    
+        print(pos, ref_pos, fasta_sequence[pos - 1], legend_df.loc[i, 'a1'])
+        # print('----------------------------------')
+
+    legend_df = legend_df[legend_df['position'].isin(list(filtered_positions))].reset_index(drop=True)
+    for i in range(10):
+        pos = legend_df.loc[i, 'position']
+        ref_pos = legend_df.loc[i, 'a0']
+        # alt_pos = legend_df.loc[i, 'a1']
+        print(pos, ref_pos, fasta_sequence[pos - 1], legend_df.loc[i, 'a1'])
+
+
+def check_integrity_vcf_fasta_sim():
+    fasta_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/contig_10_ploidy_3.fa'
+    vcf_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/AWRI_ploidy3_contig10.vcf.gz'
+    genotypes_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/haplotypes.csv'
+
+    vcf_in = pysam.VariantFile(vcf_path)
+    # original_snps = {record.pos - 1: record for record in vcf_in.fetch()}  # Map positions to records
+    
+    def read_fasta_file(file_path):
+        haplotype_dict = {}
+        with open(file_path, 'r') as file:
+            lines = file.readlines()
+            for i in range(0, len(lines), 2):
+                key = lines[i].strip()[1:]  # Remove '>' and strip any whitespace
+                value = lines[i + 1].strip()  # Strip any whitespace
+                haplotype_dict[key] = value
+        return haplotype_dict
+
+    hap_dict = read_fasta_file(fasta_path)
+    # [len(hap_dict[k]) for k in hap_dict.keys()]
+    
+    gen_df = pd.read_csv(genotypes_path)
+    gen_df = gen_df.loc[gen_df.index.repeat(3)].reset_index(drop=True)
+    snp_counter = 0
+    for record in vcf_in.fetch():
+        pos = record.pos - 1
+        ref = record.ref
+        alts = record.alts[:1]
+        print(snp_counter, pos, 'REF:', ref, 'ALT:', alts, 'HAPs:',(hap_dict['haplotype_1'][pos], hap_dict['haplotype_2'][pos], hap_dict['haplotype_3'][pos]), 'GT:', gen_df.iloc[snp_counter].values)
+        snp_counter += 1
+
+
+def generate_quotient_graph(inp):
+    this_frag_path, this_fragment_coverage_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path = inp
+    file_name = frag_file.split('.')[0]
+    print('Working on', os.path.join(this_frag_path, frag_file))
+    fragment_v_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_v_label_' + file_name + '.pkl')
+    fragment_e_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_e_label_' + file_name + '.pkl')
+    quotient_v_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_v_label_' + file_name + '.pkl')
+    quotient_e_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_e_label_' + file_name + '.pkl')
+    
+
+
+    class Args:
+        def __init__(self):
+            self.vcf_path = 'example/62_ID0.vcf'
+            self.data_path = os.path.join(this_frag_path, frag_file)
+            # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
+            self.bam_path = 'example/example.bam'
+            self.genotype_path = genotype_path
+            self.ploidy = ploidy
+            self.error_rate = 0.001
+            self.epsilon = 0.0001
+            self.output_path = 'output'
+            self.root_dir = 'D:/UCONN/HaplOrbit'
+            self.alleles = [0, 1]
+
+
+    args = Args()
+    input_handler = InputHandler(args)
+    config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+    
+    # create fragment graph
+    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
+    fragment_model.construct(input_handler, config)
+
+    # save fragment graph
+    frag_graph_path = os.path.join(this_fragment_coverage_path, file_name + '.gt.gz')
+    fragment_model.graph.save(frag_graph_path)
+
+    with open(fragment_v_label_revered_path, "wb") as f:
+        pickle.dump(fragment_model.v_label_reversed, f)
+
+    edges_map_fragment = {}
+    for k in fragment_model.e_label_reversed.keys():
+        edges_map_fragment[k] = [int(fragment_model.e_label_reversed[k].source()), int(fragment_model.e_label_reversed[k].target())]
+
+    with open(fragment_e_label_revered_path, "wb") as f:
+        pickle.dump(edges_map_fragment, f)
+
+
+    # create quotient graph
+    quotient_g = QuotientGraph(fragment_model)
+    quotient_g.construct(input_handler, config)
+
+    # save quotient graph
+    quot_graph_path = os.path.join(this_quotient_coverage_path, file_name + '.gt.gz')
+    quotient_g.graph.save(quot_graph_path)
+
+    with open(quotient_v_label_revered_path, "wb") as f:
+        pickle.dump(quotient_g.v_label_reversed, f)
+
+    edges_map_quotient = {}
+    for k in quotient_g.e_label_reversed.keys():
+        edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
+
+    with open(quotient_e_label_revered_path, "wb") as f:
+        pickle.dump(edges_map_quotient, f)
+
+    print('[Done]', os.path.join(this_frag_path, frag_file))
+
+
 def make_inputs_for_generate_qoutient_graph(simulator):
     inputs = []
     simulator.contig_lens = [100]
@@ -1231,7 +1232,8 @@ def make_inputs_for_run_count(simulator):
 
 
 def make_inputs_for_run_likelihood(simulator):
-    simulator.contig_lens = [100]
+    simulator.contig_lens = [10]
+    simulator.ploidies = [3, 4, 6]
     inputs = []
     for contig_len in simulator.contig_lens:
         for ploidy in simulator.ploidies:
@@ -1261,10 +1263,10 @@ def make_inputs_for_run_likelihood(simulator):
                 # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
                 # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
                 # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
-                existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
-                # existing_results = []
-                for rd in range(10):
-                # for rd in range(simulator.n_samples):
+                # existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
+                existing_results = []
+                # for rd in range(90, 100):
+                for rd in range(simulator.n_samples):
                     if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
                         '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
                         'qg_e_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path) and \
@@ -1279,7 +1281,7 @@ def make_inputs_for_run_likelihood(simulator):
 
 
 def make_inputs_for_running_FFBS(simulator):
-    simulator.contig_lens = [100]
+    simulator.contig_lens = [10]
     inputs = []
     for contig_len in simulator.contig_lens:
         for ploidy in simulator.ploidies:
@@ -1309,8 +1311,8 @@ def make_inputs_for_running_FFBS(simulator):
                 # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
                 # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
                 # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
-                existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
-                # existing_results = []
+                # existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
+                existing_results = []
                 for rd in range(simulator.n_samples):
                     if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
                         '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
@@ -1867,7 +1869,20 @@ def run_FFBS_quotient_likelihood(inp):
 
     forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)
 
+    # backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)
     samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
+
+    fragment_list = fragment_model.fragment_list
+    reads_dict = calculate_pair_counts(fragment_list)
+
+
+    
+
+    for i in range(10):
+        # samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
+        samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
+        ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples)
+        print('FFBS Accuracy:', ffbs_acc)
 
     predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities")
 
@@ -2039,7 +2054,7 @@ def save_inputs(inputs, output_dir):
     """
     Save each input as a separate pickle file in the specified output directory.
     """
-    output_dir = '/mnt/research/aguiarlab/proj/HaplOrbit/inputs100'
+    output_dir = '/mnt/research/aguiarlab/proj/HaplOrbit/inputs100_2'
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 

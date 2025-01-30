@@ -1,16 +1,21 @@
 
 from itertools import permutations
 import numpy as np
+import pandas as pd
+import pickle
+import os
+import itertools
+from collections import defaultdict
 
-'''
-input:
-h_col : list or array, one allele position across all haplotypes in true phase
-h_star_col : list or array, one allele position across all haplotypes in assembled phase
-returns:
-list of tuples, each tuple is a mapping of the indices 0, ..., k-1 in h_star_col to the indices 0, ..., k-1 in h_col
-'''
+
 def find_matches(h_star_col, h_col):
-
+  """
+  input:
+  h_col : list or array, one allele position across all haplotypes in true phase
+  h_star_col : list or array, one allele position across all haplotypes in assembled phase
+  returns:
+  list of tuples, each tuple is a mapping of the indices 0, ..., k-1 in h_star_col to the indices 0, ..., k-1 in h_col
+  """
   # find where all of the 1s and 0s are in H and H star
   one_indices_h = [i for i, val in enumerate(h_col) if val == 1]
   zero_indices_h = [i for i, val in enumerate(h_col) if val == 0]
@@ -47,14 +52,15 @@ def find_matches(h_star_col, h_col):
   return matches
 
 
-'''
-input:
-H and H_star : numpy arrays of the true and assembled phasings
-retuns:
-the value of the vector error
-the backtracking steps - how we have to permute each column of H to make them match H_star
-'''
 def compute_vector_error_rate(H, H_star):
+  """
+  input:
+  H and H_star : numpy arrays of the true and assembled phasings
+  retuns:
+  the value of the vector error
+  the backtracking steps - how we have to permute each column of H to make them match H_star
+  """
+  
   k, n = H.shape
 
   # i^th dictionary stores the ways to get through the i^th col
@@ -114,40 +120,39 @@ def compute_vector_error_rate(H, H_star):
   return vector_error_rate, vector_error, backtracking_steps, dp_table
 
 
-
-'''
-input:
-reconstucted haplotypes - numpy array assembled phasing
-list of reads - list of lists
-  odd index lists are positions, even index reads are alleles
-returns:
-the proportion of reads that could be mapped to some row of H_star at their specified position
-'''
 def mec(reconstructed_haplotypes, list_of_reads):
-  
-    pos_allele_pairs = [(list_of_reads[i], list_of_reads[i + 1]) for i in range(0, len(list_of_reads), 2)]
+  """
+  input:
+  reconstucted haplotypes - numpy array assembled phasing
+  list of reads - list of lists
+    odd index lists are positions, even index reads are alleles
+  returns:
+  the proportion of reads that could be mapped to some row of H_star at their specified position
+  """
+  pos_allele_pairs = [(list_of_reads[i], list_of_reads[i + 1]) for i in range(0, len(list_of_reads), 2)]
 
-    map_back = np.zeros(len(pos_allele_pairs))
+  map_back = np.zeros(len(pos_allele_pairs))
 
-    for idx, (position_seq, allele_seq) in enumerate(pos_allele_pairs):
-        for reconstructed_hap in reconstructed_haplotypes:
-            subarray = reconstructed_hap[position_seq[0] : position_seq[-1]]
+  for idx, (position_seq, allele_seq) in enumerate(pos_allele_pairs):
+      for reconstructed_hap in reconstructed_haplotypes:
+          subarray = reconstructed_hap[position_seq[0] : position_seq[-1]]
 
-            if np.array_equal(subarray, allele_seq):
-                map_back[idx] = 1
-                # once we find a match for this read, we can stop checking other rows
-                break
-    return np.sum(map_back)/len(pos_allele_pairs)
+          if np.array_equal(subarray, allele_seq):
+              map_back[idx] = 1
+              # once we find a match for this read, we can stop checking other rows
+              break
+  return np.sum(map_back)/len(pos_allele_pairs)
   
   
-'''
-calculates how many SNPs line up perfectly (across all haplotypes)
-from the reconstructed haplotypes to the ground truth
-returns:
-the proportion of correct SNPs
-the permutation of the haplotypes that gives the best accuracy
-'''
 def calculate_accuracy(reconstructed_haplotypes, true_haplptypes):
+  """
+  calculates how many SNPs line up perfectly (across all haplotypes)
+  from the reconstructed haplotypes to the ground truth
+  returns:
+  the proportion of correct SNPs
+  the permutation of the haplotypes that gives the best accuracy
+  """
+
   n = reconstructed_haplotypes.shape[1]  # Number of SNPs
   k = reconstructed_haplotypes.shape[0]  # Number of haplotypes
   
@@ -162,20 +167,22 @@ def calculate_accuracy(reconstructed_haplotypes, true_haplptypes):
       
   return accuracy, best_permutation
   
-  
-'''
-calculates the number of alleles that must be switched
-to make the reconstructed haplotypes line up perfectly
-with the ground truth
-returns:
-the numbers of alleles to be switched
-the permutation of haplotypes that gives the best mismatch error
-'''  
+
 def calculate_mismatch_error(reconstructed_haplotypes, true_haplotypes):
+  """
+  calculates the number of alleles that must be switched
+  to make the reconstructed haplotypes line up perfectly
+  with the ground truth
+  returns:
+  the numbers of alleles to be switched
+  the permutation of haplotypes that gives the best mismatch error
+  """
+
   n = reconstructed_haplotypes.shape[1]  # Number of SNPs
   k = reconstructed_haplotypes.shape[0]  # Number of haplotypes
     
   mismatch_error = n*k
+  best_permutation = None
   
   for row_permutations in permutations(reconstructed_haplotypes):
     permuted_reconstructed_haplotypes = np.array(row_permutations)
@@ -187,13 +194,13 @@ def calculate_mismatch_error(reconstructed_haplotypes, true_haplotypes):
   return mismatch_error, best_permutation
   
 
-'''
-fragment mapping phase relationship from hap compass
-takes all fragments and true haplotypes
-returns: counting all of the pairwise phase relationships defined 
-by the input set of fragments that do not exist in the solution
-'''
 def calculate_fmpr(SNP_matrix, true_haplotypes):
+  """
+  fragment mapping phase relationship from hap compass
+  takes all fragments and true haplotypes
+  returns: counting all of the pairwise phase relationships defined 
+  by the input set of fragments that do not exist in the solution
+  """
   m, n = SNP_matrix.shape
   k = true_haplotypes.shape[0]
   
@@ -214,49 +221,125 @@ def calculate_fmpr(SNP_matrix, true_haplotypes):
   return fmpr_metric
 
 
-'''
-helper function for fragment mapping phase relationship
-np.nan might need to be replaced with
-however we represent no read for that location on that fragment
-'''
 def one_fmpr(f_ij, j_idx, f_ik, k_idx, haplotype):
-  
+  """
+  helper function for fragment mapping phase relationship
+  np.nan might need to be replaced with
+  however we represent no read for that location on that fragment
+  """
   if ((f_ij != np.nan and f_ik != np.nan) and 
       (f_ij != haplotype[j_idx] or f_ik != haplotype[k_idx])):
     return 1
   return 0
 
-# correct phasing rate = 
-# num alleles that are in the same place 
-# in the true & reconstructed
 
-# perfect solution rate = num haplotypes 
-# w no switches (identical in true & reconst)
+def evaluate_ffbs_acc(results_path):
+    eval_df = pd.DataFrame(columns=['Contig', 'Ploidy', 'Coverage', 'Sample', 'FFBS_Acc'], index=range(2*3*5))
+    counter = 0 
+    for contig in [10, 100]:
+        for ploidy in [3, 4, 6]:
+            genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_{}/ploidy_{}/haplotypes.csv'.format(contig, ploidy)
+            for cov in [10, 20, 30, 40, 50]:
+                for sample in range(100):
+                    sample_name = str(sample).zfill(2)
+                    print('Contig:', contig, 'Ploidy:', ploidy, 'Coverage:', cov)
+                    # ploidy = 4
+                    sample_result = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_{}/ploidy_{}/cov_{}/results_likelihood/FFBS_{}.pkl'.format(contig, ploidy, cov, sample_name) 
+                    with open(sample_result, 'rb') as f:
+                        this_results = pickle.load(f)
+                        f.close()
+                    samples = this_results['samples']
+                    samples_brief = {}
+                    for t in samples.keys():
+                        for nn in samples[t].keys():
+                            if nn not in samples_brief.keys():
+                                samples_brief[nn] = samples[t][nn]
 
-########
-# examples
-########
+                    true_haplotypes = pd.read_csv(genotype_path).T
+                    sorted_nodes = sort_nodes(samples_brief.keys())
+                    eval_ffbs = {node: 0 for node in sorted_nodes}
+                    evals = []
+                    for node in sorted_nodes:
+                        positions = [int(i)-1 for i in node.split('-')]
+                        true_phasing = true_haplotypes.loc[:, positions].values
+                        true_phasing_permutations = np.array(list(itertools.permutations(true_phasing)))
 
-'''
-h = [0, 0, 1]
-h_star = [0, 1, 0]
-find_matches(h, h_star)
+                        phasing = samples_brief[node]
+                        phas_np = str_2_phas_1(phasing, ploidy)
+                        if not any(np.array_equal(phas_np, perm) for perm in true_phasing_permutations):
+                            evals.append(0)
+                            continue
+                        eval_ffbs[node] = 1
+                        evals.append(1)
 
-H = np.array([
-    [1,1,1,0,0,0,1],
-    [1,0,1,0,0,1,1],
-    [0,0,0,1,1,0,0]
-])
+                    ffbs_acc = np.sum(evals)/len(evals)
+                    eval_df.loc[counter, 'Contig'] = contig
+                    eval_df.loc[counter, 'Ploidy'] = ploidy
+                    eval_df.loc[counter, 'Coverage'] = cov
+                    eval_df.loc[counter, 'Sample'] = sample_name
+                    eval_df.loc[counter, 'FFBS_Acc'] = ffbs_acc
+                    counter += 1
+    eval_groups = eval_df.groupby(['Contig', 'Ploidy', 'Coverage'])['FFBS_Acc'].mean().reset_index()
+    eval_groups.to_csv(os.path.join(results_path, 'ffbs_acc.csv'), index=False)
 
-H_star = np.array([
-    [1,1,1,1,1,0,1],
-    [1,0,1,0,0,0,1],
-    [0,0,0,0,0,1,0]
-])
 
-compute_vector_error(H, H_star)
+def evaulate_ffbs_acc_sample(genotype_path, samples):
+    samples_brief = {}
+    for t in samples.keys():
+        for nn in samples[t].keys():
+            if nn not in samples_brief.keys():
+                samples_brief[nn] = samples[t][nn]
+    # print(len(samples_brief))
+    true_haplotypes = pd.read_csv(genotype_path).T
+    sorted_nodes = sort_nodes(samples_brief.keys())
+    eval_ffbs = {node: 0 for node in sorted_nodes}
+    evals = []
+    for node in sorted_nodes:
+        positions = [int(i)-1 for i in node.split('-')]
+        true_phasing = true_haplotypes.loc[:, positions].values
+        true_phasing_permutations = np.array(list(itertools.permutations(true_phasing)))
 
-list_of_reads = [([1,1,1], 0), ([1,1], 2 ), ([0,0],5)]
+        phasing = samples_brief[node]
+        phas_np = str_2_phas_1(phasing, ploidy)
+        if not any(np.array_equal(phas_np, perm) for perm in true_phasing_permutations):
+            evals.append(0)
+            continue
+        eval_ffbs[node] = 1
+        evals.append(1)
 
-mec(H_star, list_of_reads)
-'''
+    ffbs_acc = np.sum(evals)/len(evals)
+    # print(ffbs_acc)
+    return ffbs_acc
+
+
+def calculate_pair_counts(fragment_list):
+    """
+    Parses the fragment list and creates a dictionary of dictionaries to count '00', '01', '10', and '11' 
+    between every pair of positions across reads.
+    
+    Args:
+        fragment_list: List of lists, where each pair of sublists represents positions and contents of a read.
+
+    Returns:
+        A dictionary of dictionaries with pair counts.
+    """
+    # pair_counts = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
+    pair_counts = defaultdict(lambda: defaultdict(int))
+
+    for i in range(0, len(fragment_list), 2):
+        positions = fragment_list[i]
+        contents = fragment_list[i + 1]
+
+        for idx1 in range(len(positions)):
+            for idx2 in range(idx1 + 1, len(positions)):
+                pos1, pos2 = positions[idx1], positions[idx2]
+                state1, state2 = contents[idx1], contents[idx2]
+
+                # Sort positions to ensure consistency in key order
+                # pos_pair = tuple(sorted((pos1, pos2)))
+                pos_pair = '-'.join([str(s) for s in sorted((pos1, pos2))])
+                state_pair = f"{state1}{state2}"
+
+                pair_counts[pos_pair][state_pair] += 1
+
+    return pair_counts
