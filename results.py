@@ -9,6 +9,7 @@ import itertools
 from collections import defaultdict
 import pysam
 
+
 def prepare_results():
     agg_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
     sim_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri'
@@ -164,118 +165,6 @@ def plot_contig_length():
                 # plt.show()
                 plt.savefig(os.path.join(agg_results_path, f"phased_length_{ploidy}_{contig}.png"), bbox_inches="tight", dpi=300)
                 plt.close()
-
-
-def evaluate_ffbs_acc(results_path):
-    eval_df = pd.DataFrame(columns=['Contig', 'Ploidy', 'Coverage', 'Sample', 'FFBS_Acc'], index=range(2*3*5))
-    counter = 0 
-    for contig in [10, 100]:
-        for ploidy in [3, 4, 6]:
-            genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_{}/ploidy_{}/haplotypes.csv'.format(contig, ploidy)
-            for cov in [10, 20, 30, 40, 50]:
-                for sample in range(100):
-                    sample_name = str(sample).zfill(2)
-                    print('Contig:', contig, 'Ploidy:', ploidy, 'Coverage:', cov)
-                    # ploidy = 4
-                    sample_result = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_{}/ploidy_{}/cov_{}/results_likelihood/FFBS_{}.pkl'.format(contig, ploidy, cov, sample_name) 
-                    with open(sample_result, 'rb') as f:
-                        this_results = pickle.load(f)
-                        f.close()
-                    samples = this_results['samples']
-                    samples_brief = {}
-                    for t in samples.keys():
-                        for nn in samples[t].keys():
-                            if nn not in samples_brief.keys():
-                                samples_brief[nn] = samples[t][nn]
-
-                    true_haplotypes = pd.read_csv(genotype_path).T
-                    sorted_nodes = sort_nodes(samples_brief.keys())
-                    eval_ffbs = {node: 0 for node in sorted_nodes}
-                    evals = []
-                    for node in sorted_nodes:
-                        positions = [int(i)-1 for i in node.split('-')]
-                        true_phasing = true_haplotypes.loc[:, positions].values
-                        true_phasing_permutations = np.array(list(itertools.permutations(true_phasing)))
-
-                        phasing = samples_brief[node]
-                        phas_np = str_2_phas_1(phasing, ploidy)
-                        if not any(np.array_equal(phas_np, perm) for perm in true_phasing_permutations):
-                            evals.append(0)
-                            continue
-                        eval_ffbs[node] = 1
-                        evals.append(1)
-
-                    ffbs_acc = np.sum(evals)/len(evals)
-                    eval_df.loc[counter, 'Contig'] = contig
-                    eval_df.loc[counter, 'Ploidy'] = ploidy
-                    eval_df.loc[counter, 'Coverage'] = cov
-                    eval_df.loc[counter, 'Sample'] = sample_name
-                    eval_df.loc[counter, 'FFBS_Acc'] = ffbs_acc
-                    counter += 1
-    eval_groups = eval_df.groupby(['Contig', 'Ploidy', 'Coverage'])['FFBS_Acc'].mean().reset_index()
-    eval_groups.to_csv(os.path.join(results_path, 'ffbs_acc.csv'), index=False)
-
-
-def evaulate_ffbs_acc_sample(genotype_path, samples):
-    samples_brief = {}
-    for t in samples.keys():
-        for nn in samples[t].keys():
-            if nn not in samples_brief.keys():
-                samples_brief[nn] = samples[t][nn]
-    # print(len(samples_brief))
-    true_haplotypes = pd.read_csv(genotype_path).T
-    sorted_nodes = sort_nodes(samples_brief.keys())
-    eval_ffbs = {node: 0 for node in sorted_nodes}
-    evals = []
-    for node in sorted_nodes:
-        positions = [int(i)-1 for i in node.split('-')]
-        true_phasing = true_haplotypes.loc[:, positions].values
-        true_phasing_permutations = np.array(list(itertools.permutations(true_phasing)))
-
-        phasing = samples_brief[node]
-        phas_np = str_2_phas_1(phasing, ploidy)
-        if not any(np.array_equal(phas_np, perm) for perm in true_phasing_permutations):
-            evals.append(0)
-            continue
-        eval_ffbs[node] = 1
-        evals.append(1)
-
-    ffbs_acc = np.sum(evals)/len(evals)
-    # print(ffbs_acc)
-    return ffbs_acc
-
-
-def calculate_pair_counts(fragment_list):
-    """
-    Parses the fragment list and creates a dictionary of dictionaries to count '00', '01', '10', and '11' 
-    between every pair of positions across reads.
-    
-    Args:
-        fragment_list: List of lists, where each pair of sublists represents positions and contents of a read.
-
-    Returns:
-        A dictionary of dictionaries with pair counts.
-    """
-    # pair_counts = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
-    pair_counts = defaultdict(lambda: defaultdict(int))
-
-    for i in range(0, len(fragment_list), 2):
-        positions = fragment_list[i]
-        contents = fragment_list[i + 1]
-
-        for idx1 in range(len(positions)):
-            for idx2 in range(idx1 + 1, len(positions)):
-                pos1, pos2 = positions[idx1], positions[idx2]
-                state1, state2 = contents[idx1], contents[idx2]
-
-                # Sort positions to ensure consistency in key order
-                # pos_pair = tuple(sorted((pos1, pos2)))
-                pos_pair = '-'.join([str(s) for s in sorted((pos1, pos2))])
-                state_pair = f"{state1}{state2}"
-
-                pair_counts[pos_pair][state_pair] += 1
-
-    return pair_counts
 
 
 def generate_fragmentfile_test():
@@ -489,7 +378,7 @@ def generate_fragmentfile_test():
     print(f"Fixed VCF file saved as {output_vcf}")
 
 
-def extract_fragments(vcf_file, bam_file, output_file):
+def extract_fragments_0(vcf_file, bam_file, output_file):
     # Parse VCF file and collect variant information
     vcf_file = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_6/1_modified_AWRI_ploidy6_contig10.vcf'
     bam_file = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_6/test_out.bam'
@@ -699,7 +588,8 @@ def extract_custom_fragments(vcf_file, bam_file, output_file, distance_threshold
 
 def extract_fragments(vcf_file, bam_file, output_file):
     # Parse VCF file and collect variant information into a dictionary
-
+    vcf_file = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_6/AWRI_ploidy6_contig10.vcf'
+    bam_file = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_6/cov_50/bam/00.bam'
     variants = {}
     with open(vcf_file, "r") as vcf:
         for line in vcf:
@@ -718,9 +608,10 @@ def extract_fragments(vcf_file, bam_file, output_file):
         for read in bam.fetch():
             if read.is_unmapped or read.is_secondary or read.is_supplementary:
                 continue  # Skip unmapped or non-primary alignments
-
+            
             read_name = read.query_name
             chrom = bam.get_reference_name(read.reference_id)  # Chromosome for this read
+            
             if chrom not in variants:
                 continue  # Skip reads from chromosomes without variants
 

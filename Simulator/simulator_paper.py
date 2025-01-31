@@ -459,32 +459,6 @@ class Simulator:
                 self.main_sh += f'sh {this_sh_path}\n'
 
 
-    # def simulate_fastq_art(self):
-    #     """
-    #     Simulate FASTQ files using ART.
-    #     """
-    #     for contig_len in self.contig_lens:
-    #         for ploidy in self.ploidies:
-    #             fasta_path = os.path.join(self.main_path, f'contig_{contig_len}', f'ploidy_{ploidy}', f'contig_{contig_len}_ploidy_{ploidy}.fa')
-    #             this_sh_path = os.path.join(self.main_path, f'contig_{contig_len}', f'ploidy_{ploidy}', f'01_simulate_{contig_len}_{ploidy}.sh')
-
-    #             to_print = self.get_slurm_header('fastq')
-    #             for coverage in self.coverages:
-    #                 cov_path = os.path.join(self.main_path, f'contig_{contig_len}', f'ploidy_{ploidy}', f'cov_{coverage}')
-    #                 if not os.path.exists(cov_path):
-    #                     os.makedirs(cov_path, exist_ok=True)
-    #                 fastq_path = os.path.join(cov_path, 'fastq')
-    #                 if not os.path.exists(fastq_path):
-    #                     os.makedirs(fastq_path, exist_ok=True)
-
-    #                 for rd in range(self.n_samples):
-                        # command = f'{self.art_path} -ss HS20 -i {fasta_path} -p -na -l {self.read_length} -f {coverage} -m {self.mil} -s {self.sil} -o {fastq_path}/{str(rd).zfill(2)}\n'
-    #                     to_print += command
-
-    #             with open(this_sh_path, 'w') as f:
-    #                 f.write(to_print)
-    #             self.main_sh += f'sh {this_sh_path}\n'
-
     def align_fastq_files(self):
         """
         Align simulated FASTQ files using BWA.
@@ -589,8 +563,6 @@ class SimulatorAWRI:
         self.main_sh = self.sbatch_str + '\n\n' + 'echo `hostname`\n\nmodule load bwa/0.7.17\nmodule load bwa-mem2/2.0 bwa-mem2/2.1\n\n\n'
         # '#!/bin/bash\n#BATCH --job-name=pyalb\n#SBATCH -N 1\n#SBATCH -n 1\n#SBATCH -c 1\n#SBATCH --partition=general\n#SBATCH --qos=general\n#SBATCH 
         # --mail-type=END\n#SBATCH --mem=20G\n#SBATCH --mail-user=marjan.hosseini@uconn.edu\n#SBATCH -o script.out\n#SBATCH -e ont.err\n\necho `hostname`'
-
-
 
     def generate_genomes_fasta(self):
         """
@@ -795,6 +767,7 @@ class SimulatorAWRI:
                     f.write(to_print)
                 self.main_sh += f'sh {this_sh_path}\n'
 
+
     def extract_hairs(self):
         """
         Extract haplotypes using ExtractHAIRS.
@@ -826,6 +799,7 @@ class SimulatorAWRI:
                 with open(this_sh_path, 'w') as f:
                     f.write(to_print)
                 self.main_sh += f'sh {this_sh_path}\n'
+
 
     def simulate(self):
         """
@@ -933,7 +907,8 @@ def extract_positions(vcf_path):
 
 
 def plot_positions_distances(positions):
-    vcf_path = '/labs/Aguiar/pHapCompass/datasets/SRR10489264/variants_freebayes.vcf'
+    # vcf_path = '/labs/Aguiar/pHapCompass/datasets/SRR10489264/variants_freebayes.vcf'
+    vcf_path = '/mnt/research/aguiarlab/proj/HaplOrbit/datasets/gold_standard_phasing/vcf-diploid/HG00514.chr1.vcf.gz'
     positions = extract_positions(vcf_path)
     positions = sorted(positions)
     differences = [positions[i] - positions[i - 1] for i in range(1, len(positions))]
@@ -943,6 +918,8 @@ def plot_positions_distances(positions):
     plt.ylabel('Frequency')
     plt.title('Histogram of Differences Between Consecutive VCF Positions')
     plt.grid(axis='y', linestyle='--', alpha=0.7)
+    plt.xscale('log')
+    # plt.xlim(0, 100000)
     plt.show()
 
 
@@ -956,7 +933,6 @@ def extract_column_NA12878(file_path):
 
 
 def extract_column_NA12878_v2(file_path):
-
 
     # file_path = "/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/windows/10/hapref_chr21_filtered.vcf.bgz_sample0_len10.bcf"
     
@@ -992,7 +968,6 @@ def extract_column_NA12878_v2(file_path):
     # Close the output VCF file
     output_vcf.close()
     
-
     # Convert the list of records into a DataFrame
     df = pd.DataFrame(records)
 
@@ -1007,6 +982,57 @@ def extract_column_NA12878_v2(file_path):
     df = df.sort_values(by="POS").reset_index(drop=True)
     # df['difference'] = df['POS'].diff()
     df.to_csv('/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv', index=False)
+
+
+def extract_sample_from_vcf(file_path, target_sample):
+    # target_sample = 'HG00514'
+    file_path = '/mnt/research/aguiarlab/proj/HaplOrbit/reference/hapref_chr21_filtered.vcf.bgz'
+    bcf_file = pysam.VariantFile(file_path)
+
+    output_file = '/mnt/research/aguiarlab/proj/HaplOrbit/reference/maf0.01_hapref_chr21_filtered_{}.vcf.gz'.format(target_sample)
+    output_vcf = pysam.VariantFile(output_file, 'w', header=bcf_file.header)
+
+    # Specify the sample you want to extract
+    # target_sample = "NA12878"
+
+    # Create an empty list to store the records
+    records = []
+
+    # Iterate through the records in the BCF file
+    for record in bcf_file.fetch():
+        if target_sample in record.samples:
+            # Extract genotype information
+            genotype = record.samples[target_sample]["GT"]
+            # Add record to DataFrame if it's relevant
+            records.append({
+                "CHROM": record.chrom,
+                "POS": record.pos,
+                "REF": record.ref,
+                "ALT": ",".join(record.alts) if record.alts else None,
+                "GENOTYPE": genotype
+            })
+        # Write the record to the new VCF file
+        output_vcf.write(record)
+
+    # Close the output VCF file
+    output_vcf.close()
+    
+    # Convert the list of records into a DataFrame
+    df = pd.DataFrame(records)
+
+    # Filter for heterozygous genotypes (1|0 or 0|1)
+    df["GENOTYPE"] = df["GENOTYPE"].apply(lambda x: "|".join(map(str, x)))  # Convert tuples to string
+    # hetero_df = df[df["GENOTYPE"].isin(["1|0", "0|1"])].reset_index(drop=True)
+
+    # # Sort by position and add simulated positions
+    # hetero_df = hetero_df.sort_values(by="POS").reset_index(drop=True)
+    # hetero_df["sim_pos"] = hetero_df.index
+    # hetero_df.to_csv('/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv', index=False)
+    df = df.sort_values(by="POS").reset_index(drop=True)
+    # df['difference'] = df['POS'].diff()
+    df_name = '/mnt/research/aguiarlab/proj/HaplOrbit/reference/maf0.01_hapref_chr21_filtered_{}.csv'.format(target_sample)
+    df.to_csv(df_name, index=False)
+
 
 
 def check_compatibility_vcf_fasta():
@@ -1046,10 +1072,10 @@ def check_compatibility_vcf_fasta():
         print(pos, ref_pos, fasta_sequence[pos - 1], legend_df.loc[i, 'a1'])
 
 
-def check_integrity_vcf_fasta_sim():
-    fasta_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/contig_10_ploidy_3.fa'
-    vcf_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/AWRI_ploidy3_contig10.vcf.gz'
-    genotypes_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_3/haplotypes.csv'
+def check_integrity_vcf_fasta_sim_fasta_ref_():
+    fasta_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_6/contig_10_ploidy_6.fa'
+    vcf_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_6/AWRI_ploidy6_contig10.vcf'
+    genotypes_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_6/haplotypes.csv'
 
     vcf_in = pysam.VariantFile(vcf_path)
     # original_snps = {record.pos - 1: record for record in vcf_in.fetch()}  # Map positions to records
@@ -1073,8 +1099,8 @@ def check_integrity_vcf_fasta_sim():
     for record in vcf_in.fetch():
         pos = record.pos - 1
         ref = record.ref
-        alts = record.alts[:1]
-        print(snp_counter, pos, 'REF:', ref, 'ALT:', alts, 'HAPs:',(hap_dict['haplotype_1'][pos], hap_dict['haplotype_2'][pos], hap_dict['haplotype_3'][pos]), 'GT:', gen_df.iloc[snp_counter].values)
+        alts = record.alts[:1] 
+        print(snp_counter, pos, 'REF:', ref, 'ALT:', alts, 'HAPs:',[hap_dict[key][pos] for key in sorted(hap_dict.keys())], 'GT:', gen_df.iloc[snp_counter].values)
         snp_counter += 1
 
 
