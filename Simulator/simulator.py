@@ -710,5 +710,66 @@ def simulate_NA12878():
     simulator.simulate()
 
 
+def prepare_inputs_for_run():
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_test'
+    output_dir = '/mnt/research/aguiarlab/proj/HaplOrbit/inputs'
+    contig_lens = [100]
+    ploidies = [6]
+    coverages = [10, 50, 100]
+    n_samples = 10
+    inputs = []
+    for contig_len in contig_lens:
+        for ploidy in ploidies:
+            # stop
+            genotype_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
+            # genotype_df = pd.read_csv(genotype_path)
+            for coverage in coverages:
+                this_cov_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+                frag_path = os.path.join(this_cov_path, 'frag')
+                frag_graph_path = os.path.join(this_cov_path, 'fgraph')
+                quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
+                qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
+                results_path = os.path.join(this_cov_path, 'results_likelihood')
+
+                if not os.path.exists(frag_graph_path):
+                    os.makedirs(frag_graph_path)
+                if not os.path.exists(quotient_graph_path):
+                    os.makedirs(quotient_graph_path)
+                if not os.path.exists(qgraph_reverse_maps_path):
+                    os.makedirs(qgraph_reverse_maps_path)
+                if not os.path.exists(results_path):
+                    os.makedirs(results_path)
+
+                # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
+                # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
+                # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
+                # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
+                # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
+                # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
+                existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
+                # existing_results = []
+                # for rd in range(90, 100):
+                for rd in range(n_samples):
+                    
+                    if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results:
+                        print(frag_path)
+                        inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
+                        inputs.append(inp)
+    inputs = sorted(inputs, key=lambda x: x[0], reverse=True)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    for i, inp in enumerate(inputs):
+        input_file = os.path.join(output_dir, f"input_{i}.pkl")
+        with open(input_file, "wb") as f:
+            pickle.dump(inp, f)
+    print(f"Saved {len(inputs)} inputs to {output_dir}")
+
+
+
 if __name__ == '__main__':
+
     simulate_NA12878()
+    # simulate_awri()
+
+

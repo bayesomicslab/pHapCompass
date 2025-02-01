@@ -70,7 +70,8 @@ class FragmentGraph:
         # fragment_list = []
         # for fragment in open(self.data_path, 'r'):
         for fragment in open(self.data_path, 'r'):
-            print(fragment)
+            # print(fragment)
+            
             # read index when there are pairs, readname, start pos (in variants), allele sequence, alleles
             parts = fragment.split()
             positions = []

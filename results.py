@@ -585,6 +585,14 @@ def extract_custom_fragments(vcf_file, bam_file, output_file, distance_threshold
 
     print(f"Fragments saved to {output_file}")
 
+def change_haplotype_orientation():
+    hap_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_test/contig_100/ploidy_6/haplotypes.csv'
+    hap_df = pd.read_csv(hap_path).T
+    columns = ['haplotype_' + str(i + 1) for i in range(len(hap_df.columns))]
+    hap_df.columns = columns
+    hap_df.to_csv(hap_path, index=False)
+
+
 
 def extract_fragments(vcf_file, bam_file, output_file):
     # Parse VCF file and collect variant information into a dictionary

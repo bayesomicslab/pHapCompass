@@ -19,7 +19,6 @@ from FFBS.FFBS_quotient_graph import *
 import time
 
 
-
 class Simulator:
     def __init__(self, config):
         """
@@ -1898,19 +1897,16 @@ def run_FFBS_quotient_likelihood(inp):
     # backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)
     samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
 
-    fragment_list = fragment_model.fragment_list
-    reads_dict = calculate_pair_counts(fragment_list)
+    # fragment_list = fragment_model.fragment_list
+    # reads_dict = calculate_pair_counts(fragment_list)
 
-
-    
-
-    for i in range(10):
-        # samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
-        samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
-        ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples)
-        print('FFBS Accuracy:', ffbs_acc)
-
-    predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities")
+    # for i in range(10):
+    #     # samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
+    #     samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
+    #     ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples)
+    #     print('FFBS Accuracy:', ffbs_acc)
+    ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples, ploidy)
+    predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="counts")
 
     end_time = time.time()
 
@@ -1928,8 +1924,8 @@ def run_FFBS_quotient_likelihood(inp):
     results_name = 'FFBS_{}.pkl'.format(frag_file.split('.')[0])
     results = {}
     results['evaluation'] = {'vector_error_rate': vector_error_rate, 'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 
-                             'dp_table': dp_table, 'accuracy': accuracy, 'mismatch_error': mismatch_error, 'mec': mec_}
-    results['predicted_haplotypes'] = predicted_haplotypes_np
+                             'dp_table': dp_table, 'accuracy': accuracy, 'mismatch_error': mismatch_error, 'mec': mec_, 'ffbs_acc': ffbs_acc}
+    results['predicted_haplotypes'] = predicted_haplotypes
     results['true_haplotypes'] = true_haplotypes
     results['forward_messages'] = forward_messages
     results['transitions_dict'] = transitions_dict
@@ -1946,7 +1942,7 @@ def run_FFBS_quotient_likelihood(inp):
     with open(os.path.join(results_path, results_name), 'wb') as f:
         pickle.dump(results, f)
 
-    print('Saved results in {}.'.format(os.path.join(results_path, results_name)), 'vector_error_rate', vector_error_rate, 'vector_error', vector_error, 'mismatch_error', mismatch_error, 'mec', mec_)
+    print('Saved results in {}.'.format(os.path.join(results_path, results_name)), 'vector_error_rate', vector_error_rate, 'vector_error', vector_error, 'mismatch_error', mismatch_error, 'mec', mec_, 'ffbs_acc', ffbs_acc)
     
 
 def simulate_na12878():

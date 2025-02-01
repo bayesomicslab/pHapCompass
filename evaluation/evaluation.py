@@ -6,6 +6,7 @@ import pickle
 import os
 import itertools
 from collections import defaultdict
+from utils.utils import sort_nodes, str_2_phas_1
 
 
 def find_matches(h_star_col, h_col):
@@ -283,7 +284,7 @@ def evaluate_ffbs_acc(results_path):
     eval_groups.to_csv(os.path.join(results_path, 'ffbs_acc.csv'), index=False)
 
 
-def evaulate_ffbs_acc_sample(genotype_path, samples):
+def evaulate_ffbs_acc_sample(genotype_path, samples, ploidy):
     samples_brief = {}
     for t in samples.keys():
         for nn in samples[t].keys():

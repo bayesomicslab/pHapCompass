@@ -15,7 +15,7 @@ from algorithm.inference import *
 from algorithm.chordal_contraction import *
 import graph_tool.all as gt
 from collections import defaultdict, deque
-from evaluation.evaluation import compute_vector_error_rate, calculate_accuracy, calculate_mismatch_error, mec
+from evaluation.evaluation import compute_vector_error_rate, calculate_accuracy, calculate_mismatch_error, mec, evaulate_ffbs_acc_sample
 from collections import Counter
 from collections import Counter, defaultdict
 
