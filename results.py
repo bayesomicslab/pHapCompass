@@ -10,13 +10,13 @@ from collections import defaultdict
 import pysam
 
 
-def prepare_results():
+def prepare_results_ismb():
     agg_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
-    sim_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri'
+    sim_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_test'
     metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
-    contigs = ['10', '100'] # 100, 1000
-    ploidies = ['3', '4', '6']
-    coverages = ['10', '20', '30', '40', '50']
+    contigs = ['100'] 
+    ploidies = ['6']
+    coverages = ['10', '50', '100']
     results_dfs = []
     for contig in contigs:
         for ploidy in ploidies:
@@ -47,11 +47,11 @@ def prepare_results():
                     results_dfs.append(this_result_df)
 
     results_df = pd.concat(results_dfs, ignore_index=True)
-    results_df.to_csv(os.path.join(agg_results_path, 'sim_awri_results_likelihood10_100_beagle.csv'), index=False)
+    results_df.to_csv(os.path.join(agg_results_path, 'pHapCompass_results_simulated_data_test.csv'), index=False)
 
 
     # server3_results = pd.read_csv(os.path.join(agg_results_path, 'sim_awri_results_likelihood10_100_server3.csv'))
-    beagle_results = pd.read_csv(os.path.join(agg_results_path, 'sim_awri_results_likelihood10_100_beagle.csv'))
+    beagle_results = pd.read_csv(os.path.join(agg_results_path, 'pHapCompass_results_simulated_data_test.csv'))
     # ser3_beagle = pd.concat([server3_results, beagle_results], ignore_index=True)
     # ser3_beagle_non_redundant = ser3_beagle.groupby(["Contig", "Ploidy", "Coverage"], group_keys=False).apply(lambda group: group.drop_duplicates(subset="Sample")).reset_index(drop=True)
     # ser3_beagle_non_redundant = ser3_beagle_non_redundant[ser3_beagle_non_redundant['Ploidy'] != 8].reset_index(drop=True)
@@ -97,14 +97,73 @@ def prepare_results():
     results_df_100.to_csv(os.path.join(agg_results_path, 'all_methods_results_100.csv'), index=False)
 
 
-def compare_metric_methods():
+def prepare_results():
+    agg_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
+    sim_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_test'
+    metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
+    contigs = ['100'] 
+    ploidies = ['6']
+    coverages = ['10', '50', '100']
+    results_dfs = []
+    for contig in contigs:
+        for ploidy in ploidies:
+            for coverage in coverages:
+                # results_path = os.path.join(sim_data_path, 'contig_' + contig, 'ploidy_' + ploidy, 'cov_' + coverage, 'results')
+                results_path = os.path.join(sim_data_path, 'contig_' + contig, 'ploidy_' + ploidy, 'cov_' + coverage, 'results_likelihood')
+                if os.path.exists(results_path):
+                    samples = [f for f in os.listdir(results_path) if 'FFBS' in f]
+                    this_result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value', 'length_phased'], index=range(len(samples)*len(metrics)))
+                    this_result_df['Contig'] = contig
+                    this_result_df['Ploidy'] = ploidy
+                    this_result_df['Coverage'] = coverage
+                    this_result_df['Method'] = 'pHapCompass'                
+                    counter = 0
+                    for sample in samples:
+                        sample_result = os.path.join(results_path, sample)
+                        with open(sample_result, 'rb') as f:
+                            this_results = pickle.load(f)
+                        sample_name = sample.split('.pkl')[0].split('_')[-1]
+                        evals = this_results['evaluation']
+                        phased_snp = this_results['predicted_haplotypes'].shape[1]
+                        for metric in metrics:
+                            this_result_df.loc[counter, 'Sample'] = sample_name
+                            this_result_df.loc[counter, 'Metric'] = metric
+                            this_result_df.loc[counter, 'Value'] = evals[metric]
+                            this_result_df.loc[counter, 'length_phased'] = phased_snp
+                            counter += 1
+                    results_dfs.append(this_result_df)
+
+    results_df = pd.concat(results_dfs, ignore_index=True)
+    results_df.to_csv(os.path.join(agg_results_path, 'pHapCompass_results_simulated_data_test.csv'), index=False)
+
+
+    # server3_results = pd.read_csv(os.path.join(agg_results_path, 'sim_awri_results_likelihood10_100_server3.csv'))
+    phapcompass_results = pd.read_csv(os.path.join(agg_results_path, 'pHapCompass_results_simulated_data_test.csv'))
+    whatshapp_results = pd.read_csv(os.path.join(agg_results_path, 'whatshap_results_simulated_data_test.csv'))
+
+
+    all_results = pd.concat([phapcompass_results, whatshapp_results], ignore_index=True)
+    all_results['Contig'] = all_results['Contig'].astype(int)
+    all_results['Ploidy'] = all_results['Ploidy'].astype(int)
+    all_results['Coverage'] = all_results['Coverage'].astype(int)
+    all_results['length_phased'] = all_results['length_phased'].astype(int)
+
+    all_results = all_results.sort_values(by=['Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric']).reset_index(drop=True)
+    methods_order = ['pHapCompass', 'WhatsHap' , 'HPoP-G']
+    all_results = all_results.sort_values(by=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric'],
+        key=lambda col: col.map({method: i for i, method in enumerate(methods_order)})).reset_index(drop=True)
+
+    all_results.to_csv(os.path.join(agg_results_path, 'all_methods_results.csv'), index=False)
+
+
+def compare_metric_methods(all_results, agg_results_path):
     # compare metrics for different methods:
-    for contig in [10, 100]:
-        for metric in ['vector_error_rate', 'mismatch_error', 'mec']:
-            for ploidy in [3, 4, 6]:
+    for contig in [100]:
+        for metric in ['vector_error_rate', 'mismatch_error', 'mec', 'accuracy', 'vector_error']:
+            for ploidy in [6]:
                 print('Contig:', contig, 'Metric:', metric, 'Ploidy:', ploidy)
                 metric_df = all_results[(all_results['Metric'] == metric) & (all_results['Ploidy'] == ploidy)].reset_index(drop=True)
-                g = sns.catplot(x="Coverage", y="Value", hue="Method", data=metric_df, kind="violin", height=6, aspect=1.5)
+                g = sns.catplot(x="Coverage", y="Value", hue="Method", data=metric_df, kind="box", height=6, aspect=1.5)
 
                 # Add the title and labels
                 g.fig.suptitle(f"Contig: {str(contig)}, Metric: {metric.capitalize()}, Ploidy: {str(ploidy).capitalize()}", y=1.05)
@@ -124,22 +183,14 @@ def compare_metric_methods():
                 plt.close()
 
 
-def plot_contig_length():
-    for contig in [10, 100]:
+def plot_contig_length(all_results, agg_results_path):
+    for contig in [100]:
         for metric in ['vector_error_rate']:
-            for ploidy in [3, 4, 6]:
+            for ploidy in [6]:
                 # stop
                 print('Contig:', contig, 'Ploidy:', ploidy)
                 metric_df = all_results[(all_results['Metric'] == metric) & (all_results['Ploidy'] == ploidy) & (all_results['Contig'] == contig)].reset_index(drop=True)
-                # qqq = metric_df[metric_df['Method'] == 'WhatsHap'].reset_index(drop=True)
-                # qqq['length_phased'].unique()
-                # sns.catplot(x="Coverage", y="Value",hue="Method", data=metric_df, kind="violin", height=6, aspect=1.5)
-                # plt.title(f"{metric.capitalize()}, Ploidy: {str(ploidy).capitalize()}")
-                # plt.xlabel("Coverage")
-                # plt.ylabel("Value")
-                # plt.legend(loc='upper right')
-                # plt.tight_layout()
-                # plt.show()
+
                 metric_df['length_phased'] = metric_df['length_phased'].astype(int)
                 metric_df['length_phased'] = metric_df['length_phased']/contig * 100
 
@@ -584,6 +635,7 @@ def extract_custom_fragments(vcf_file, bam_file, output_file, distance_threshold
         output.writelines(fragments)
 
     print(f"Fragments saved to {output_file}")
+
 
 def change_haplotype_orientation():
     hap_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_test/contig_100/ploidy_6/haplotypes.csv'

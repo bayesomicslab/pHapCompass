@@ -166,8 +166,8 @@ class SimulatorNA12878:
                     f_out.write('>chr21_{}\n'.format(contig_len))
                     f_out.write("".join(new_fasta) + "\n")
 
-                haplotype_df = haplotype_df.T
-                # haplotype_df.columns = [f"haplotype_{i + 1}" for i in range(ploidy)]
+                # haplotype_df = haplotype_df.T
+                haplotype_df.columns = [f"haplotype_{i + 1}" for i in range(ploidy)]
                 haplotype_df.to_csv(os.path.join(ploidy_path, 'haplotypes.csv'), index=False)
 
                 print(f"Generated genomes for contig length {contig_len} and ploidy {ploidy}.")
@@ -691,15 +691,15 @@ def simulate_NA12878():
         # "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
         "input_vcf_path": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21_NA12878/updated_NA12878_extracted.vcf',
         "contig_fasta": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21_NA12878/GRCh37_chr21.fna',
-        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_test',
+        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878',
         "art_path": 'art_illumina',
         "extract_hairs_path": 'extractHAIRS',
-        "n_samples": 10, 
+        "n_samples": 100, 
         "target_spacing": 100,
         "densify_snps": False, 
-        "contig_lens": [100], 
-        "ploidies": [6],
-        "coverages": [10, 50, 100],
+        "contig_lens": [100, 1000], 
+        "ploidies": [3, 4, 6],
+        "coverages": [10, 30, 50, 100],
         "read_length": 150,
         "mean_insert_length": 500,
         "std_insert_length": 50, 
@@ -746,8 +746,8 @@ def prepare_inputs_for_run():
                 # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
                 # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
                 # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
-                existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
-                # existing_results = []
+                # existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
+                existing_results = []
                 # for rd in range(90, 100):
                 for rd in range(n_samples):
                     

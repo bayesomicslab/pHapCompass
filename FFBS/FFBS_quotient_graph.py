@@ -807,6 +807,22 @@ def sample_states_no_resample_optimized(slices, edges, forward_messages, backwar
     return sampled_states
 
 
+def sample_states_ground_truth(slices, nodes, genotype_path):
+    true_haplotypes = pd.read_csv(genotype_path).T
+    sorted_nodes = sort_nodes(nodes)
+    sampled_states = {}
+
+    # **Step 1:** Sample Z_T from the final forward distribution (only uses alpha_T).
+    t = len(slices)
+    sampled_states[t] = {}
+    for node in sorted_nodes:
+        positions = [int(i)-1 for i in node.split('-')]
+        true_phasing = true_haplotypes.loc[:, positions].values
+        true_phasing_str = phas_2_str(true_phasing)
+        sampled_states[t][node] = true_phasing_str
+    return sampled_states
+
+
 def sample_states_book(slices, edges, forward_messages, transitions_dict):
     """
     Sample states using forward messages and transition probabilities without backward messages.
@@ -1737,7 +1753,7 @@ def main():
     for i in range(10):
         print('Run:', i)
         samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
-        ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples)
+        ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples, ploidy)
         print('FFBS Accuracy:', ffbs_acc)
 
         # predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, prority="counts") # "probabilities"

@@ -1896,7 +1896,7 @@ def run_FFBS_quotient_likelihood(inp):
 
     # backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)
     samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
-
+    # samples = sample_states_ground_truth(slices, nodes, genotype_path)
     # fragment_list = fragment_model.fragment_list
     # reads_dict = calculate_pair_counts(fragment_list)
 
@@ -1906,7 +1906,7 @@ def run_FFBS_quotient_likelihood(inp):
     #     ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples)
     #     print('FFBS Accuracy:', ffbs_acc)
     ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples, ploidy)
-    predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="counts")
+    predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities")
 
     end_time = time.time()
 
