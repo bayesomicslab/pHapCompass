@@ -19,6 +19,31 @@ from FFBS.FFBS_quotient_graph import *
 import time
 
 
+def remove_duplicate_positions():
+    input_vcf = "/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21_NA12878/updated_NA12878_extracted.vcf"  # Change to your actual input VCF file
+    output_vcf = "/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21_NA12878/updated_NA12878_extracted_no_duplicate.vcf"
+
+    # Open input VCF file
+    vcf_in = pysam.VariantFile(input_vcf, "r")
+
+    # Create output VCF file with the same header
+    vcf_out = pysam.VariantFile(output_vcf, "w", header=vcf_in.header)
+
+    # Dictionary to store seen (chromosome, position) pairs
+    seen_positions = set()
+
+    # Iterate through VCF records
+    for record in vcf_in:
+        key = (record.chrom, record.pos)  # Unique identifier (Chromosome, Position)
+        
+        if key not in seen_positions:
+            vcf_out.write(record)  # Write the first occurrence
+            seen_positions.add(key)  # Mark this (chrom, pos) as seen
+
+    # Close VCF files
+    vcf_in.close()
+    vcf_out.close()
+
 class SimulatorNA12878:
     def __init__(self, config):
         """
@@ -122,7 +147,7 @@ class SimulatorNA12878:
                     # if pos + 1 in adjusted_pos and snp_counter < contig_len:
                         # print(pos, ref, genomes[0][pos], alts)
                         # print(pos, record.start, record.stop, alts, ref, contig_seq[pos], len(alts[0]))
-                        print(pos, ref, contig_seq[pos], alts)
+                        # print(pos, ref, contig_seq[pos], alts)
                         processed_info = {key: (value[0],) if isinstance(value, tuple) and len(value) > 1 else value for key, value in record.info.items()}
                         
                         # current_snp = pos
@@ -223,10 +248,10 @@ class SimulatorNA12878:
                     if not os.path.exists(bam_path):
                         os.makedirs(bam_path)
                     for rd in range(self.n_samples):
-                        command = 'bwa mem {} {}/{}1.fq {}/{}2.fq > {}/{}.sam\n'.format(ref_fasta, fastq_path, str(rd).zfill(2), fastq_path, str(rd).zfill(2), bam_path, str(rd).zfill(2))
-                        sort_com = 'samtools view -Sb {}/{}.sam | samtools sort -o {}/{}.bam\n'.format(bam_path, str(rd).zfill(2), bam_path, str(rd).zfill(2))
-                        index_com = 'samtools index {}/{}.bam\n'.format(bam_path, str(rd).zfill(2))
-                        rmv_com = 'rm {}/{}.sam\n\n'.format(bam_path, str(rd).zfill(2))
+                        command = 'bwa mem {} {}/{}1.fq {}/{}2.fq > {}/{}.sam; '.format(ref_fasta, fastq_path, str(rd).zfill(2), fastq_path, str(rd).zfill(2), bam_path, str(rd).zfill(2))
+                        sort_com = 'samtools view -Sb {}/{}.sam | samtools sort -o {}/{}.bam; '.format(bam_path, str(rd).zfill(2), bam_path, str(rd).zfill(2))
+                        index_com = 'samtools index {}/{}.bam; '.format(bam_path, str(rd).zfill(2))
+                        rmv_com = 'rm {}/{}.sam; \n'.format(bam_path, str(rd).zfill(2))
                         to_print += command
                         to_print += sort_com
                         to_print += index_com
@@ -688,8 +713,8 @@ def simulate_awri():
 def simulate_NA12878():
     
     beagle_config_NA12878 = {
-        # "snp_df_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NEW/maf0.01_hapref_chr21_filtered_NA12878.csv',
-        "input_vcf_path": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21_NA12878/updated_NA12878_extracted.vcf',
+        # "input_vcf_path": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21_NA12878/updated_NA12878_extracted.vcf',
+        "input_vcf_path": "/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21_NA12878/updated_NA12878_extracted_no_duplicate.vcf",
         "contig_fasta": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21_NA12878/GRCh37_chr21.fna',
         "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878',
         "art_path": 'art_illumina',
@@ -698,8 +723,8 @@ def simulate_NA12878():
         "target_spacing": 100,
         "densify_snps": False, 
         "contig_lens": [100, 1000], 
-        "ploidies": [3, 4, 6],
-        "coverages": [10, 30, 50, 100],
+        "ploidies": [3, 4, 6, 8],
+        "coverages": [10, 30, 50, 70, 100],
         "read_length": 150,
         "mean_insert_length": 500,
         "std_insert_length": 50, 
@@ -711,12 +736,12 @@ def simulate_NA12878():
 
 
 def prepare_inputs_for_run():
-    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_test'
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
     output_dir = '/mnt/research/aguiarlab/proj/HaplOrbit/inputs'
     contig_lens = [100]
-    ploidies = [6]
-    coverages = [10, 50, 100]
-    n_samples = 10
+    ploidies = [3, 4, 6, 8]
+    coverages = [10, 30, 50, 70, 100]
+    n_samples = 100
     inputs = []
     for contig_len in contig_lens:
         for ploidy in ploidies:
@@ -769,7 +794,7 @@ def prepare_inputs_for_run():
 
 if __name__ == '__main__':
 
-    simulate_NA12878()
+    # simulate_NA12878()
     # simulate_awri()
-
+    prepare_inputs_for_run()
 

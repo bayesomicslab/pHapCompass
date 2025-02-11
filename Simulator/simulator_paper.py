@@ -19,6 +19,38 @@ from FFBS.FFBS_quotient_graph import *
 import time
 
 
+def get_block_info(quotient_g, predicted_haplotypes, true_haplotypes, fragment_model):
+    component_labels, _ = gt.label_components(quotient_g.graph)
+    components = {}
+    for v in quotient_g.graph.vertices():
+        comp_id = component_labels[v]  # Get component ID of the vertex
+        if comp_id not in components:
+            components[comp_id] = {'blocks': []}
+        components[comp_id]['blocks'].append(quotient_g.graph.vertex_properties["v_label"][v])
+
+    for key in components.keys():
+        block = components[key]['blocks']
+        positions = sorted(set(int(num) for r in block for num in r.split('-')))
+        positions_ind = [p-1 for p in positions]
+        block_pred_haplotype = predicted_haplotypes[positions_ind].to_numpy()
+        block_true_haplotype = true_haplotypes[positions_ind].to_numpy()
+        block_vector_error_rate, block_vector_error, _, _ = compute_vector_error_rate(block_pred_haplotype, block_true_haplotype)
+        block_accuracy, _ = calculate_accuracy(block_pred_haplotype, block_true_haplotype)
+        block_mismatch_error, _ = calculate_mismatch_error(block_pred_haplotype, block_true_haplotype)
+        block_mec_ = mec(block_pred_haplotype, fragment_model.fragment_list)
+        components[key]['evaluation'] = {'vector_error_rate': block_vector_error_rate, 'vector_error': block_vector_error, 
+                                         'accuracy': block_accuracy, 'mismatch_error': block_mismatch_error, 'mec': block_mec_}
+        components[key]['block_size'] = len(positions_ind)
+
+    block_info = {'vector_error_rate': np.mean([components[key]['evaluation']['vector_error_rate'] for key in components.keys()]), 
+                  'vector_error': np.mean([components[key]['evaluation']['vector_error'] for key in components.keys()]),
+                  'accuracy': np.mean([components[key]['evaluation']['accuracy'] for key in components.keys()]),
+                  'mismatch_error': np.mean([components[key]['evaluation']['mismatch_error'] for key in components.keys()]),
+                  'mec': np.mean([components[key]['evaluation']['mec'] for key in components.keys()]), 
+                  'average_block_size': np.mean([components[key]['block_size'] for key in components.keys()])}
+
+    return block_info, components
+
 class Simulator:
     def __init__(self, config):
         """
@@ -908,18 +940,20 @@ def extract_positions(vcf_path):
 def plot_positions_distances(positions):
     # vcf_path = '/labs/Aguiar/pHapCompass/datasets/SRR10489264/variants_freebayes.vcf'
     vcf_path = '/mnt/research/aguiarlab/proj/HaplOrbit/datasets/gold_standard_phasing/vcf-diploid/HG00514.chr1.vcf.gz'
+    vcf_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878/contig_100/ploidy_3/NA12878_ploidy3_contig100.vcf'
     positions = extract_positions(vcf_path)
     positions = sorted(positions)
     differences = [positions[i] - positions[i - 1] for i in range(1, len(positions))]
     plt.figure(figsize=(12, 6))
     plt.hist(differences, bins=50, color='blue', alpha=0.7, edgecolor='black')
-    plt.xlabel('Difference (bp)')
+    plt.xlabel('Distances (bp)')
     plt.ylabel('Frequency')
     plt.title('Histogram of Differences Between Consecutive VCF Positions')
     plt.grid(axis='y', linestyle='--', alpha=0.7)
     plt.xscale('log')
     # plt.xlim(0, 100000)
-    plt.show()
+    # plt.show()
+    plt.savefig('/mnt/research/aguiarlab/proj/HaplOrbit/results/position_differences.png')
 
 
 def extract_column_NA12878(file_path):
@@ -1103,6 +1137,7 @@ def check_integrity_vcf_fasta_sim_fasta_ref_():
         snp_counter += 1
 
 
+
 def generate_quotient_graph(inp):
     this_frag_path, this_fragment_coverage_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path = inp
     file_name = frag_file.split('.')[0]
@@ -1257,7 +1292,7 @@ def make_inputs_for_run_count(simulator):
 
 
 def make_inputs_for_run_likelihood(simulator):
-    simulator.contig_lens = [10]
+    simulator.contig_lens = [100]
     simulator.ploidies = [3, 4, 6]
     inputs = []
     for contig_len in simulator.contig_lens:
@@ -1848,6 +1883,13 @@ def run_FFBS_quotient_likelihood(inp):
     frag_graph_path = os.path.join(this_fragment_coverage_path, file_name + '.gt.gz')
     fragment_model.graph.save(frag_graph_path)
 
+    frag_graph_plot_path = os.path.join(this_fragment_coverage_path, file_name + '.png')
+
+    e_labels = fragment_model.graph.edge_properties["e_label"]
+    v_labels = fragment_model.graph.vertex_properties["v_label"]
+    gt.graph_draw(fragment_model.graph, output_size=(1000, 1000), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=16,  
+    edge_font_size=10, output=frag_graph_plot_path)
+
     with open(fragment_v_label_revered_path, "wb") as f:
         pickle.dump(fragment_model.v_label_reversed, f)
 
@@ -1865,6 +1907,18 @@ def run_FFBS_quotient_likelihood(inp):
     # save quotient graph
     quot_graph_path = os.path.join(this_quotient_coverage_path, file_name + '.gt.gz')
     quotient_g.graph.save(quot_graph_path)
+
+
+    quotient_graph_plot_path = os.path.join(this_quotient_coverage_path, file_name + '.png')
+    e_labels = quotient_g.graph.edge_properties["e_label"]
+    v_labels = quotient_g.graph.vertex_properties["v_label"]
+    gt.graph_draw(quotient_g.graph, output_size=(1000, 1000), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=16,  
+    edge_font_size=10, output=quotient_graph_plot_path)
+
+    # gt.graph_draw(quotient_g.graph, output_size=(1000, 1000), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=16,  
+    # edge_font_size=10)
+
+
 
     with open(quotient_v_label_revered_path, "wb") as f:
         pickle.dump(quotient_g.v_label_reversed, f)
@@ -1895,38 +1949,52 @@ def run_FFBS_quotient_likelihood(inp):
     forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)
 
     # backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)
-    samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
+    
+    # samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
+    samples = sample_states_book_multiple_times(slices, edges, forward_messages, transitions_dict, n=100)
     # samples = sample_states_ground_truth(slices, nodes, genotype_path)
     # fragment_list = fragment_model.fragment_list
     # reads_dict = calculate_pair_counts(fragment_list)
 
     # for i in range(10):
-    #     # samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
-    #     samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
-    #     ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples)
+    #     samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
+    #     # samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
+    #     ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples, ploidy)
     #     print('FFBS Accuracy:', ffbs_acc)
     ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples, ploidy)
+    # print('FFBS Accuracy:', ffbs_acc)
     predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities")
 
     end_time = time.time()
 
     elapsed_time = round(end_time - start_time, 2)
 
+    true_haplotypes = pd.read_csv(genotype_path).T
+
+    block_info, components = get_block_info(quotient_g, predicted_haplotypes, true_haplotypes, fragment_model)
+
     sampled_positions = [c for c in predicted_haplotypes.columns.values if np.nan not in list(predicted_haplotypes[c].values)]
 
     predicted_haplotypes_np = predicted_haplotypes[sampled_positions].to_numpy()
-    true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()[:, sampled_positions]
+    # true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()[:, sampled_positions]
+    
+    true_haplotypes_np = true_haplotypes.to_numpy()[:, sampled_positions]
 
-    vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes)
-    accuracy, _ = calculate_accuracy(predicted_haplotypes_np, true_haplotypes)
-    mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes)
+    vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes_np)
+    accuracy, _ = calculate_accuracy(predicted_haplotypes_np, true_haplotypes_np)
+    mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes_np)
     mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
     results_name = 'FFBS_{}.pkl'.format(frag_file.split('.')[0])
     results = {}
+    results['block_evaluation'] = block_info
+    results['components'] = components
+    results['n_blocks'] = len(components.keys())
+    results['average_block_size'] = block_info['average_block_size']
+    results['length_phased'] = len(sampled_positions)
     results['evaluation'] = {'vector_error_rate': vector_error_rate, 'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 
                              'dp_table': dp_table, 'accuracy': accuracy, 'mismatch_error': mismatch_error, 'mec': mec_, 'ffbs_acc': ffbs_acc}
     results['predicted_haplotypes'] = predicted_haplotypes
-    results['true_haplotypes'] = true_haplotypes
+    results['true_haplotypes'] = pd.read_csv(genotype_path).T
     results['forward_messages'] = forward_messages
     results['transitions_dict'] = transitions_dict
     results['transitions_dict_extra'] = transitions_dict_extra

@@ -5,6 +5,7 @@ import pandas as pd
 import pickle
 import os
 import itertools
+from scipy.optimize import linear_sum_assignment
 from collections import defaultdict
 from utils.utils import sort_nodes, str_2_phas_1
 
@@ -178,22 +179,21 @@ def calculate_mismatch_error(reconstructed_haplotypes, true_haplotypes):
   the numbers of alleles to be switched
   the permutation of haplotypes that gives the best mismatch error
   """
-
-  n = reconstructed_haplotypes.shape[1]  # Number of SNPs
-  k = reconstructed_haplotypes.shape[0]  # Number of haplotypes
-    
+  k, n = reconstructed_haplotypes.shape
   mismatch_error = n*k
-  best_permutation = None
   
-  for row_permutations in permutations(reconstructed_haplotypes):
-    permuted_reconstructed_haplotypes = np.array(row_permutations)
-    temp_mismatch_error = np.sum(permuted_reconstructed_haplotypes != true_haplotypes)
-    if temp_mismatch_error<mismatch_error:
-      mismatch_error = temp_mismatch_error
-      best_permutation = permuted_reconstructed_haplotypes
-      
-  return mismatch_error, best_permutation
+  mismatch_matrix = np.zeros((k,k))
   
+  for reconstructed_row in range(k):
+      for true_row in range(k):
+          mismatch_matrix[reconstructed_row, true_row] = np.sum(
+              reconstructed_haplotypes[reconstructed_row] != true_haplotypes[true_row]
+          )
+  # true indices give us the mapping from the rows 0,...k-1 in H to the rows sigma(0), ... in H*        
+  recon_indices, true_indices = linear_sum_assignment(mismatch_matrix)
+  mismatch_error = mismatch_matrix[recon_indices, true_indices].sum()
+  return mismatch_error, true_indices
+
 
 def calculate_fmpr(SNP_matrix, true_haplotypes):
   """
@@ -235,17 +235,19 @@ def one_fmpr(f_ij, j_idx, f_ik, k_idx, haplotype):
 
 
 def evaluate_ffbs_acc(results_path):
+    results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
     eval_df = pd.DataFrame(columns=['Contig', 'Ploidy', 'Coverage', 'Sample', 'FFBS_Acc'], index=range(2*3*5))
     counter = 0 
-    for contig in [10, 100]:
-        for ploidy in [3, 4, 6]:
-            genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_{}/ploidy_{}/haplotypes.csv'.format(contig, ploidy)
-            for cov in [10, 20, 30, 40, 50]:
+    for contig in [100]:
+        for ploidy in [3, 4, 6, 8]:
+            genotype_path = os.path.join(main_path, 'contig_{}/ploidy_{}/haplotypes.csv'.format(contig, ploidy))
+            for cov in [10, 30, 50, 70, 100]:
                 for sample in range(100):
                     sample_name = str(sample).zfill(2)
                     print('Contig:', contig, 'Ploidy:', ploidy, 'Coverage:', cov)
                     # ploidy = 4
-                    sample_result = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_{}/ploidy_{}/cov_{}/results_likelihood/FFBS_{}.pkl'.format(contig, ploidy, cov, sample_name) 
+                    sample_result = os.path.join(main_path, 'contig_{}/ploidy_{}/cov_{}/results_likelihood/FFBS_{}.pkl'.format(contig, ploidy, cov, sample_name)) 
                     with open(sample_result, 'rb') as f:
                         this_results = pickle.load(f)
                         f.close()
@@ -280,8 +282,8 @@ def evaluate_ffbs_acc(results_path):
                     eval_df.loc[counter, 'Sample'] = sample_name
                     eval_df.loc[counter, 'FFBS_Acc'] = ffbs_acc
                     counter += 1
-    eval_groups = eval_df.groupby(['Contig', 'Ploidy', 'Coverage'])['FFBS_Acc'].mean().reset_index()
-    eval_groups.to_csv(os.path.join(results_path, 'ffbs_acc.csv'), index=False)
+    # eval_groups = eval_df.groupby(['Contig', 'Ploidy', 'Coverage'])['FFBS_Acc'].mean().reset_index()
+    eval_df.to_csv(os.path.join(results_path, 'ffbs_acc_NA12878.csv'), index=False)
 
 
 def evaulate_ffbs_acc_sample(genotype_path, samples, ploidy):
@@ -301,6 +303,7 @@ def evaulate_ffbs_acc_sample(genotype_path, samples, ploidy):
         true_phasing_permutations = np.array(list(itertools.permutations(true_phasing)))
 
         phasing = samples_brief[node]
+        # print(phasing)
         phas_np = str_2_phas_1(phasing, ploidy)
         if not any(np.array_equal(phas_np, perm) for perm in true_phasing_permutations):
             evals.append(0)
@@ -344,3 +347,9 @@ def calculate_pair_counts(fragment_list):
                 pair_counts[pos_pair][state_pair] += 1
 
     return pair_counts
+
+
+if __name__ == '__main__':
+    evaluate_ffbs_acc('/mnt/research/aguiarlab/proj/HaplOrbit/results')
+    # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878/contig_100/ploidy_3/haplotypes.csv'
+    # samples = {'0': {'1-2': '

@@ -8,6 +8,7 @@ import numpy as np
 import itertools
 from collections import defaultdict
 import pysam
+from evaluation.evaluation import evaulate_ffbs_acc_sample
 
 
 def prepare_results_ismb():
@@ -99,11 +100,11 @@ def prepare_results_ismb():
 
 def prepare_results():
     agg_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
-    sim_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_test'
+    sim_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
     metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
     contigs = ['100'] 
-    ploidies = ['6']
-    coverages = ['10', '50', '100']
+    ploidies = ['3', '4', '6', '8']
+    coverages = ['10', '30', '50', '70', '100']
     results_dfs = []
     for contig in contigs:
         for ploidy in ploidies:
@@ -134,15 +135,21 @@ def prepare_results():
                     results_dfs.append(this_result_df)
 
     results_df = pd.concat(results_dfs, ignore_index=True)
-    results_df.to_csv(os.path.join(agg_results_path, 'pHapCompass_results_simulated_data_test.csv'), index=False)
+    results_df.to_csv(os.path.join(agg_results_path, 'pHapCompass_results_simulated_data_NA12878.csv'), index=False)
 
 
     # server3_results = pd.read_csv(os.path.join(agg_results_path, 'sim_awri_results_likelihood10_100_server3.csv'))
-    phapcompass_results = pd.read_csv(os.path.join(agg_results_path, 'pHapCompass_results_simulated_data_test.csv'))
-    whatshapp_results = pd.read_csv(os.path.join(agg_results_path, 'whatshap_results_simulated_data_test.csv'))
+    phapcompass_results = pd.read_csv(os.path.join(agg_results_path, 'pHapCompass_results_simulated_data_NA12878.csv'))
+    # whatshapp_results = pd.read_csv(os.path.join(agg_results_path, 'whatshap_results_simulated_data_test.csv'))
+    # hpopg_results = pd.read_csv(os.path.join(agg_results_path, 'hpop_results_simulated_data_test.csv'))
+    whatshapp_results346 = pd.read_csv(os.path.join(agg_results_path, 'whatshap_results_simulated_data_NA12878_346.csv'))
+    hpopg_results346 = pd.read_csv(os.path.join(agg_results_path, 'hpop_results_simulated_data_NA12878_346.csv'))
+    whatshapp_results8 = pd.read_csv(os.path.join(agg_results_path, 'whatshap_results_simulated_data_NA12878_ploidy8.csv'))
+    hpopg_results8 = pd.read_csv(os.path.join(agg_results_path, 'hpop_results_simulated_data_NA12878_8.csv'))
 
 
-    all_results = pd.concat([phapcompass_results, whatshapp_results], ignore_index=True)
+    # all_results = pd.concat([phapcompass_results, whatshapp_results, hpopg_results], ignore_index=True)
+    all_results = pd.concat([phapcompass_results, whatshapp_results346, whatshapp_results8, hpopg_results346, hpopg_results8], ignore_index=True)
     all_results['Contig'] = all_results['Contig'].astype(int)
     all_results['Ploidy'] = all_results['Ploidy'].astype(int)
     all_results['Coverage'] = all_results['Coverage'].astype(int)
@@ -153,14 +160,139 @@ def prepare_results():
     all_results = all_results.sort_values(by=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric'],
         key=lambda col: col.map({method: i for i, method in enumerate(methods_order)})).reset_index(drop=True)
 
-    all_results.to_csv(os.path.join(agg_results_path, 'all_methods_results.csv'), index=False)
+    all_results.to_csv(os.path.join(agg_results_path, 'all_methods_results_simulated_data_NA12878.csv'), index=False)
+
+
+def collect_ground_truth_results():
+    agg_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
+    sim_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
+    # metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
+    contigs = ['100'] 
+    ploidies = ['3', '4', '6', '8']
+    coverages = ['10', '30', '50', '70', '100']
+    results_dfs = []
+    for contig in contigs:
+        for ploidy in ploidies:
+            genotype_path = os.path.join(sim_data_path, 'contig_{}/ploidy_{}/haplotypes.csv'.format(contig, ploidy))
+            for coverage in coverages:
+                # results_path = os.path.join(sim_data_path, 'contig_' + contig, 'ploidy_' + ploidy, 'cov_' + coverage, 'results')
+                results_path = os.path.join(sim_data_path, 'contig_' + contig, 'ploidy_' + ploidy, 'cov_' + coverage, 'results_likelihood')
+                if os.path.exists(results_path):
+                    samples = [f for f in os.listdir(results_path) if 'FFBS' in f]
+                    this_result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Vector Error Rate', 'FFBS Accuracy'], index=range(len(samples)))
+                    this_result_df['Contig'] = contig
+                    this_result_df['Ploidy'] = ploidy
+                    this_result_df['Coverage'] = coverage
+                    this_result_df['Method'] = 'pHapCompass'                
+                    counter = 0
+                    for sample in samples:
+                        sample_result = os.path.join(results_path, sample)
+                        with open(sample_result, 'rb') as f:
+                            this_results = pickle.load(f)
+                        sample_name = sample.split('.pkl')[0].split('_')[-1]
+                        # graph_samples = this_results['samples']
+                        evals = this_results['evaluation']
+                        # ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, graph_samples, int(ploidy))
+                        this_result_df.loc[counter, 'Vector Error Rate'] = evals['vector_error_rate']
+                        this_result_df.loc[counter, 'FFBS Accuracy'] = evals['ffbs_acc']
+                        this_result_df.loc[counter, 'Sample'] = sample_name
+                        counter += 1
+
+                    results_dfs.append(this_result_df)
+
+    results_df = pd.concat(results_dfs, ignore_index=True)
+    results_df.to_csv(os.path.join(agg_results_path, 'simulated_data_NA12878_ground_truth_ffbs_vector_error_rate.csv'), index=False)
+
+
+def collect_results_blocks_pHapCompass():
+    agg_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
+    sim_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
+    metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec', 'length_phased', 'n_blocks', 'average_block_size', 'ffbs_acc']
+    contigs = ['100'] 
+    ploidies = ['3', '4', '6', '8']
+    coverages = ['10', '30', '50', '70', '100']
+    results_dfs = []
+    for contig in contigs:
+        for ploidy in ploidies:
+            for coverage in coverages:
+                # results_path = os.path.join(sim_data_path, 'contig_' + contig, 'ploidy_' + ploidy, 'cov_' + coverage, 'results')
+                results_path = os.path.join(sim_data_path, 'contig_' + contig, 'ploidy_' + ploidy, 'cov_' + coverage, 'results_likelihood')
+                if os.path.exists(results_path):
+                    samples = [f for f in os.listdir(results_path) if 'FFBS' in f]
+                    this_result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value'], index=range(len(samples)*len(metrics)))
+                    this_result_df['Contig'] = contig
+                    this_result_df['Ploidy'] = ploidy
+                    this_result_df['Coverage'] = coverage
+                    this_result_df['Method'] = 'pHapCompass'                
+                    counter = 0
+                    for sample in samples:
+                        sample_result = os.path.join(results_path, sample)
+                        with open(sample_result, 'rb') as f:
+                            this_results = pickle.load(f)
+
+                        sample_name = sample.split('.pkl')[0].split('_')[-1]
+                        vector_error_rate = this_results['block_evaluation']['vector_error_rate']
+                        vector_error = this_results['block_evaluation']['vector_error']
+                        accuracy = this_results['block_evaluation']['accuracy']
+                        mismatch_error = this_results['block_evaluation']['mismatch_error']
+                        mec_ = this_results['block_evaluation']['mec']
+                        ffbs_acc = this_results['evaluation']['ffbs_acc']
+                        average_block_size = this_results['average_block_size']
+                        # components = this_results['components']
+                        # average_block_size = np.mean([components[key]['block_size'] for key in components.keys()])
+                        n_blocks = this_results['n_blocks']
+                        length_phased = this_results['length_phased']
+                        evals = {'vector_error_rate': vector_error_rate, 'vector_error': vector_error, 'accuracy': accuracy, 
+                                 'mismatch_error': mismatch_error, 'mec': mec_, 'length_phased': length_phased, 
+                                 'n_blocks': n_blocks, 'average_block_size': average_block_size, 'ffbs_acc': ffbs_acc}
+
+                        for metric in metrics:
+                            this_result_df.loc[counter, 'Sample'] = sample_name
+                            this_result_df.loc[counter, 'Metric'] = metric
+                            this_result_df.loc[counter, 'Value'] = evals[metric]
+                            counter += 1
+                    results_dfs.append(this_result_df)
+
+    results_df = pd.concat(results_dfs, ignore_index=True)
+    results_df.to_csv(os.path.join(agg_results_path, 'pHapCompass_results_simulated_data_NA12878_block.csv'), index=False)
+
+
+def collect_results_blocks_all():
+    agg_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
+    sim_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
+    metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
+ 
+
+    # server3_results = pd.read_csv(os.path.join(agg_results_path, 'sim_awri_results_likelihood10_100_server3.csv'))
+    phapcompass_results = pd.read_csv(os.path.join(agg_results_path, 'pHapCompass_results_simulated_data_NA12878_block.csv'))
+    # whatshapp_results = pd.read_csv(os.path.join(agg_results_path, 'whatshap_results_simulated_data_test.csv'))
+    # hpopg_results = pd.read_csv(os.path.join(agg_results_path, 'hpop_results_simulated_data_test.csv'))
+    whatshapp_results346 = pd.read_csv(os.path.join(agg_results_path, 'whatshap_results_simulated_data_NA12878_346_block.csv'))
+    hpopg_results346 = pd.read_csv(os.path.join(agg_results_path, 'hpop_results_simulated_data_NA12878_346_block.csv'))
+    whatshapp_results8 = pd.read_csv(os.path.join(agg_results_path, 'whatshap_results_simulated_data_NA12878_ploidy8_block.csv'))
+    hpopg_results8 = pd.read_csv(os.path.join(agg_results_path, 'hpop_results_simulated_data_NA12878_8_block.csv'))
+
+
+    # all_results = pd.concat([phapcompass_results, whatshapp_results, hpopg_results], ignore_index=True)
+    all_results = pd.concat([phapcompass_results, whatshapp_results346, whatshapp_results8, hpopg_results346, hpopg_results8], ignore_index=True)
+    all_results['Contig'] = all_results['Contig'].astype(int)
+    all_results['Ploidy'] = all_results['Ploidy'].astype(int)
+    all_results['Coverage'] = all_results['Coverage'].astype(int)
+    # all_results['length_phased'] = all_results['length_phased'].astype(int)
+
+    all_results = all_results.sort_values(by=['Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric']).reset_index(drop=True)
+    methods_order = ['pHapCompass', 'WhatsHap' , 'HPoP-G']
+    all_results = all_results.sort_values(by=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric'],
+        key=lambda col: col.map({method: i for i, method in enumerate(methods_order)})).reset_index(drop=True)
+
+    all_results.to_csv(os.path.join(agg_results_path, 'all_methods_results_simulated_data_NA12878_block.csv'), index=False)
 
 
 def compare_metric_methods(all_results, agg_results_path):
     # compare metrics for different methods:
     for contig in [100]:
-        for metric in ['vector_error_rate', 'mismatch_error', 'mec', 'accuracy', 'vector_error']:
-            for ploidy in [6]:
+        for metric in ['vector_error_rate', 'mismatch_error', 'mec', 'accuracy', 'vector_error' ,'length_phased', 'n_blocks', 'average_block_size',]:
+            for ploidy in [3, 4, 6, 8]:
                 print('Contig:', contig, 'Metric:', metric, 'Ploidy:', ploidy)
                 metric_df = all_results[(all_results['Metric'] == metric) & (all_results['Ploidy'] == ploidy)].reset_index(drop=True)
                 g = sns.catplot(x="Coverage", y="Value", hue="Method", data=metric_df, kind="box", height=6, aspect=1.5)
@@ -183,10 +315,10 @@ def compare_metric_methods(all_results, agg_results_path):
                 plt.close()
 
 
-def plot_contig_length(all_results, agg_results_path):
+def plot_phased_length_box(all_results, agg_results_path):
     for contig in [100]:
         for metric in ['vector_error_rate']:
-            for ploidy in [6]:
+            for ploidy in [3, 4, 6, 8]:
                 # stop
                 print('Contig:', contig, 'Ploidy:', ploidy)
                 metric_df = all_results[(all_results['Metric'] == metric) & (all_results['Ploidy'] == ploidy) & (all_results['Contig'] == contig)].reset_index(drop=True)
@@ -216,6 +348,63 @@ def plot_contig_length(all_results, agg_results_path):
                 # plt.show()
                 plt.savefig(os.path.join(agg_results_path, f"phased_length_{ploidy}_{contig}.png"), bbox_inches="tight", dpi=300)
                 plt.close()
+
+
+def plot_phased_length_line(all_results, agg_results_path):
+    for contig in [100]:
+        for metric in ['vector_error_rate']:
+            for ploidy in [3, 4, 6, 8]:
+                # stop
+                print('Contig:', contig, 'Ploidy:', ploidy)
+                metric_df = all_results[(all_results['Metric'] == metric) & (all_results['Ploidy'] == ploidy) & (all_results['Contig'] == contig)].reset_index(drop=True)
+
+                metric_df['length_phased'] = metric_df['length_phased'].astype(int)
+                metric_df['length_phased'] = metric_df['length_phased']/contig * 100
+
+                sns.lineplot(
+                    x="Coverage", y="length_phased", hue="Method",
+                    data=metric_df, marker="o", linewidth=2
+                )
+
+                # Title and labels
+                plt.title(f"Percentage of Phased Variants (%), Contig: {contig}, Ploidy: {ploidy}", fontsize=14)
+                plt.xlabel("Coverage", fontsize=12)
+                plt.ylabel("Phased Variants (%)", fontsize=12)
+
+                # Move the legend to the top-right inside the plot area
+                plt.legend(title="Method", loc="upper right", bbox_to_anchor=(0.95, 0.8), frameon=True)
+                # plt.show()
+                # Save and close the figure
+                plt.savefig(os.path.join(agg_results_path, f"phased_length_{ploidy}_{contig}_line.png"), bbox_inches="tight", dpi=300)
+                plt.close()
+
+
+def plot_ffbs_accuracy():
+    agg_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
+    ffbs_df_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/ffbs_acc_NA12878.csv'
+
+    ffbs_df = pd.read_csv(ffbs_df_path)
+    ffbs_df['Ploidy'] = ffbs_df['Ploidy'].astype(int)
+    ffbs_df['Coverage'] = ffbs_df['Coverage'].astype(int)
+    g = sns.catplot(x="Ploidy", y="FFBS_Acc", hue="Coverage",  data=ffbs_df, kind="violin", height=6, aspect=1.5)
+
+    # Add the title and labels
+    g.fig.suptitle("FFBS accuracy" , y=1.05)
+    g.set_axis_labels("Ploidy", "")
+
+    # Move the legend to the top-right, inside the plot area
+    g._legend.set_bbox_to_anchor((0.95, 0.25))  # Adjust the position
+    g._legend.set_frame_on(True)  # Optional: Add a frame around the legend
+    g._legend.set_title("Coverage")  # Optional: Customize legend title
+
+    # Adjust the layout to ensure everything fits within the figure
+    # g.fig.subplots_adjust(top=0.85, right=0.9)
+    g.fig.subplots_adjust(top=1, right=1)
+
+    # Save the figure
+    # plt.show()
+    plt.savefig(os.path.join(agg_results_path, f"FFBS_acc_NA12878.png"), bbox_inches="tight", dpi=300)
+    plt.close()
 
 
 def generate_fragmentfile_test():
@@ -378,10 +567,6 @@ def generate_fragmentfile_test():
     print("BAM Contigs:", bam_contigs)
     print("VCF Contigs:", vcf_contigs)
     print("Mismatched Contigs:", mismatched_contigs)
-
-
-
-
 
     # Updated BAM file path
     bam_file_path = "/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_6/test_out.bam"
@@ -645,8 +830,8 @@ def change_haplotype_orientation():
     hap_df.to_csv(hap_path, index=False)
 
 
-
 def extract_fragments(vcf_file, bam_file, output_file):
+
     # Parse VCF file and collect variant information into a dictionary
     vcf_file = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_6/AWRI_ploidy6_contig10.vcf'
     bam_file = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_10/ploidy_6/cov_50/bam/00.bam'
@@ -735,3 +920,131 @@ def extract_fragments(vcf_file, bam_file, output_file):
         output.writelines(fragments)
 
     print(f"Fragments saved to {output_file}")
+
+
+def make_ffbs_vs_vector_error_rate_plot():
+    plot_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
+    ffbs_df_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/ffbs_acc_NA12878.csv'
+    results_df_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/pHapCompass_results_simulated_data_NA12878.csv'
+
+    # Load data
+    ffbs_df = pd.read_csv(ffbs_df_path)
+    results_df = pd.read_csv(results_df_path)
+
+    # Convert relevant columns to integer type
+    ffbs_df['Ploidy'] = ffbs_df['Ploidy'].astype(int)
+    ffbs_df['Coverage'] = ffbs_df['Coverage'].astype(int)
+    results_df['Ploidy'] = results_df['Ploidy'].astype(int)
+    results_df['Coverage'] = results_df['Coverage'].astype(int)
+
+    # Filter results_df to keep only 'vector_error_rate' rows
+    results_df = results_df[results_df['Metric'] == 'vector_error_rate'].reset_index(drop=True)
+
+    # Merge dataframes
+    merged_df = results_df.merge(ffbs_df, on=['Contig', 'Ploidy', 'Coverage', 'Sample'], how='inner')
+    merged_df = merged_df.drop(columns=['Method', 'Metric', 'length_phased'])
+    merged_df = merged_df.rename(columns={'Value': 'Vector Error Rate', 'FFBS_Acc': 'FFBS Accuracy'})
+
+    # Define color palette
+    palette = sns.color_palette("tab10")
+
+    # Loop through specific contigs and ploidies
+    for contig in [100]:
+        for ploidy in [3, 4, 6, 8]:
+            print('Contig:', contig, 'Ploidy:', ploidy)
+            
+            # Subset data for this ploidy
+            ploidy_df = merged_df[(merged_df['Ploidy'] == ploidy) & (merged_df['Contig'] == contig)].reset_index(drop=True)
+
+            # Create scatter plot with regression lines
+            plt.figure(figsize=(8, 6))
+
+            # Scatter plot (swapped axes)
+            scatter = sns.scatterplot(data=ploidy_df, x="Vector Error Rate", y="FFBS Accuracy",
+                                    hue="Coverage", palette=palette, s=10, edgecolor="black", alpha=0.5)
+
+            # Regression lines (swapped axes) - NO LEGEND
+            coverages = sorted(ploidy_df['Coverage'].unique())  # Ensure same order for colors
+            for i, coverage in enumerate(coverages):
+                subset = ploidy_df[ploidy_df["Coverage"] == coverage]
+                sns.regplot(data=subset, x="Vector Error Rate", y="FFBS Accuracy",
+                            scatter=False, color=palette[i], ci=95)  # Removed label to avoid extra legend
+
+            # Title and labels (swapped)
+            plt.title(f"Ploidy {ploidy}, Contig {contig}: Vector Error Rate vs. FFBS Accuracy")
+            plt.xlabel("Vector Error Rate")  
+            plt.ylabel("FFBS Accuracy")  
+
+            # Keep only scatter plot legend
+            handles, labels = scatter.get_legend_handles_labels()
+            plt.legend(handles, labels, title="Coverage")
+
+            # Save plot (optional)
+            plt.savefig(os.path.join(plot_path, f"ffbs_vs_vector_error_rate_ploidy_{ploidy}_contig_{contig}.png"), dpi=300, bbox_inches="tight")
+
+            # Show plot
+            plt.show()
+
+
+def make_vector_error_rate_vs_FFBS_plot():
+    plot_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
+    ffbs_df_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/ffbs_acc_NA12878.csv'
+    results_df_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/pHapCompass_results_simulated_data_NA12878.csv'
+
+    # Load data
+    ffbs_df = pd.read_csv(ffbs_df_path)
+    results_df = pd.read_csv(results_df_path)
+
+    # Convert relevant columns to integer type
+    ffbs_df['Ploidy'] = ffbs_df['Ploidy'].astype(int)
+    ffbs_df['Coverage'] = ffbs_df['Coverage'].astype(int)
+    results_df['Ploidy'] = results_df['Ploidy'].astype(int)
+    results_df['Coverage'] = results_df['Coverage'].astype(int)
+
+    # Filter results_df to keep only 'vector_error_rate' rows
+    results_df = results_df[results_df['Metric'] == 'vector_error_rate'].reset_index(drop=True)
+
+    # Merge dataframes
+    merged_df = results_df.merge(ffbs_df, on=['Contig', 'Ploidy', 'Coverage', 'Sample'], how='inner')
+    merged_df = merged_df.drop(columns=['Method', 'Metric', 'length_phased'])
+    merged_df = merged_df.rename(columns={'Value': 'Vector Error Rate', 'FFBS_Acc': 'FFBS Accuracy'})
+
+    # Define color palette
+    palette = sns.color_palette("tab10")
+
+    # Loop through specific contigs and ploidies
+    for contig in [100]:
+        for ploidy in [3, 4, 6, 8]:
+            print('Contig:', contig, 'Ploidy:', ploidy)
+            
+            # Subset data for this ploidy
+            ploidy_df = merged_df[(merged_df['Ploidy'] == ploidy) & (merged_df['Contig'] == contig)].reset_index(drop=True)
+
+            # Create scatter plot with regression lines
+            plt.figure(figsize=(8, 6))
+
+            # Scatter plot (swapped axes)
+            scatter = sns.scatterplot(data=ploidy_df, x="FFBS Accuracy", y="Vector Error Rate",
+                                    hue="Coverage", palette=palette, s=10, edgecolor="black", alpha=0.5)
+
+            # Regression lines (swapped axes) - NO LEGEND
+            coverages = sorted(ploidy_df['Coverage'].unique())  # Ensure same order for colors
+            for i, coverage in enumerate(coverages):
+                subset = ploidy_df[ploidy_df["Coverage"] == coverage]
+                sns.regplot(data=subset, x="FFBS Accuracy", y="Vector Error Rate",
+                            scatter=False, color=palette[i], ci=95)  # Removed label to avoid extra legend
+
+            # Title and labels (swapped)
+            plt.title(f"Ploidy {ploidy}, Contig {contig}: FFBS Accuracy vs. Vector Error Rate")
+            plt.xlabel("FFBS Accuracy")  # Swapped
+            plt.ylabel("Vector Error Rate")  # Swapped
+
+            # Keep only scatter plot legend
+            handles, labels = scatter.get_legend_handles_labels()
+            plt.legend(handles, labels, title="Coverage")
+
+            # Save plot (optional)
+            plt.savefig(os.path.join(plot_path, f"vector_error_rate_vs_ffbs_ploidy_{ploidy}_contig_{contig}.png"), dpi=300, bbox_inches="tight")
+
+            # Show plot
+            plt.show()

@@ -16,7 +16,6 @@ from algorithm.chordal_contraction import *
 import graph_tool.all as gt
 from collections import defaultdict, deque
 from evaluation.evaluation import compute_vector_error_rate, calculate_accuracy, calculate_mismatch_error, mec, evaulate_ffbs_acc_sample
-from collections import Counter
 from collections import Counter, defaultdict
 
 
@@ -1341,6 +1340,39 @@ def select_best_candidate(candidates, prioritize="probabilities"):
     
     # If there are still ties, pick one randomly
     return random.choice(filtered_candidates)
+
+
+def sample_states_book_multiple_times(slices, edges, forward_messages, transitions_dict, n=10):
+    """
+    Samples multiple times and computes the consensus (mode) for each node.
+
+    Parameters:
+    - slices: Dictionary of slices {t: list of nodes in slice t}.
+    - edges: List of directed edges (source, target).
+    - forward_messages: Precomputed forward messages {t: {node: {state: log probability}}}.
+    - transitions_dict: Dictionary of transition probabilities.
+    - n: Number of times to sample.
+
+    Returns:
+    - consensus_samples: Dictionary of consensus samples after multiple runs.
+    """
+    # Store multiple sampled dictionaries
+    all_samples = [sample_states_book(slices, edges, forward_messages, transitions_dict) for _ in range(n)]
+
+    # Compute consensus sample
+    consensus_samples = {}
+
+    # Iterate over slices (5, 4, 3, ...)
+    for t in slices.keys():
+        consensus_samples[t] = {}
+
+        # Iterate over nodes in the current slice
+        for node in slices[t]:
+            sampled_values = [all_samples[i][t][node] for i in range(n)]  # Collect samples across all runs
+            most_common_sample = Counter(sampled_values).most_common(1)[0][0]  # Get mode
+            consensus_samples[t][node] = most_common_sample  # Store consensus
+
+    return consensus_samples
 
 
 def predict_haplotypes_old(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, prority="counts"):
