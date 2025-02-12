@@ -15,7 +15,7 @@ from models.quotient_graph import QuotientGraph
 from multiprocessing import Pool
 import matplotlib.pyplot as plt
 import graph_tool.all as gt
-from FFBS.FFBS_quotient_graph import *
+from FFBS.test_FFBS_quotient_graph import *
 import time
 
 

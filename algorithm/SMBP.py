@@ -16,7 +16,7 @@ import time
 import gzip
 import pickle
 import scipy
-from Simulator.simulator_paper import transition_matrices_v2, emissions_v2
+from algorithm.FFBS import transition_matrices_v2, emissions_v2
 
 # Create an mrftools Markov Network
 def create_markov_net(q_graph, transitions):

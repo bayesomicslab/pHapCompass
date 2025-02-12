@@ -2,7 +2,13 @@ import os
 import sys
 import pickle
 from algorithm.FFBS import *
-
+from algorithm.chordal_contraction import *
+from data.input_handler import InputHandler
+from data.configuration import Configuration
+from models.fragment_graph import FragmentGraph
+from models.quotient_graph import QuotientGraph
+from evaluation.evaluation import *
+from utils.utils import *
 
 def make_inputs_for_generate_qoutient_graph(simulator):
     inputs = []
@@ -87,53 +93,53 @@ def make_inputs_for_run_count(simulator):
     return inputs
 
 
-def make_inputs_for_run_likelihood(simulator):
-    simulator.contig_lens = [100]
-    simulator.ploidies = [3, 4, 6]
-    inputs = []
-    for contig_len in simulator.contig_lens:
-        for ploidy in simulator.ploidies:
-            # stop
-            genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
-            # genotype_df = pd.read_csv(genotype_path)
-            for coverage in simulator.coverages:
-                this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
-                frag_path = os.path.join(this_cov_path, 'frag')
-                frag_graph_path = os.path.join(this_cov_path, 'fgraph')
-                quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
-                qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
-                results_path = os.path.join(this_cov_path, 'results_likelihood')
+# def make_inputs_for_run_likelihood(simulator):
+#     simulator.contig_lens = [100]
+#     simulator.ploidies = [3, 4, 6]
+#     inputs = []
+#     for contig_len in simulator.contig_lens:
+#         for ploidy in simulator.ploidies:
+#             # stop
+#             genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
+#             # genotype_df = pd.read_csv(genotype_path)
+#             for coverage in simulator.coverages:
+#                 this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+#                 frag_path = os.path.join(this_cov_path, 'frag')
+#                 frag_graph_path = os.path.join(this_cov_path, 'fgraph')
+#                 quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
+#                 qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
+#                 results_path = os.path.join(this_cov_path, 'results_likelihood')
 
-                if not os.path.exists(frag_graph_path):
-                    os.makedirs(frag_graph_path)
-                if not os.path.exists(quotient_graph_path):
-                    os.makedirs(quotient_graph_path)
-                if not os.path.exists(qgraph_reverse_maps_path):
-                    os.makedirs(qgraph_reverse_maps_path)
-                if not os.path.exists(results_path):
-                    os.makedirs(results_path)
+#                 if not os.path.exists(frag_graph_path):
+#                     os.makedirs(frag_graph_path)
+#                 if not os.path.exists(quotient_graph_path):
+#                     os.makedirs(quotient_graph_path)
+#                 if not os.path.exists(qgraph_reverse_maps_path):
+#                     os.makedirs(qgraph_reverse_maps_path)
+#                 if not os.path.exists(results_path):
+#                     os.makedirs(results_path)
 
-                # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
-                # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
-                # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
-                # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
-                # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
-                # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
-                # existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
-                existing_results = []
-                # for rd in range(90, 100):
-                for rd in range(simulator.n_samples):
-                    if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
-                        '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
-                        'qg_e_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path) and \
-                        'qg_v_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path):
-                        print(frag_path)
-                        inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
-                        # inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path]
+#                 # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
+#                 # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
+#                 # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
+#                 # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
+#                 # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
+#                 # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
+#                 # existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
+#                 existing_results = []
+#                 # for rd in range(90, 100):
+#                 for rd in range(simulator.n_samples):
+#                     if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
+#                         '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
+#                         'qg_e_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path) and \
+#                         'qg_v_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path):
+#                         print(frag_path)
+#                         inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
+#                         # inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path]
 
-                        inputs.append(inp)
-        inputs = sorted(inputs, key=lambda x: x[0], reverse=True)
-    return inputs
+#                         inputs.append(inp)
+#         inputs = sorted(inputs, key=lambda x: x[0], reverse=True)
+#     return inputs
 
 
 def make_inputs_for_running_FFBS(simulator):
@@ -224,6 +230,62 @@ def make_inputs_for_chordal_contraction(simulator):
     return inputs
 
 
+def make_inputs_for_run_likelihood():
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
+    output_dir = '/mnt/research/aguiarlab/proj/HaplOrbit/inputs'
+    contig_lens = [100]
+    ploidies = [3, 4, 6, 8]
+    coverages = [10, 30, 50, 70, 100]
+    n_samples = 100
+    inputs = []
+    for contig_len in contig_lens:
+        for ploidy in ploidies:
+            # stop
+            genotype_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
+            # genotype_df = pd.read_csv(genotype_path)
+            for coverage in coverages:
+                this_cov_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+                frag_path = os.path.join(this_cov_path, 'frag')
+                frag_graph_path = os.path.join(this_cov_path, 'fgraph')
+                quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
+                qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
+                results_path = os.path.join(this_cov_path, 'results_likelihood')
+
+                if not os.path.exists(frag_graph_path):
+                    os.makedirs(frag_graph_path)
+                if not os.path.exists(quotient_graph_path):
+                    os.makedirs(quotient_graph_path)
+                if not os.path.exists(qgraph_reverse_maps_path):
+                    os.makedirs(qgraph_reverse_maps_path)
+                if not os.path.exists(results_path):
+                    os.makedirs(results_path)
+
+                # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
+                # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
+                # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
+                # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
+                # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
+                # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
+                # existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
+                existing_results = []
+                # for rd in range(90, 100):
+                for rd in range(n_samples):
+                    
+                    if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results:
+                        print(frag_path)
+                        inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
+                        inputs.append(inp)
+    inputs = sorted(inputs, key=lambda x: x[0], reverse=True)
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    for i, inp in enumerate(inputs):
+        input_file = os.path.join(output_dir, f"input_{i}.pkl")
+        with open(input_file, "wb") as f:
+            pickle.dump(inp, f)
+    print(f"Saved {len(inputs)} inputs to {output_dir}")
+
+
 def save_inputs(inputs, output_dir):
     """
     Save each input as a separate pickle file in the specified output directory.
@@ -237,7 +299,6 @@ def save_inputs(inputs, output_dir):
         with open(input_file, "wb") as f:
             pickle.dump(inp, f)
     print(f"Saved {len(inputs)} inputs to {output_dir}")
-
 
 
 def run_chordal_contraction_graph_tool_top_k(inp):
