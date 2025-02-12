@@ -1,0 +1,461 @@
+Timer unit: 1e-06 s
+
+Total time: 0.235008 s
+File: /mnt/research/aguiarlab/proj/HaplOrbit/algorithm/chordal_contraction.py
+Function: get_chordless_cycles at line 442
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   442                                           @profile
+   443                                           def get_chordless_cycles(subgraph_copy):
+   444                                               """
+   445                                               Check if the given graph is chordal using Lexicographical Breadth-First Search (Lex-BFS).
+   446                                           
+   447                                               Parameters:
+   448                                               
+   449                                               graph: A graph_tool Graph object.
+   450                                           
+   451                                               Returns:
+   452                                               
+   453                                               True if the graph is chordal, False otherwise."""
+   454         1          0.5      0.5      0.0      chordless_cycles = []
+   455         1          0.2      0.2      0.0      labels = {}
+   456       101        433.1      4.3      0.2      for v in subgraph_copy.vertices():
+   457       100         95.4      1.0      0.0          labels[v] = []
+   458                                           
+   459         1          0.3      0.3      0.0      ordering = []
+   460         1        388.0    388.0      0.2      unnumbered = set(subgraph_copy.vertices())
+   461                                           
+   462         1          4.3      4.3      0.0      n = subgraph_copy.num_vertices()
+   463       101         32.4      0.3      0.0      for i in range(n, 0, -1):
+   464                                                   # print(i)
+   465                                                   # Select the unnumbered vertex with the largest label lexicographically
+   466       100         17.8      0.2      0.0          max_label_vertex = None
+   467       100         18.7      0.2      0.0          max_label = None
+   468      5150       1153.8      0.2      0.5          for v in unnumbered:
+   469      5050       8474.3      1.7      3.6              label = labels[v]
+   470      5050       1721.0      0.3      0.7              if max_label is None or label > max_label:
+   471       197         35.1      0.2      0.0                  max_label = label
+   472       197         41.5      0.2      0.0                  max_label_vertex = v
+   473                                           
+   474       100         16.3      0.2      0.0          v = max_label_vertex
+   475       100         62.4      0.6      0.0          ordering.append(v)
+   476       100        123.1      1.2      0.1          unnumbered.remove(v)
+   477                                           
+   478                                                   # Update labels of unnumbered neighbors
+   479      2770      60729.3     21.9     25.8          for u in v.all_neighbors():
+   480      2670       3091.2      1.2      1.3              if u in unnumbered:
+   481      1335       2410.0      1.8      1.0                  labels[u].append(i)
+   482                                           
+   483                                               # Reverse the ordering to get the perfect elimination ordering (PEO)
+   484         1          1.5      1.5      0.0      ordering.reverse()
+   485         1         75.5     75.5      0.0      position = {v: idx for idx, v in enumerate(ordering)}
+   486       101         49.5      0.5      0.0      for idx, v in enumerate(ordering):
+   487                                                   # Check if the neighbors of v that appear later in the PEO form a clique
+   488                                                   
+   489       100      69143.5    691.4     29.4          nbrs = [u for u in v.all_neighbors() if position[u] > idx]
+   490       100         33.6      0.3      0.0          if not nbrs:
+   491         1          0.3      0.3      0.0              continue
+   492                                                   # Find the neighbor with the smallest position (earliest in PEO)
+   493        99       2502.6     25.3      1.1          w = min(nbrs, key=lambda u: position[u])
+   494                                                   # print('min neighbor:', w, 'neighbors:', nbrs)
+   495      1434        388.5      0.3      0.2          for u in nbrs:
+   496      1335      12591.1      9.4      5.4              if u != w and not subgraph_copy.edge(u, w) and not subgraph_copy.edge(w, u):
+   497                                                           # The neighbors do not form a clique
+   498                                                           # print('ordering:', v, 'neighbor', u, 'min neighbor',w)
+   499                                                           # gt.shortest_path(subgraph_copy, u, w)
+   500       152       6875.1     45.2      2.9                  v_filter = subgraph_copy.new_vertex_property("bool", val=True)
+   501                                               
+   502                                                           # Exclude the specified node by setting its filter to False
+   503       152        788.0      5.2      0.3                  v_filter[subgraph_copy.vertex(v)] = False
+   504                                                           # subgraph_2 = gt.GraphView(subgraph_copy, vfilt=v_filter)
+   505                                               
+   506                                                           # Find the shortest path in the filtered graph
+   507       152      63502.3    417.8     27.0                  path_v = gt.shortest_path(subgraph_copy, source=w, target=u)[0]
+   508                                                           # path_edges = path_edges[::-1]
+   509       152        105.8      0.7      0.0                  path_v = path_v + [v]
+   510                                                           # print(path_v)
+   511       152        102.4      0.7      0.0                  chordless_cycles.append(path_v)
+   512                                                           # subgraph_copy.set_vertex_filter(None)
+   513                                           
+   514         1          0.2      0.2      0.0      return chordless_cycles
+
+Total time: 132.652 s
+File: /mnt/research/aguiarlab/proj/HaplOrbit/algorithm/chordal_contraction.py
+Function: divide_graph_by_labels at line 882
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   882                                           @profile
+   883                                           def divide_graph_by_labels(graph, m):
+   884                                               # Retrieve vertex labels
+   885         1         21.6     21.6      0.0      vertex_labels = graph.vp["v_label"]
+   886                                           
+   887                                               # Create a sorted list of vertices based on their labels
+   888         2      31666.0  15833.0      0.0      sorted_vertices = sorted(
+   889         1         60.1     60.1      0.0          graph.vertices(), key=lambda v: tuple(map(int, vertex_labels[v].split('-')))
+   890                                               )
+   891                                           
+   892                                               # Divide sorted vertices into chunks of approximately 'm' vertices
+   893         1          0.5      0.5      0.0      subgraphs = []
+   894         1          2.5      2.5      0.0      current_chunk = []
+   895                                           
+   896     11038       3366.1      0.3      0.0      for vertex in sorted_vertices:
+   897     11037       3403.5      0.3      0.0          current_chunk.append(vertex)
+   898     11037       3668.1      0.3      0.0          if len(current_chunk) >= m:
+   899                                                       # Create a subgraph for the current chunk
+   900       110  132147634.6    1e+06     99.6              subgraph = gt.GraphView(graph, vfilt=lambda v, chunk=current_chunk: v in chunk)
+   901       110        153.5      1.4      0.0              subgraphs.append(subgraph)
+   902       110        170.1      1.5      0.0              current_chunk = []  # Reset for the next chunk
+   903                                           
+   904                                               # Handle any remaining vertices in the last chunk
+   905         1          0.2      0.2      0.0      if current_chunk:
+   906         1     462331.4 462331.4      0.3          subgraph = gt.GraphView(graph, vfilt=lambda v, chunk=current_chunk: v in chunk)
+   907         1          1.0      1.0      0.0          subgraphs.append(subgraph)
+   908                                           
+   909         1          0.2      0.2      0.0      return subgraphs
+
+Total time: 3.41369 s
+File: /mnt/research/aguiarlab/proj/HaplOrbit/algorithm/haplotype_assembly_helper.py
+Function: compute_likelihood_generalized_plus at line 140
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   140                                           @profile
+   141                                           def compute_likelihood_generalized_plus(observed, phasing, obs_pos, phas_pos, error_rate):
+   142                                               """This likelihood computation can accept different length observed and phasing, but the length of obs_pos and
+   143                                               phas_pos should be the same. The likelihood is computed on the provided indices on both vectors"""
+   144     71345     299299.6      4.2      8.8      new_phasing = phasing[:, phas_pos]
+   145     71345      96302.3      1.3      2.8      new_observed = observed[obs_pos]
+   146     71345     739301.4     10.4     21.7      y = np.tile(new_observed, (new_phasing.shape[0], 1))
+   147     71345     186090.5      2.6      5.5      diff = y - new_phasing
+   148     71345     246014.1      3.4      7.2      diff[diff != 0] = 1
+   149     71345     104263.4      1.5      3.1      comp_diff = 1 - diff
+   150     71345     172216.1      2.4      5.0      term1 = diff * error_rate
+   151     71345     143422.0      2.0      4.2      term2 = comp_diff * (1 - error_rate)
+   152     71345      64974.1      0.9      1.9      terms = term1 + term2
+   153     71345     517891.8      7.3     15.2      probs = np.prod(terms, axis=1)
+   154     71345     830658.3     11.6     24.3      likelihood = np.mean(probs)
+   155     71345      13254.6      0.2      0.4      return likelihood
+
+Total time: 1.37207 s
+File: /mnt/research/aguiarlab/proj/HaplOrbit/utils/utils.py
+Function: get_matching_reads_for_positions at line 15
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+    15                                           @profile
+    16                                           def get_matching_reads_for_positions(pos, fragment_list):
+    17                                               # pos = [1, 2, 3]
+    18                                               
+    19      1828       9105.4      5.0      0.7      obs_positions = fragment_list[::2]
+    20      1828       4572.7      2.5      0.3      obs_reads = fragment_list[1::2]
+    21                                               
+    22      1828    1254475.3    686.3     91.4      matching_obs = [(obs_positions[idx], obs_reads[idx]) for idx in range(len(obs_positions)) if
+    23                                                               len(set(pos).intersection(set(obs_positions[idx]))) > 1]
+    24                                               
+    25      1828        455.2      0.2      0.0      matches = []
+    26     23809       5138.8      0.2      0.4      for mat in matching_obs:
+    27                                                   # print(mat)
+    28     21981      87136.9      4.0      6.4          shared_idx = [i for i, element in enumerate(mat[0]) if element in pos]
+    29                                                   # print([shared_idx, mat[0], mat[1]])
+    30     21981      10799.2      0.5      0.8          matches.append([shared_idx, mat[0], mat[1]])
+    31                                                   # print('-------------------------------------')
+    32                                                   # [mat[0][i] for i in shared_idx]
+    33                                                   # [mat[1][i] for i in shared_idx]
+    34                                               
+    35      1828        388.8      0.2      0.0      return matches
+
+Total time: 0.729659 s
+File: /mnt/research/aguiarlab/proj/HaplOrbit/utils/utils.py
+Function: find_phasings_matches at line 463
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   463                                           @profile
+   464                                           def find_phasings_matches(ff, sf, common_ff, common_sf, source_label, target_label):
+   465                                               # Correct
+   466      9590       2218.3      0.2      0.3      templates = []
+   467      9590     327850.4     34.2     44.9      all_local = find_matchings(list(ff[:, common_ff]), list(sf[:, common_sf]))
+   468     18320       5531.5      0.3      0.8      for al in all_local:
+   469      8730      10750.7      1.2      1.5          ff_ordering = [ii[0] for ii in al]
+   470      8730       9157.8      1.0      1.3          sf_ordering = [ii[1] for ii in al]
+   471      8730      64086.4      7.3      8.8          assert any(ff[ff_ordering, common_ff] == sf[sf_ordering, common_sf])
+   472      8730      26506.8      3.0      3.6          ordered_ff = ff[ff_ordering, :]
+   473      8730      21064.8      2.4      2.9          ordered_sf = sf[sf_ordering, :]
+   474      8730     242732.4     27.8     33.3          temp = hstack_with_order(ordered_ff, ordered_sf, source_label, target_label)
+   475                                           
+   476                                                   # temp = np.hstack([ff[ff_ordering, :], sf[sf_ordering, 1:]])
+   477      8730       9101.8      1.0      1.2          byte_set = {a.tobytes() for a in templates}
+   478      8730       6093.0      0.7      0.8          if temp.tobytes() not in byte_set:
+   479      6825       2664.8      0.4      0.4              templates.append(temp)
+   480      9590       1900.4      0.2      0.3      return templates
+
+Total time: 0.187545 s
+File: /mnt/research/aguiarlab/proj/HaplOrbit/utils/utils.py
+Function: hstack_with_order at line 483
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   483                                           @profile
+   484                                           def hstack_with_order(source_matrix, target_matrix, source_label, target_label):
+   485                                               """
+   486                                               Combines columns from source and target matrices based on the given labels.
+   487                                           
+   488                                               Parameters:
+   489                                               - source_matrix: np.ndarray, source matrix with columns mapped by source_label
+   490                                               - target_matrix: np.ndarray, target matrix with columns mapped by target_label
+   491                                               - source_label: str, label with numbers associated with source_matrix columns
+   492                                               - target_label: str, label with numbers associated with target_matrix columns
+   493                                           
+   494                                               Returns:
+   495                                               - np.ndarray, combined matrix with columns arranged based on sorted unique labels
+   496                                               """
+   497                                           
+   498                                               # Parse the labels and extract unique, sorted numbers
+   499      8730      11976.8      1.4      6.4      source_keys = list(map(int, source_label.split('-')))
+   500      8730       8132.8      0.9      4.3      target_keys = list(map(int, target_label.split('-')))
+   501      8730      10325.6      1.2      5.5      all_keys = sorted(set(source_keys + target_keys))
+   502                                           
+   503                                               # Create dictionaries for source and target matrix columns
+   504      8730      23963.2      2.7     12.8      source_dict = {key: source_matrix[:, i] for i, key in enumerate(source_keys)}
+   505      8730      17983.4      2.1      9.6      target_dict = {key: target_matrix[:, i] for i, key in enumerate(target_keys)}
+   506                                           
+   507                                               # Merge the two dictionaries: prefer source_dict values if keys overlap
+   508      8730       4113.9      0.5      2.2      combined_dict = {**target_dict, **source_dict}
+   509                                           
+   510                                               # Retrieve the columns based on the sorted keys
+   511      8730     109262.7     12.5     58.3      combined_matrix = np.column_stack([combined_dict[key] for key in all_keys])
+   512                                           
+   513      8730       1786.4      0.2      1.0      return combined_matrix
+
+Total time: 0.201519 s
+File: /mnt/research/aguiarlab/proj/HaplOrbit/utils/utils.py
+Function: find_matchings at line 515
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   515                                           @profile
+   516                                           def find_matchings(nodes_part1, nodes_part2):
+   517                                               # Sort both parts and remember the original indices.
+   518      9590      19912.2      2.1      9.9      sorted_part1 = sorted(enumerate(nodes_part1), key=lambda x: x[1])
+   519      9590      15125.4      1.6      7.5      sorted_part2 = sorted(enumerate(nodes_part2), key=lambda x: x[1])
+   520                                               
+   521                                               # Split nodes by type and collect their original indices.
+   522      9590       2924.0      0.3      1.5      def split_by_type(sorted_nodes):
+   523                                                   grouped = {}
+   524                                                   for idx, t in sorted_nodes:
+   525                                                       if t not in grouped:
+   526                                                           grouped[t] = []
+   527                                                       grouped[t].append(idx)
+   528                                                   return grouped
+   529                                               
+   530      9590      31183.7      3.3     15.5      grouped_part1 = split_by_type(sorted_part1)
+   531      9590      24233.1      2.5     12.0      grouped_part2 = split_by_type(sorted_part2)
+   532      9590       9085.5      0.9      4.5      if grouped_part1.keys() != grouped_part2.keys():
+   533                                                   return []
+   534      9590      22565.6      2.4     11.2      if any([len((grouped_part1[i])) != len((grouped_part2[i])) for i in grouped_part1.keys()]):
+   535      5225       1106.6      0.2      0.5          return []
+   536                                               # Start with a single empty matching.
+   537      4365       1191.6      0.3      0.6      matchings = [[]]
+   538     13095       5058.6      0.4      2.5      for node_type, indices1 in grouped_part1.items():
+   539      8730       2793.0      0.3      1.4          indices2 = grouped_part2[node_type]
+   540                                                   
+   541                                                   # For each current matching, extend it with all possible permutations for the current type.
+   542      8730       1820.7      0.2      0.9          new_matchings = []
+   543     21825      11104.3      0.5      5.5          for perm in itertools.permutations(indices2, len(indices2)):
+   544     28925       7794.0      0.3      3.9              for current_matching in matchings:
+   545                                                           # Add new matching to the results only if it doesn't conflict with the current matching.
+   546     15830      27443.7      1.7     13.6                  if all((i1, i2) not in current_matching for i1, i2 in zip(indices1, perm)):
+   547     15830      14456.4      0.9      7.2                      new_matchings.append(current_matching + list(zip(indices1, perm)))
+   548      8730       2809.6      0.3      1.4          matchings = new_matchings
+   549                                               
+   550      4365        911.7      0.2      0.5      return matchings
+
+Total time: 8.74084 s
+File: /mnt/research/aguiarlab/proj/HaplOrbit/utils/utils.py
+Function: compute_edge_weight at line 646
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   646                                           @profile
+   647                                           def compute_edge_weight(new_vertex_name, v_label, source_phasings, target_phasings, fragment_model, config):
+   648      1828      12029.3      6.6      0.1      possitions = sorted(set([int(nn) for nn in new_vertex_name.split('-')] + [int(nn) for nn in v_label.split('-')]))
+   649      1828       7648.9      4.2      0.1      common_ff, common_sf = find_common_element_and_index(new_vertex_name, v_label)
+   650      1828        399.0      0.2      0.0      all_phasings =[]
+   651      6683       1932.4      0.3      0.0      for ffstr in source_phasings:
+   652     14445       4016.7      0.3      0.0          for sfstr in target_phasings:
+   653                                                       
+   654      9590     893544.2     93.2     10.2              matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, 3), str_2_phas_1(sfstr, 3), common_ff, common_sf, new_vertex_name, v_label)
+   655                                                       
+   656      9590       2367.7      0.2      0.0              sorted_phasings = []
+   657     16415       4660.4      0.3      0.1              for mtx in matched_phasings:
+   658      6825     133475.2     19.6      1.5                  sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
+   659      6825       3120.3      0.5      0.0                  sorted_phasings.append(sorted_matrix)
+   660      9590      66746.0      7.0      0.8              matched_phasings_str = [phas_2_str(pm) for pm in sorted_phasings]
+   661      9590       4121.2      0.4      0.0              all_phasings += matched_phasings_str
+   662      1828    1407219.5    769.8     16.1      matches = get_matching_reads_for_positions(possitions, fragment_model.fragment_list)
+   663      1828      30097.6     16.5      0.3      weights = {phas_2_str(phas): 0 for phas in all_phasings}
+   664      8653       2137.1      0.2      0.0      for phas in all_phasings:
+   665     78170      25108.9      0.3      0.3          for indc, this_po, obs in matches:
+   666                                                       
+   667    142690    5037178.9     35.3     57.6              weights[phas_2_str(phas)] += compute_likelihood_generalized_plus(np.array(obs), str_2_phas_1(phas, config.ploidy), indc,
+   668     71345      53569.4      0.8      0.6                                                                                  list(range(len(indc))),
+   669     71345      16500.6      0.2      0.2                                                                                  config.error_rate)
+   670      1828    1033444.8    565.3     11.8      entr = entropy(list(weights.values()), base=10)
+   671      1828       1165.1      0.6      0.0      final_weight = {"weight": weights, "entropy": entr}
+   672      1828        361.0      0.2      0.0      return final_weight
+
+Total time: 0.0111193 s
+File: /mnt/research/aguiarlab/proj/HaplOrbit/utils/utils.py
+Function: sort_strings at line 674
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+   674                                           @profile
+   675                                           def sort_strings(strings):
+   676                                               # Sort the list of strings using the custom comparison logic
+   677      1828      11119.3      6.1    100.0      return sorted(strings, key=lambda x: list(map(int, x.split('-'))))
+
+Total time: 0.0102715 s
+File: generate_chordal_graph.py
+Function: get_top_k_weights at line 16
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+    16                                           @profile
+    17                                           def get_top_k_weights(mydict, k):
+    18                                               # Extract the 'weight' dictionary
+    19      1875       1053.2      0.6     10.3      weights = mydict['weight']
+    20                                               
+    21                                               # Sort the weights dictionary by value in descending order and take the top k items
+    22      1875       8397.5      4.5     81.8      top_k_weights = dict(sorted(weights.items(), key=lambda item: item[1], reverse=True)[:k])
+    23                                               
+    24                                               # Return a new dictionary with the top k weights and the same entropy
+    25      1875        820.8      0.4      8.0      return {'weight': top_k_weights, 'entropy': mydict['entropy']}
+
+Total time: 9.52152 s
+File: generate_chordal_graph.py
+Function: chordal_contraction_graph_tool_approx at line 28
+
+Line #      Hits         Time  Per Hit   % Time  Line Contents
+==============================================================
+    28                                           @profile
+    29                                           def chordal_contraction_graph_tool_approx(inp):
+    30         1          1.1      1.1      0.0      save_path, subg_id, subg, config, fragment_model, k = inp
+    31         1        103.3    103.3      0.0      this_path = os.path.join(save_path, 'chordal_sub_' + str(subg_id) + '.gt.gz')
+    32         1      10325.3  10325.3      0.1      new_graph = subg.copy()
+    33         1          7.3      7.3      0.0      e_weights = new_graph.edge_properties["e_weights"]
+    34                                               # new_graph.clear_filters()
+    35         1         65.3     65.3      0.0      e_entropy = new_graph.new_edge_property("double")
+    36                                           
+    37                                               # Loop over edges and assign entropy from the e_weights property
+    38      1336       1424.8      1.1      0.0      for e in new_graph.edges():
+    39      1335       9648.7      7.2      0.1          e_entropy[e] = e_weights[e]['entropy']
+    40                                           
+    41         1        103.6    103.6      0.0      new_graph.ep['e_entropy'] = e_entropy
+    42                                           
+    43         1     243539.2 243539.2      2.6      chordless_cycles = get_chordless_cycles(new_graph)
+    44                                           
+    45         1          0.4      0.4      0.0      to_be_removed_nodes = []
+    46                                           
+    47       153        163.7      1.1      0.0      for cyc_id, cyc in enumerate(chordless_cycles):
+    48                                                   
+    49                                                   # print(cyc_id)
+    50                                                   
+    51       152       1339.0      8.8      0.0          edges = [new_graph.edge(cyc[-1], cyc[0])]
+    52       608        232.0      0.4      0.0          for i in range(len(cyc) - 1):
+    53       456       3569.8      7.8      0.0              edges += [new_graph.edge(cyc[i], cyc[i+1])]
+    54       152        335.1      2.2      0.0          edges = [x for x in edges if x is not None]
+    55       199        183.2      0.9      0.0          while len(edges) > 3:
+    56        47       1418.3     30.2      0.0              min_edge = min(edges, key=lambda e: new_graph.ep['e_entropy'][e])
+    57        47        332.0      7.1      0.0              source_label = new_graph.vp['v_label'][min_edge.source()]
+    58        47        164.4      3.5      0.0              target_label = new_graph.vp['v_label'][min_edge.target()]
+    59                                                       # new node positions
+    60        47        377.7      8.0      0.0              poss = sorted(set([int(nn) for nn in source_label.split('-')] + [int(nn) for nn in target_label.split('-')]))
+    61                                                       # new vertex properties:
+    62        47        157.0      3.3      0.0              new_vertex_name = '-'.join([str(nnn) for nnn in poss])
+    63        47        541.7     11.5      0.0              vertex_weights = new_graph.ep['e_weights'][min_edge]
+    64        47        780.8     16.6      0.0              vertex_weights_appr = get_top_k_weights(vertex_weights, k)
+    65                                           
+    66        47        347.1      7.4      0.0              new_graph.vertex_properties["v_weights"][min_edge.source()] = vertex_weights_appr
+    67        47        233.0      5.0      0.0              new_graph.vertex_properties["v_label"][min_edge.source()] = new_vertex_name
+    68                                           
+    69        47      44917.2    955.7      0.5              source_nbrs = [n for n in min_edge.source().all_neighbors() if n != min_edge.target()]
+    70        47      31715.7    674.8      0.3              target_nbrs = [n for n in min_edge.target().all_neighbors() if n != min_edge.source()]
+    71        47       1825.2     38.8      0.0              common_nbrs = set(source_nbrs).intersection(set(target_nbrs))
+    72                                           
+    73       663        322.0      0.5      0.0              for n in common_nbrs:
+    74                                                           
+    75       616       2957.4      4.8      0.0                  v_label = new_graph.vertex_properties["v_label"][n]
+    76                                                           # e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+    77                                                           # print(len(e_poss))
+    78                                                           # new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+    79       616       7011.0     11.4      0.1                  sorted_labels = sort_strings([new_vertex_name, v_label])
+    80       616        524.1      0.9      0.0                  new_edge_name = '--'.join(sorted_labels)
+    81       616       1118.1      1.8      0.0                  (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+    82                                           
+    83       616       3035.7      4.9      0.0                  first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+    84       616       2601.5      4.2      0.0                  second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+    85       616    3226268.6   5237.4     33.9                  final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+    86       616       6570.9     10.7      0.1                  final_weights_appr = get_top_k_weights(final_weight, k)
+    87                                           
+    88       616      14356.2     23.3      0.2                  e1 = new_graph.edge(min_edge.source(), n)
+    89       616       5438.7      8.8      0.1                  e2 = new_graph.edge(min_edge.target(), n)
+    90                                                           
+    91       616      15905.4     25.8      0.2                  new_graph.edge_properties["e_weights"][e1] = final_weights_appr
+    92       616       7262.5     11.8      0.1                  new_graph.edge_properties["e_label"][e1] = new_edge_name
+    93       616       5609.0      9.1      0.1                  new_graph.edge_properties['e_entropy'][e1] = final_weights_appr['entropy']
+    94       616       3261.4      5.3      0.0                  new_graph.remove_edge(e2)
+    95                                           
+    96       591       1446.2      2.4      0.0              for n in set(source_nbrs)-common_nbrs:
+    97                                                           
+    98       544       2544.5      4.7      0.0                  v_label = new_graph.vertex_properties["v_label"][n]
+    99                                           
+   100       544       5910.2     10.9      0.1                  sorted_labels = sort_strings([new_vertex_name, v_label])
+   101       544        463.9      0.9      0.0                  new_edge_name = '--'.join(sorted_labels)
+   102       544       1017.3      1.9      0.0                  (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+   103                                           
+   104       544       2696.0      5.0      0.0                  first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+   105       544       2630.2      4.8      0.0                  second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+   106       544    3177561.6   5841.1     33.4                  final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+   107       544       5974.8     11.0      0.1                  final_weights_appr = get_top_k_weights(final_weight, k)
+   108                                           
+   109                                           
+   110       544      12535.0     23.0      0.1                  e1 = new_graph.edge(min_edge.source(), n)
+   111                                                           # e2 = new_graph.edge(min_edge.target(), n)
+   112       544      13274.9     24.4      0.1                  new_graph.edge_properties["e_weights"][e1] = final_weights_appr
+   113       544       6862.9     12.6      0.1                  new_graph.edge_properties["e_label"][e1] = new_edge_name
+   114       544       5150.3      9.5      0.1                  new_graph.edge_properties['e_entropy'][e1] = final_weights_appr['entropy']
+   115                                                           # new_graph.edge_properties["e_weights"][e2]
+   116                                           
+   117                                                       
+   118       715       1475.9      2.1      0.0              for n in set(target_nbrs)-common_nbrs:
+   119                                                           
+   120       668       3053.0      4.6      0.0                  v_label = new_graph.vertex_properties["v_label"][n]
+   121       668       7368.8     11.0      0.1                  sorted_labels = sort_strings([new_vertex_name, v_label])
+   122       668        577.1      0.9      0.0                  new_edge_name = '--'.join(sorted_labels)
+   123                                           
+   124       668       1224.6      1.8      0.0                  (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+   125                                           
+   126       668       3243.2      4.9      0.0                  first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+   127       668       3100.1      4.6      0.0                  second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+   128       668    2519186.4   3771.2     26.5                  final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+   129       668       6574.5      9.8      0.1                  final_weights_appr = get_top_k_weights(final_weight, k)
+   130                                           
+   131       668      14603.7     21.9      0.2                  e2 = new_graph.edge(min_edge.target(), n)
+   132       668       4023.5      6.0      0.0                  new_graph.remove_edge(e2)
+   133       668      15733.4     23.6      0.2                  e1 = new_graph.add_edge(min_edge.source(), n)
+   134       668      11078.1     16.6      0.1                  new_graph.edge_properties["e_weights"][e1] = final_weights_appr
+   135       668       7341.0     11.0      0.1                  new_graph.edge_properties["e_label"][e1] = new_edge_name
+   136       668       6002.2      9.0      0.1                  new_graph.edge_properties['e_entropy'][e1] = final_weights_appr['entropy']
+   137                                                       
+   138                                                       # to_be_removed_nodes += [min_edge.target()]
+   139        47         76.8      1.6      0.0              to_be_removed_nodes.append(min_edge.target())
+   140        47        130.6      2.8      0.0              new_graph.remove_edge(min_edge)
+   141        47        640.1     13.6      0.0              edges.remove(min_edge)
+   142                                           
+   143         1        980.1    980.1      0.0      new_graph.remove_vertex(to_be_removed_nodes)
+   144         1      20936.9  20936.9      0.2      new_graph.save(this_path)
+   145         1          9.8      9.8      0.0      print('[Done]', this_path)
+

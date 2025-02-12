@@ -840,6 +840,19 @@ def compute_likelihood_generalized_plus(observed, phasing, obs_pos, phas_pos, er
     return likelihood
 
 
+def compute_global_phasing_likelihood(predicted_haplotypes, fragment_model, config):
+    predicted_haplotype_np_all = predicted_haplotypes.to_numpy()
+    # reads_all_poss = fragment_model.fragment_list[::2]
+    likelihood = 0
+    for rd_id in range(0, len(fragment_model.fragment_list), 2):
+        read_poss = [p - 1 for p in fragment_model.fragment_list[rd_id]]
+        read_frag = fragment_model.fragment_list[rd_id + 1]
+        phas = predicted_haplotype_np_all[:, read_poss]
+        read_indices = list(range(len(read_frag)))
+        rd_likelihood = compute_likelihood_generalized_plus(np.array(read_frag), phas, read_indices, read_indices, config.error_rate)
+        likelihood += rd_likelihood
+    return likelihood
+
 def plot_subgraph_graph_tool_simple(new_graph, included_vertices):
     v_filter = new_graph.new_vertex_property("bool")
 
@@ -852,3 +865,29 @@ def plot_subgraph_graph_tool_simple(new_graph, included_vertices):
         gt.graph_draw(subgraph, output_size=(500, 500), vertex_font_size=14,edge_font_size=12, vetex_size=10)
     else:
         gt.graph_draw(new_graph, output_size=(500, 500), vertex_font_size=14, edge_font_size=12, vetex_size=10)
+
+
+
+
+def match_np(np1,np2):
+    np1_cols = np.all(~np.isnan(np1), axis=0)
+    np2_cols = np.all(~np.isnan(np2), axis=0)
+    indices1 = np.where(np1_cols)[0]
+    indices2 = np.where(np2_cols)[0]
+    np1_nan_cols = np.isnan(np1).all(axis=0)
+    np2_nan_cols = np.isnan(np2).all(axis=0)
+    # np1_nan_indices = np.where(np1_nan_cols)[0]
+    np2_nan_indices = np.where(np2_nan_cols)[0]
+
+    premutations = []
+    fixed_positions = sorted(list(set(indices1).intersection(set(indices2))))
+    fixed_values1 = np1[:, fixed_positions]
+    correct_permuted = None
+    for permuted_key in itertools.permutations(np2):
+        permuted_key_np = np.array(permuted_key)
+        if np.array_equal(fixed_values1, permuted_key_np[:, fixed_positions]):
+            correct_permuted = permuted_key_np
+            correct_permuted[:, np2_nan_indices] = np1[:, np2_nan_indices]
+            premutations.append(correct_permuted)
+    return premutations
+

@@ -10,6 +10,35 @@ from collections import defaultdict
 from utils.utils import sort_nodes, str_2_phas_1
 
 
+def calculate_correct_phasing_rate(reconstructed_haplotypes, true_haplotypes):
+    n = reconstructed_haplotypes.shape[1]  # Number of SNPs
+    k = reconstructed_haplotypes.shape[0]  # Number of haplotypes
+
+    similarity_score = 0
+    for i in range(k):
+        for j in range(n):
+            if reconstructed_haplotypes[i, j] == true_haplotypes[i, j]:
+                similarity_score += 1
+
+    # Calculate the Correct Phasing Rate (Rc)
+    Rc = similarity_score / (n * k)
+    return Rc
+
+
+def calculate_perfect_solution_rate(reconstructed_haplotypes, true_haplotypes):
+    k = reconstructed_haplotypes.shape[0]  # Number of haplotypes
+    perfect_count = 0
+
+    # Check if each haplotype matches perfectly with the corresponding true haplotype
+    for i in range(k):
+        if np.array_equal(reconstructed_haplotypes[i], true_haplotypes[i]):
+            perfect_count += 1
+
+    # Calculate the Perfect Solution Rate (Rp)
+    Rp = perfect_count / k
+    return Rp
+
+
 def find_matches(h_star_col, h_col):
   """
   input:
@@ -348,8 +377,36 @@ def calculate_pair_counts(fragment_list):
 
     return pair_counts
 
+    
+def get_block_info(quotient_g, predicted_haplotypes, true_haplotypes, fragment_model):
+    component_labels, _ = gt.label_components(quotient_g.graph)
+    components = {}
+    for v in quotient_g.graph.vertices():
+        comp_id = component_labels[v]  # Get component ID of the vertex
+        if comp_id not in components:
+            components[comp_id] = {'blocks': []}
+        components[comp_id]['blocks'].append(quotient_g.graph.vertex_properties["v_label"][v])
 
-if __name__ == '__main__':
-    evaluate_ffbs_acc('/mnt/research/aguiarlab/proj/HaplOrbit/results')
-    # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878/contig_100/ploidy_3/haplotypes.csv'
-    # samples = {'0': {'1-2': '
+    for key in components.keys():
+        block = components[key]['blocks']
+        positions = sorted(set(int(num) for r in block for num in r.split('-')))
+        positions_ind = [p-1 for p in positions]
+        block_pred_haplotype = predicted_haplotypes[positions_ind].to_numpy()
+        block_true_haplotype = true_haplotypes[positions_ind].to_numpy()
+        block_vector_error_rate, block_vector_error, _, _ = compute_vector_error_rate(block_pred_haplotype, block_true_haplotype)
+        block_accuracy, _ = calculate_accuracy(block_pred_haplotype, block_true_haplotype)
+        block_mismatch_error, _ = calculate_mismatch_error(block_pred_haplotype, block_true_haplotype)
+        block_mec_ = mec(block_pred_haplotype, fragment_model.fragment_list)
+        components[key]['evaluation'] = {'vector_error_rate': block_vector_error_rate, 'vector_error': block_vector_error, 
+                                         'accuracy': block_accuracy, 'mismatch_error': block_mismatch_error, 'mec': block_mec_}
+        components[key]['block_size'] = len(positions_ind)
+
+    block_info = {'vector_error_rate': np.mean([components[key]['evaluation']['vector_error_rate'] for key in components.keys()]), 
+                  'vector_error': np.mean([components[key]['evaluation']['vector_error'] for key in components.keys()]),
+                  'accuracy': np.mean([components[key]['evaluation']['accuracy'] for key in components.keys()]),
+                  'mismatch_error': np.mean([components[key]['evaluation']['mismatch_error'] for key in components.keys()]),
+                  'mec': np.mean([components[key]['evaluation']['mec'] for key in components.keys()]), 
+                  'average_block_size': np.mean([components[key]['block_size'] for key in components.keys()])}
+
+    return block_info, components
+

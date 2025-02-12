@@ -35,18 +35,12 @@ def sort_tuples_by_number(tuples):
     return sorted_tuples
 
 
-
-
 def str_2_phas_1(phasing, ploidy):
     return np.array([int(p) for p in [*phasing]]).reshape(ploidy, -1)
 
 
 def phas_2_str(phas):
     return ''.join([str(ph) for ph in list(np.ravel(phas))])
-
-
-
-
 
 
 def permute_rows(a):
@@ -362,160 +356,5 @@ def generate_hmm_with_weights_and_emissions_random(qg, error_rate, k, m):
     return state_names, transition_matrix, emission_prob_matrix, emission_index_map
 
 
-
-class Args:
-    def __init__(self):
-        self.vcf_path = 'example/62_ID0.vcf'
-        self.data_path = 'example/test.txt'
-        self.bam_path = 'example/example.bam'
-        self.genotype_path = 'example/genotype.txt'
-        self.ploidy = 3
-        self.error_rate = 0.001
-        self.epsilon = 0.0001
-        self.output_path = 'output'
-        self.root_dir = 'D:/UCONN/HaplOrbit'
-        self.alleles = [0, 1]
-
-
-
-def forward_filtering_no_observations(A, B, pi, T):
-    """
-    Perform forward filtering in FFBS without explicit observations, handling zero sums.
-
-    A : transition matrix (NxN)
-    B : emission matrix (NxM), where M is the number of possible emissions
-    pi : initial state distribution (N)
-    T : length of the sequence to sample
-    
-    Returns:
-    alpha : forward probabilities (T x N)
-    """
-    N = A.shape[0]  # Number of hidden states
-    
-    # Alpha array to store forward probabilities
-    alpha = np.zeros((T, N))
-    
-    # Step 1: Initialize the forward probabilities with the initial state distribution (pi)
-    alpha[0, :] = pi  # No observation, so we just start with the initial probabilities
-    
-    # Step 2: Forward recursion step (no conditioning on emissions, just transitions)
-    for t in range(1, T):
-        for j in range(N):
-            alpha[t, j] = np.sum(alpha[t-1, :] * A[:, j])
-        
-        # Check if sum of alpha is zero and handle it
-        alpha_sum = np.sum(alpha[t, :])
-        if alpha_sum == 0:
-            alpha[t, :] = 0  # Keep it as zeros if all transition probabilities are zero
-        else:
-            # Normalize to avoid underflow and ensure valid probabilities
-            alpha[t, :] /= alpha_sum
-    
-    return alpha
-
-
-def backward_sampling_no_observations(alpha, A, B, T):
-    """
-    Perform backward sampling in FFBS without explicit observations.
-
-    alpha : forward probabilities (T x N)
-    A : transition matrix (NxN)
-    B : emission matrix (NxM), where M is the number of possible emissions
-    T : length of the sequence to sample
-    
-    Returns:
-    sampled_states : list of sampled hidden states
-    sampled_emissions : list of sampled emissions corresponding to the hidden states
-    """
-    N = A.shape[0]  # Number of hidden states
-    M = B.shape[1]  # Number of possible emissions
-    
-    # Initialize arrays to store the sampled states and emissions
-    sampled_states = np.zeros(T, dtype=int)
-    sampled_emissions = np.zeros(T, dtype=int)
-    
-    if np.sum(alpha[T-1, :]) == 0:
-        probs = np.ones(alpha[T-1, :].shape[0])/alpha[T-1, :].shape[0]
-    else: 
-        probs = alpha[T-1, :] / np.sum(alpha[T-1, :])
-    # Step 1: Sample the final hidden state from the forward probabilities at time T-1
-    sampled_states[T-1] = np.random.choice(N, p=probs)
-    
-    # Step 2: Backward sampling of the hidden states
-    for t in range(T-2, -1, -1):
-        current_state = sampled_states[t+1]
-        prob = alpha[t, :] * A[:, current_state]
-        if np.sum(prob) == 0:
-            prob = np.ones(prob.shape[0])/prob.shape[0]  # Keep it as zeros if all transition probabilities are zero
-        else:  # Normalize probabilities
-            prob /= np.sum(prob)  # Normalize probabilities
-        sampled_states[t] = np.random.choice(N, p=prob)
-    
-    # Step 3: Sample the emissions based on the sampled hidden states
-    for t in range(T):
-        sampled_emissions[t] = np.random.choice(M, p=B[sampled_states[t], :])
-    
-    return sampled_states, sampled_emissions
-
-
-def ffbs_no_observations(A, B, pi, T):
-    """
-    Full FFBS algorithm that combines forward filtering and backward sampling, without explicit observations.
-    
-    A : transition matrix (NxN)
-    B : emission matrix (NxM)
-    pi : initial state distribution (N)
-    T : length of the sequence to sample
-    
-    Returns:
-    sampled_states : list of sampled hidden states
-    sampled_emissions : list of sampled emissions
-    """
-    # Step 1: Forward Filtering
-    alpha = forward_filtering_no_observations(A, B, pi, T)
-    
-    # Step 2: Backward Sampling
-    sampled_states, sampled_emissions = backward_sampling_no_observations(alpha, A, B, T)
-    
-    return sampled_states, sampled_emissions
-
-
-# Create the mock args object
-args = Args()
-
-
-# Initialize classes with parsed arguments
-input_handler = InputHandler(args)
-
-config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
-
-fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
-frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
-
-# fragment_model = FragmentGraph(args.data_path, args.genotype_path, args.ploidy, input_handler.alleles)
-# frag_graph, fragment_list = fragment_model.construct_graph(input_handler, config)
-
-plot_graph(frag_graph)
-print('Fragment Graph constructed.')
-
-quotient_g = QuotientGraph(frag_graph).construct(fragment_list, input_handler, config)
-plot_graph(quotient_g)
-print('Quotient Graph constructed.')
-
-# qg = chordal_contraction_cycle_base(quotient_g, fragment_list, input_handler, config)
-qg = chordal_contraction(quotient_g, fragment_list, input_handler, config)
-plot_graph(qg)    
-print('Chordal Graph constructed.')
-
-
-
-error_rate = 0.001
-k = 2
-m = 2
-# state_names, transition_matrix, emission_prob_matrix, emission_index_map = generate_hmm_with_weights_and_emissions(qg, error_rate)
-state_names, transition_matrix, emission_prob_matrix, emission_index_map = generate_hmm_with_weights_and_emissions_random(qg, error_rate, k, m)
-pi = np.array([1/2 , 1/2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0])
-T = 10
-ffbs_no_observations(transition_matrix, emission_prob_matrix, pi, T)
 
 

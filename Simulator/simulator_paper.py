@@ -19,37 +19,38 @@ from FFBS.FFBS_quotient_graph import *
 import time
 
 
-def get_block_info(quotient_g, predicted_haplotypes, true_haplotypes, fragment_model):
-    component_labels, _ = gt.label_components(quotient_g.graph)
-    components = {}
-    for v in quotient_g.graph.vertices():
-        comp_id = component_labels[v]  # Get component ID of the vertex
-        if comp_id not in components:
-            components[comp_id] = {'blocks': []}
-        components[comp_id]['blocks'].append(quotient_g.graph.vertex_properties["v_label"][v])
+# def get_block_info(quotient_g, predicted_haplotypes, true_haplotypes, fragment_model):
+#     component_labels, _ = gt.label_components(quotient_g.graph)
+#     components = {}
+#     for v in quotient_g.graph.vertices():
+#         comp_id = component_labels[v]  # Get component ID of the vertex
+#         if comp_id not in components:
+#             components[comp_id] = {'blocks': []}
+#         components[comp_id]['blocks'].append(quotient_g.graph.vertex_properties["v_label"][v])
 
-    for key in components.keys():
-        block = components[key]['blocks']
-        positions = sorted(set(int(num) for r in block for num in r.split('-')))
-        positions_ind = [p-1 for p in positions]
-        block_pred_haplotype = predicted_haplotypes[positions_ind].to_numpy()
-        block_true_haplotype = true_haplotypes[positions_ind].to_numpy()
-        block_vector_error_rate, block_vector_error, _, _ = compute_vector_error_rate(block_pred_haplotype, block_true_haplotype)
-        block_accuracy, _ = calculate_accuracy(block_pred_haplotype, block_true_haplotype)
-        block_mismatch_error, _ = calculate_mismatch_error(block_pred_haplotype, block_true_haplotype)
-        block_mec_ = mec(block_pred_haplotype, fragment_model.fragment_list)
-        components[key]['evaluation'] = {'vector_error_rate': block_vector_error_rate, 'vector_error': block_vector_error, 
-                                         'accuracy': block_accuracy, 'mismatch_error': block_mismatch_error, 'mec': block_mec_}
-        components[key]['block_size'] = len(positions_ind)
+#     for key in components.keys():
+#         block = components[key]['blocks']
+#         positions = sorted(set(int(num) for r in block for num in r.split('-')))
+#         positions_ind = [p-1 for p in positions]
+#         block_pred_haplotype = predicted_haplotypes[positions_ind].to_numpy()
+#         block_true_haplotype = true_haplotypes[positions_ind].to_numpy()
+#         block_vector_error_rate, block_vector_error, _, _ = compute_vector_error_rate(block_pred_haplotype, block_true_haplotype)
+#         block_accuracy, _ = calculate_accuracy(block_pred_haplotype, block_true_haplotype)
+#         block_mismatch_error, _ = calculate_mismatch_error(block_pred_haplotype, block_true_haplotype)
+#         block_mec_ = mec(block_pred_haplotype, fragment_model.fragment_list)
+#         components[key]['evaluation'] = {'vector_error_rate': block_vector_error_rate, 'vector_error': block_vector_error, 
+#                                          'accuracy': block_accuracy, 'mismatch_error': block_mismatch_error, 'mec': block_mec_}
+#         components[key]['block_size'] = len(positions_ind)
 
-    block_info = {'vector_error_rate': np.mean([components[key]['evaluation']['vector_error_rate'] for key in components.keys()]), 
-                  'vector_error': np.mean([components[key]['evaluation']['vector_error'] for key in components.keys()]),
-                  'accuracy': np.mean([components[key]['evaluation']['accuracy'] for key in components.keys()]),
-                  'mismatch_error': np.mean([components[key]['evaluation']['mismatch_error'] for key in components.keys()]),
-                  'mec': np.mean([components[key]['evaluation']['mec'] for key in components.keys()]), 
-                  'average_block_size': np.mean([components[key]['block_size'] for key in components.keys()])}
+#     block_info = {'vector_error_rate': np.mean([components[key]['evaluation']['vector_error_rate'] for key in components.keys()]), 
+#                   'vector_error': np.mean([components[key]['evaluation']['vector_error'] for key in components.keys()]),
+#                   'accuracy': np.mean([components[key]['evaluation']['accuracy'] for key in components.keys()]),
+#                   'mismatch_error': np.mean([components[key]['evaluation']['mismatch_error'] for key in components.keys()]),
+#                   'mec': np.mean([components[key]['evaluation']['mec'] for key in components.keys()]), 
+#                   'average_block_size': np.mean([components[key]['block_size'] for key in components.keys()])}
 
-    return block_info, components
+#     return block_info, components
+
 
 class Simulator:
     def __init__(self, config):
@@ -845,88 +846,88 @@ class SimulatorAWRI:
             f.write(self.main_sh)
 
 
-def emissions_v2(ploidy, quotient_g, quotient_g_v_label_reversed, error_rate):
-    """
-    The only difference in version 2 is that we are using quotient graph directly:
-    quotient_g.graph ==> quotient_g
-    """
-    emission_dict = {}
-    # Calculate emissions for each state and populate the emission probability matrix
-    for state in quotient_g_v_label_reversed.keys():
-        emission_dict[state] = {}
+# def emissions_v2(ploidy, quotient_g, quotient_g_v_label_reversed, error_rate):
+#     """
+#     The only difference in version 2 is that we are using quotient graph directly:
+#     quotient_g.graph ==> quotient_g
+#     """
+#     emission_dict = {}
+#     # Calculate emissions for each state and populate the emission probability matrix
+#     for state in quotient_g_v_label_reversed.keys():
+#         emission_dict[state] = {}
 
-        node_elements = state.split('-')  # For example, '1-2' -> ['1', '2']
-        node_length = len(node_elements)  # Determine the number of elements in the node
+#         node_elements = state.split('-')  # For example, '1-2' -> ['1', '2']
+#         node_length = len(node_elements)  # Determine the number of elements in the node
 
-        # Generate all possible combinations of 0 and 1 based on the node length
-        possible_emissions = generate_binary_combinations(node_length)
-        v = quotient_g_v_label_reversed[state]
-        phasings = quotient_g.vertex_properties["v_weights"][v]['weight'].keys()
-        for phasing in phasings:
-            emission_dict[state][phasing] = {}
-            phasing_np = str_2_phas_1(phasing, ploidy)  # Compute phasing for the state key
-            for emission in possible_emissions:
-                likelihood = compute_likelihood(np.array(emission), phasing_np, error_rate)
-                emission_dict[state][phasing][''.join([str(e) for e in emission])] = likelihood
+#         # Generate all possible combinations of 0 and 1 based on the node length
+#         possible_emissions = generate_binary_combinations(node_length)
+#         v = quotient_g_v_label_reversed[state]
+#         phasings = quotient_g.vertex_properties["v_weights"][v]['weight'].keys()
+#         for phasing in phasings:
+#             emission_dict[state][phasing] = {}
+#             phasing_np = str_2_phas_1(phasing, ploidy)  # Compute phasing for the state key
+#             for emission in possible_emissions:
+#                 likelihood = compute_likelihood(np.array(emission), phasing_np, error_rate)
+#                 emission_dict[state][phasing][''.join([str(e) for e in emission])] = likelihood
 
-    return emission_dict
+#     return emission_dict
 
 
-def transition_matrices_v2(quotient_g, edges_map_quotient, ploidy, config, fragment_model):
-    """
-    The only difference in version 2 is that we are using quotient graph directly:
-    quotient_g.graph ==> quotient_g
-    """
-    transitions_dict = {}
-    transitions_dict_extra = {}
-    for edge in edges_map_quotient.keys():
-        transitions_dict_extra[edge] = {}
-        source = edges_map_quotient[edge][0]
-        target = edges_map_quotient[edge][1]
-        source_weights = quotient_g.vertex_properties["v_weights"][source]['weight']
-        target_weights = quotient_g.vertex_properties["v_weights"][target]['weight']
-        source_label = quotient_g.vertex_properties["v_label"][source]
-        target_label = quotient_g.vertex_properties["v_label"][target]
-        common_ff, common_sf = find_common_element_and_index(source_label, target_label)
-        source_phasings = list(source_weights.keys())
-        target_phasings = list(target_weights.keys())
-        # transitions_dict = {'source': source_phasings, 'target': target_phasings}
-        transitions_mtx = np.zeros((len(source_phasings), len(target_phasings)))
+# def transition_matrices_v2(quotient_g, edges_map_quotient, ploidy, config, fragment_model):
+#     """
+#     The only difference in version 2 is that we are using quotient graph directly:
+#     quotient_g.graph ==> quotient_g
+#     """
+#     transitions_dict = {}
+#     transitions_dict_extra = {}
+#     for edge in edges_map_quotient.keys():
+#         transitions_dict_extra[edge] = {}
+#         source = edges_map_quotient[edge][0]
+#         target = edges_map_quotient[edge][1]
+#         source_weights = quotient_g.vertex_properties["v_weights"][source]['weight']
+#         target_weights = quotient_g.vertex_properties["v_weights"][target]['weight']
+#         source_label = quotient_g.vertex_properties["v_label"][source]
+#         target_label = quotient_g.vertex_properties["v_label"][target]
+#         common_ff, common_sf = find_common_element_and_index(source_label, target_label)
+#         source_phasings = list(source_weights.keys())
+#         target_phasings = list(target_weights.keys())
+#         # transitions_dict = {'source': source_phasings, 'target': target_phasings}
+#         transitions_mtx = np.zeros((len(source_phasings), len(target_phasings)))
 
-        for i, ffstr in enumerate(source_phasings):
-            for j, sfstr in enumerate(target_phasings):
-                transitions_dict_extra[edge][str(i) + '-' + str(j)] = {}
-                transitions_dict_extra[edge][str(i) + '-' + str(j)]['source_phasing'] = ffstr
-                transitions_dict_extra[edge][str(i) + '-' + str(j)]['target_phasing'] = sfstr
-                transitions_dict_extra[edge][str(i) + '-' + str(j)]['matched_phasings'] = {}
-                matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, ploidy), str_2_phas_1(sfstr, ploidy), common_ff, common_sf, source_label, target_label)
-                sorted_phasings = []
-                for mtx in matched_phasings:
-                    sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
-                    sorted_phasings.append(sorted_matrix)
+#         for i, ffstr in enumerate(source_phasings):
+#             for j, sfstr in enumerate(target_phasings):
+#                 transitions_dict_extra[edge][str(i) + '-' + str(j)] = {}
+#                 transitions_dict_extra[edge][str(i) + '-' + str(j)]['source_phasing'] = ffstr
+#                 transitions_dict_extra[edge][str(i) + '-' + str(j)]['target_phasing'] = sfstr
+#                 transitions_dict_extra[edge][str(i) + '-' + str(j)]['matched_phasings'] = {}
+#                 matched_phasings = find_phasings_matches(str_2_phas_1(ffstr, ploidy), str_2_phas_1(sfstr, ploidy), common_ff, common_sf, source_label, target_label)
+#                 sorted_phasings = []
+#                 for mtx in matched_phasings:
+#                     sorted_matrix = mtx[np.argsort([''.join(map(str, row)) for row in mtx])]
+#                     sorted_phasings.append(sorted_matrix)
                 
-                matched_phasings_str = list(set([phas_2_str(pm) for pm in sorted_phasings]))
-                # print(i, ffstr, j, sfstr)
-                # print('matched phasings:', matched_phasings_str, len(matched_phasings_str))
-                # if len(matched_phasings_str) > 1:
-                #     print('More than one matching phasing')
-                #     # stop
-                poss = sorted(list(set([int(ss) for ss in source_label.split('-')] + [int(tt) for tt in target_label.split('-')])))
-                match_reads = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
-                wei = 0
-                for phas in matched_phasings_str:
-                    this_phas_weight = 0
-                    for indc, this_po, obs in match_reads:
-                        this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), str_2_phas_1(phas, ploidy), indc, list(range(len(indc))), 
-                                                                   config.error_rate)
-                        wei += this_phas_read_weight
-                        this_phas_weight += this_phas_read_weight
-                    transitions_dict_extra[edge][str(i) + '-' + str(j)]['matched_phasings'][phas] = this_phas_weight
-                transitions_mtx[i, j] = wei
+#                 matched_phasings_str = list(set([phas_2_str(pm) for pm in sorted_phasings]))
+#                 # print(i, ffstr, j, sfstr)
+#                 # print('matched phasings:', matched_phasings_str, len(matched_phasings_str))
+#                 # if len(matched_phasings_str) > 1:
+#                 #     print('More than one matching phasing')
+#                 #     # stop
+#                 poss = sorted(list(set([int(ss) for ss in source_label.split('-')] + [int(tt) for tt in target_label.split('-')])))
+#                 match_reads = get_matching_reads_for_positions([int(i) for i in poss], fragment_model.fragment_list)
+#                 wei = 0
+#                 for phas in matched_phasings_str:
+#                     this_phas_weight = 0
+#                     for indc, this_po, obs in match_reads:
+#                         this_phas_read_weight = compute_likelihood_generalized_plus(np.array(obs), str_2_phas_1(phas, ploidy), indc, list(range(len(indc))), 
+#                                                                    config.error_rate)
+#                         wei += this_phas_read_weight
+#                         this_phas_weight += this_phas_read_weight
+#                     transitions_dict_extra[edge][str(i) + '-' + str(j)]['matched_phasings'][phas] = this_phas_weight
+#                 transitions_mtx[i, j] = wei
 
-        transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
-        transitions_dict[edge] = transitions_mtx
-    return transitions_dict, transitions_dict_extra
+#         transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
+#         transitions_dict[edge] = transitions_mtx
+#     return transitions_dict, transitions_dict_extra
 
 
 def extract_positions(vcf_path):
@@ -1067,7 +1068,6 @@ def extract_sample_from_vcf(file_path, target_sample):
     df.to_csv(df_name, index=False)
 
 
-
 def check_compatibility_vcf_fasta():
     # vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/_EGAZ00001239288_HRC.r1-1.EGA.GRCh37.chr21.haplotypes.vcf.gz'
     vcf_path = '/mnt/research/aguiarlab/data/haprefconsort/hap_ref_consort/corephase_data/maf0.01/hapref_chr21_filtered.vcf.gz'
@@ -1137,880 +1137,811 @@ def check_integrity_vcf_fasta_sim_fasta_ref_():
         snp_counter += 1
 
 
+# def make_inputs_for_generate_qoutient_graph(simulator):
+#     inputs = []
+#     simulator.contig_lens = [100]
+#     simulator.ploidies = [3, 4, 6, 8]
+#     for contig_len in simulator.contig_lens:
+#         for ploidy in simulator.ploidies:
+#             # stop
+#             genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
+#             # genotype_df = pd.read_csv(genotype_path)
+#             for coverage in simulator.coverages:
+#                 this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+#                 frag_path = os.path.join(this_cov_path, 'frag')
+#                 frag_graph_path = os.path.join(this_cov_path, 'fgraph')
+#                 quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
+#                 qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
 
-def generate_quotient_graph(inp):
-    this_frag_path, this_fragment_coverage_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path = inp
-    file_name = frag_file.split('.')[0]
-    print('Working on', os.path.join(this_frag_path, frag_file))
-    fragment_v_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_v_label_' + file_name + '.pkl')
-    fragment_e_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_e_label_' + file_name + '.pkl')
-    quotient_v_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_v_label_' + file_name + '.pkl')
-    quotient_e_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_e_label_' + file_name + '.pkl')
-    
+#                 if not os.path.exists(frag_graph_path):
+#                     os.makedirs(frag_graph_path)
+#                 if not os.path.exists(quotient_graph_path):
+#                     os.makedirs(quotient_graph_path)
+#                 if not os.path.exists(qgraph_reverse_maps_path):
+#                     os.makedirs(qgraph_reverse_maps_path)
 
+#                 existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
+#                 existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
+#                 existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
+#                 existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
+#                 existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
+#                 existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
 
-    class Args:
-        def __init__(self):
-            self.vcf_path = 'example/62_ID0.vcf'
-            self.data_path = os.path.join(this_frag_path, frag_file)
-            # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
-            self.bam_path = 'example/example.bam'
-            self.genotype_path = genotype_path
-            self.ploidy = ploidy
-            self.error_rate = 0.001
-            self.epsilon = 0.0001
-            self.output_path = 'output'
-            self.root_dir = 'D:/UCONN/HaplOrbit'
-            self.alleles = [0, 1]
-
-
-    args = Args()
-    input_handler = InputHandler(args)
-    config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
-    
-    # create fragment graph
-    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
-    fragment_model.construct(input_handler, config)
-
-    # save fragment graph
-    frag_graph_path = os.path.join(this_fragment_coverage_path, file_name + '.gt.gz')
-    fragment_model.graph.save(frag_graph_path)
-
-    with open(fragment_v_label_revered_path, "wb") as f:
-        pickle.dump(fragment_model.v_label_reversed, f)
-
-    edges_map_fragment = {}
-    for k in fragment_model.e_label_reversed.keys():
-        edges_map_fragment[k] = [int(fragment_model.e_label_reversed[k].source()), int(fragment_model.e_label_reversed[k].target())]
-
-    with open(fragment_e_label_revered_path, "wb") as f:
-        pickle.dump(edges_map_fragment, f)
+#                 for rd in range(simulator.n_samples):
+#                     if 'qg_e_label_' + str(rd).zfill(2) + '.pkl' not in existing_files_qg_e or 'qg_v_label_' + str(rd).zfill(2) + '.pkl' not in existing_files_qg_v or 'fg_e_label_' + str(rd).zfill(2) + '.pkl' not in existing_files_fg_e or 'fg_v_label_' + str(rd).zfill(2) + '.pkl' not in existing_files_fg_v or str(rd).zfill(2) + '.gt.gz' not in existing_fg or str(rd).zfill(2) + '.gt.gz' not in existing_qg:
+#                         inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path]
+#                         inputs.append(inp)
+#     return inputs
 
 
-    # create quotient graph
-    quotient_g = QuotientGraph(fragment_model)
-    quotient_g.construct(input_handler, config)
+# def make_inputs_for_run_count(simulator):
+#     simulator.contig_lens = [100]
+#     inputs = []
+#     for contig_len in simulator.contig_lens:
+#         for ploidy in simulator.ploidies:
+#             # stop
+#             genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
+#             # genotype_df = pd.read_csv(genotype_path)
+#             for coverage in simulator.coverages:
+#                 this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+#                 frag_path = os.path.join(this_cov_path, 'frag')
+#                 frag_graph_path = os.path.join(this_cov_path, 'fgraph')
+#                 quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
+#                 qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
+#                 results_path = os.path.join(this_cov_path, 'results_counts')
 
-    # save quotient graph
-    quot_graph_path = os.path.join(this_quotient_coverage_path, file_name + '.gt.gz')
-    quotient_g.graph.save(quot_graph_path)
+#                 if not os.path.exists(frag_graph_path):
+#                     os.makedirs(frag_graph_path)
+#                 if not os.path.exists(quotient_graph_path):
+#                     os.makedirs(quotient_graph_path)
+#                 if not os.path.exists(qgraph_reverse_maps_path):
+#                     os.makedirs(qgraph_reverse_maps_path)
+#                 if not os.path.exists(results_path):
+#                     os.makedirs(results_path)
 
-    with open(quotient_v_label_revered_path, "wb") as f:
-        pickle.dump(quotient_g.v_label_reversed, f)
+#                 # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
+#                 # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
+#                 # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
+#                 # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
+#                 # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
+#                 # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
+#                 existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
+#                 # existing_results = []
+#                 for rd in range(simulator.n_samples):
+#                     if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
+#                         '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
+#                         'qg_e_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path) and \
+#                         'qg_v_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path):
+#                         inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
+#                         # inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path]
 
-    edges_map_quotient = {}
-    for k in quotient_g.e_label_reversed.keys():
-        edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
-
-    with open(quotient_e_label_revered_path, "wb") as f:
-        pickle.dump(edges_map_quotient, f)
-
-    print('[Done]', os.path.join(this_frag_path, frag_file))
-
-
-def make_inputs_for_generate_qoutient_graph(simulator):
-    inputs = []
-    simulator.contig_lens = [100]
-    simulator.ploidies = [3, 4, 6, 8]
-    for contig_len in simulator.contig_lens:
-        for ploidy in simulator.ploidies:
-            # stop
-            genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
-            # genotype_df = pd.read_csv(genotype_path)
-            for coverage in simulator.coverages:
-                this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
-                frag_path = os.path.join(this_cov_path, 'frag')
-                frag_graph_path = os.path.join(this_cov_path, 'fgraph')
-                quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
-                qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
-
-                if not os.path.exists(frag_graph_path):
-                    os.makedirs(frag_graph_path)
-                if not os.path.exists(quotient_graph_path):
-                    os.makedirs(quotient_graph_path)
-                if not os.path.exists(qgraph_reverse_maps_path):
-                    os.makedirs(qgraph_reverse_maps_path)
-
-                existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
-                existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
-                existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
-                existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
-                existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
-                existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
-
-                for rd in range(simulator.n_samples):
-                    if 'qg_e_label_' + str(rd).zfill(2) + '.pkl' not in existing_files_qg_e or 'qg_v_label_' + str(rd).zfill(2) + '.pkl' not in existing_files_qg_v or 'fg_e_label_' + str(rd).zfill(2) + '.pkl' not in existing_files_fg_e or 'fg_v_label_' + str(rd).zfill(2) + '.pkl' not in existing_files_fg_v or str(rd).zfill(2) + '.gt.gz' not in existing_fg or str(rd).zfill(2) + '.gt.gz' not in existing_qg:
-                        inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path]
-                        inputs.append(inp)
-    return inputs
+#                         inputs.append(inp)
+#         inputs = sorted(inputs, key=lambda x: x[0])
+#     return inputs
 
 
-def make_inputs_for_run_count(simulator):
-    simulator.contig_lens = [100]
-    inputs = []
-    for contig_len in simulator.contig_lens:
-        for ploidy in simulator.ploidies:
-            # stop
-            genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
-            # genotype_df = pd.read_csv(genotype_path)
-            for coverage in simulator.coverages:
-                this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
-                frag_path = os.path.join(this_cov_path, 'frag')
-                frag_graph_path = os.path.join(this_cov_path, 'fgraph')
-                quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
-                qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
-                results_path = os.path.join(this_cov_path, 'results_counts')
+# def make_inputs_for_run_likelihood(simulator):
+#     simulator.contig_lens = [100]
+#     simulator.ploidies = [3, 4, 6]
+#     inputs = []
+#     for contig_len in simulator.contig_lens:
+#         for ploidy in simulator.ploidies:
+#             # stop
+#             genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
+#             # genotype_df = pd.read_csv(genotype_path)
+#             for coverage in simulator.coverages:
+#                 this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+#                 frag_path = os.path.join(this_cov_path, 'frag')
+#                 frag_graph_path = os.path.join(this_cov_path, 'fgraph')
+#                 quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
+#                 qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
+#                 results_path = os.path.join(this_cov_path, 'results_likelihood')
 
-                if not os.path.exists(frag_graph_path):
-                    os.makedirs(frag_graph_path)
-                if not os.path.exists(quotient_graph_path):
-                    os.makedirs(quotient_graph_path)
-                if not os.path.exists(qgraph_reverse_maps_path):
-                    os.makedirs(qgraph_reverse_maps_path)
-                if not os.path.exists(results_path):
-                    os.makedirs(results_path)
+#                 if not os.path.exists(frag_graph_path):
+#                     os.makedirs(frag_graph_path)
+#                 if not os.path.exists(quotient_graph_path):
+#                     os.makedirs(quotient_graph_path)
+#                 if not os.path.exists(qgraph_reverse_maps_path):
+#                     os.makedirs(qgraph_reverse_maps_path)
+#                 if not os.path.exists(results_path):
+#                     os.makedirs(results_path)
 
-                # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
-                # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
-                # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
-                # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
-                # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
-                # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
-                existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
-                # existing_results = []
-                for rd in range(simulator.n_samples):
-                    if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
-                        '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
-                        'qg_e_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path) and \
-                        'qg_v_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path):
-                        inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
-                        # inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path]
+#                 # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
+#                 # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
+#                 # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
+#                 # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
+#                 # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
+#                 # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
+#                 # existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
+#                 existing_results = []
+#                 # for rd in range(90, 100):
+#                 for rd in range(simulator.n_samples):
+#                     if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
+#                         '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
+#                         'qg_e_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path) and \
+#                         'qg_v_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path):
+#                         print(frag_path)
+#                         inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
+#                         # inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path]
 
-                        inputs.append(inp)
-        inputs = sorted(inputs, key=lambda x: x[0])
-    return inputs
-
-
-def make_inputs_for_run_likelihood(simulator):
-    simulator.contig_lens = [100]
-    simulator.ploidies = [3, 4, 6]
-    inputs = []
-    for contig_len in simulator.contig_lens:
-        for ploidy in simulator.ploidies:
-            # stop
-            genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
-            # genotype_df = pd.read_csv(genotype_path)
-            for coverage in simulator.coverages:
-                this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
-                frag_path = os.path.join(this_cov_path, 'frag')
-                frag_graph_path = os.path.join(this_cov_path, 'fgraph')
-                quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
-                qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
-                results_path = os.path.join(this_cov_path, 'results_likelihood')
-
-                if not os.path.exists(frag_graph_path):
-                    os.makedirs(frag_graph_path)
-                if not os.path.exists(quotient_graph_path):
-                    os.makedirs(quotient_graph_path)
-                if not os.path.exists(qgraph_reverse_maps_path):
-                    os.makedirs(qgraph_reverse_maps_path)
-                if not os.path.exists(results_path):
-                    os.makedirs(results_path)
-
-                # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
-                # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
-                # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
-                # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
-                # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
-                # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
-                # existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
-                existing_results = []
-                # for rd in range(90, 100):
-                for rd in range(simulator.n_samples):
-                    if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
-                        '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
-                        'qg_e_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path) and \
-                        'qg_v_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path):
-                        print(frag_path)
-                        inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
-                        # inp = [frag_path, frag_graph_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path]
-
-                        inputs.append(inp)
-        inputs = sorted(inputs, key=lambda x: x[0], reverse=True)
-    return inputs
+#                         inputs.append(inp)
+#         inputs = sorted(inputs, key=lambda x: x[0], reverse=True)
+#     return inputs
 
 
-def make_inputs_for_running_FFBS(simulator):
-    simulator.contig_lens = [10]
-    inputs = []
-    for contig_len in simulator.contig_lens:
-        for ploidy in simulator.ploidies:
-            # stop
-            genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
-            # genotype_df = pd.read_csv(genotype_path)
-            for coverage in simulator.coverages:
-                this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
-                frag_path = os.path.join(this_cov_path, 'frag')
-                frag_graph_path = os.path.join(this_cov_path, 'fgraph')
-                quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
-                qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
-                results_path = os.path.join(this_cov_path, 'results_algorithm_v2')
+# def make_inputs_for_running_FFBS(simulator):
+#     simulator.contig_lens = [10]
+#     inputs = []
+#     for contig_len in simulator.contig_lens:
+#         for ploidy in simulator.ploidies:
+#             # stop
+#             genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
+#             # genotype_df = pd.read_csv(genotype_path)
+#             for coverage in simulator.coverages:
+#                 this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+#                 frag_path = os.path.join(this_cov_path, 'frag')
+#                 frag_graph_path = os.path.join(this_cov_path, 'fgraph')
+#                 quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
+#                 qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
+#                 results_path = os.path.join(this_cov_path, 'results_algorithm_v2')
 
-                if not os.path.exists(frag_graph_path):
-                    os.makedirs(frag_graph_path)
-                if not os.path.exists(quotient_graph_path):
-                    os.makedirs(quotient_graph_path)
-                if not os.path.exists(qgraph_reverse_maps_path):
-                    os.makedirs(qgraph_reverse_maps_path)
-                if not os.path.exists(results_path):
-                    os.makedirs(results_path)
+#                 if not os.path.exists(frag_graph_path):
+#                     os.makedirs(frag_graph_path)
+#                 if not os.path.exists(quotient_graph_path):
+#                     os.makedirs(quotient_graph_path)
+#                 if not os.path.exists(qgraph_reverse_maps_path):
+#                     os.makedirs(qgraph_reverse_maps_path)
+#                 if not os.path.exists(results_path):
+#                     os.makedirs(results_path)
 
-                # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
-                # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
-                # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
-                # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
-                # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
-                # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
-                # existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
-                existing_results = []
-                for rd in range(simulator.n_samples):
-                    if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
-                        '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
-                        'qg_e_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path) and \
-                        'qg_v_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path):
-                        inp = [frag_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
-                        inputs.append(inp)
-        inputs = sorted(inputs, key=lambda x: x[0])
-    return inputs
+#                 # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
+#                 # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
+#                 # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
+#                 # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
+#                 # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
+#                 # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
+#                 # existing_results = [ff for ff in os.listdir(results_path) if 'FFBS' in ff]
+#                 existing_results = []
+#                 for rd in range(simulator.n_samples):
+#                     if 'FFBS_{}.pkl'.format(str(rd).zfill(2)) not in existing_results and \
+#                         '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path) and \
+#                         'qg_e_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path) and \
+#                         'qg_v_label_' + str(rd).zfill(2) + '.pkl' in os.listdir(qgraph_reverse_maps_path):
+#                         inp = [frag_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), ploidy, genotype_path, results_path]
+#                         inputs.append(inp)
+#         inputs = sorted(inputs, key=lambda x: x[0])
+#     return inputs
 
 
-def make_inputs_for_chordal_contraction(simulator):
-    simulator.contig_lens = [100]
-    k = 10
-    inputs = []
-    for contig_len in simulator.contig_lens:
-        for ploidy in simulator.ploidies:
-            # stop
-            genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
-            # genotype_df = pd.read_csv(genotype_path)
-            for coverage in simulator.coverages:
-                this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
-                frag_path = os.path.join(this_cov_path, 'frag')
-                frag_graph_path = os.path.join(this_cov_path, 'fgraph')
-                quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
-                qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
-                chordal_graph_path = os.path.join(this_cov_path, 'chgraph')
+# def make_inputs_for_chordal_contraction(simulator):
+#     simulator.contig_lens = [100]
+#     k = 10
+#     inputs = []
+#     for contig_len in simulator.contig_lens:
+#         for ploidy in simulator.ploidies:
+#             # stop
+#             genotype_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
+#             # genotype_df = pd.read_csv(genotype_path)
+#             for coverage in simulator.coverages:
+#                 this_cov_path = os.path.join(simulator.main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+#                 frag_path = os.path.join(this_cov_path, 'frag')
+#                 frag_graph_path = os.path.join(this_cov_path, 'fgraph')
+#                 quotient_graph_path = os.path.join(this_cov_path, 'qgraph')
+#                 qgraph_reverse_maps_path = os.path.join(this_cov_path, 'reverse_maps')
+#                 chordal_graph_path = os.path.join(this_cov_path, 'chgraph')
 
-                if not os.path.exists(frag_graph_path):
-                    os.makedirs(frag_graph_path)
-                if not os.path.exists(quotient_graph_path):
-                    os.makedirs(quotient_graph_path)
-                if not os.path.exists(qgraph_reverse_maps_path):
-                    os.makedirs(qgraph_reverse_maps_path)
-                if not os.path.exists(chordal_graph_path):
-                    os.makedirs(chordal_graph_path)
+#                 if not os.path.exists(frag_graph_path):
+#                     os.makedirs(frag_graph_path)
+#                 if not os.path.exists(quotient_graph_path):
+#                     os.makedirs(quotient_graph_path)
+#                 if not os.path.exists(qgraph_reverse_maps_path):
+#                     os.makedirs(qgraph_reverse_maps_path)
+#                 if not os.path.exists(chordal_graph_path):
+#                     os.makedirs(chordal_graph_path)
 
-                # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
-                # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
-                # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
-                # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
-                # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
-                # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
-                existing_results = [ff for ff in os.listdir(chordal_graph_path) if '.gt.gz' in ff]
+#                 # existing_files_qg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_e_label' in ff]
+#                 # existing_files_qg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'qg_v_label' in ff]
+#                 # existing_files_fg_e = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_e_label' in ff]
+#                 # existing_files_fg_v = [ff for ff in os.listdir(os.path.join(qgraph_reverse_maps_path)) if 'fg_v_label' in ff]
+#                 # existing_fg = [ff for ff in os.listdir(frag_graph_path) if '.gt.gz' in ff]
+#                 # existing_qg = [ff for ff in os.listdir(quotient_graph_path) if '.gt.gz' in ff]
+#                 existing_results = [ff for ff in os.listdir(chordal_graph_path) if '.gt.gz' in ff]
 
-                for rd in range(simulator.n_samples):
-                    if '{}.gt.gz'.format(str(rd).zfill(2)) not in existing_results and \
-                        '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path):
-                        inp = [frag_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), chordal_graph_path, genotype_path, ploidy, k]
+#                 for rd in range(simulator.n_samples):
+#                     if '{}.gt.gz'.format(str(rd).zfill(2)) not in existing_results and \
+#                         '{}.gt.gz'.format(str(rd).zfill(2)) in os.listdir(quotient_graph_path):
+#                         inp = [frag_path, quotient_graph_path, qgraph_reverse_maps_path, '{}.frag'.format(str(rd).zfill(2)), chordal_graph_path, genotype_path, ploidy, k]
                         
-                        inputs.append(inp)
-        inputs = sorted(inputs, key=lambda x: x[0])
-    return inputs
+#                         inputs.append(inp)
+#         inputs = sorted(inputs, key=lambda x: x[0])
+#     return inputs
 
 
-def chordal_contraction_graph_tool_top_k(inp):
-    this_frag_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, chordal_graph_path, genotype_path, ploidy, k = inp
+# def chordal_contraction_graph_tool_top_k(inp):
+#     this_frag_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, chordal_graph_path, genotype_path, ploidy, k = inp
 
-    # save_path, subg_id, subg, config, fragment_model, k = inp
-    # this_path = os.path.join(save_path, 'chordal_sub_' + str(subg_id) + '.gt.gz')
+#     # save_path, subg_id, subg, config, fragment_model, k = inp
+#     # this_path = os.path.join(save_path, 'chordal_sub_' + str(subg_id) + '.gt.gz')
 
-    print('Working on:', os.path.join(this_frag_path, frag_file))
-    chordal_v_label_revered_path = os.path.join(this_reverse_maps_path, 'ch_v_label_' + frag_file.split('.')[0] + '.pkl')
-    chordal_e_label_revered_path = os.path.join(this_reverse_maps_path, 'ch_e_label_' + frag_file.split('.')[0] + '.pkl')
+#     print('Working on:', os.path.join(this_frag_path, frag_file))
+#     chordal_v_label_revered_path = os.path.join(this_reverse_maps_path, 'ch_v_label_' + frag_file.split('.')[0] + '.pkl')
+#     chordal_e_label_revered_path = os.path.join(this_reverse_maps_path, 'ch_e_label_' + frag_file.split('.')[0] + '.pkl')
 
 
-    class Args:
-        def __init__(self):
-            self.vcf_path = 'example/62_ID0.vcf'
-            self.data_path = os.path.join(this_frag_path, frag_file)
-            # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
-            self.bam_path = 'example/example.bam'
-            self.genotype_path = genotype_path
-            self.ploidy = ploidy
-            self.error_rate = 0.001
-            self.epsilon = 0.0001
-            self.output_path = 'output'
-            self.root_dir = 'D:/UCONN/HaplOrbit'
-            self.alleles = [0, 1]
+#     class Args:
+#         def __init__(self):
+#             self.vcf_path = 'example/62_ID0.vcf'
+#             self.data_path = os.path.join(this_frag_path, frag_file)
+#             # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
+#             self.bam_path = 'example/example.bam'
+#             self.genotype_path = genotype_path
+#             self.ploidy = ploidy
+#             self.error_rate = 0.001
+#             self.epsilon = 0.0001
+#             self.output_path = 'output'
+#             self.root_dir = 'D:/UCONN/HaplOrbit'
+#             self.alleles = [0, 1]
 
-    # Create the mock args object
-    args = Args()
+#     # Create the mock args object
+#     args = Args()
 
-    # Initialize classes with parsed arguments
-    input_handler = InputHandler(args)
+#     # Initialize classes with parsed arguments
+#     input_handler = InputHandler(args)
 
-    config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+#     config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
 
-    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
-    fragment_model.construct(input_handler, config)
+#     fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
+#     fragment_model.construct(input_handler, config)
 
-    quotient_g_path = os.path.join(this_quotient_coverage_path, frag_file.split('.')[0] + '.gt.gz')
-    quotient_g = gt.load_graph(quotient_g_path)
+#     quotient_g_path = os.path.join(this_quotient_coverage_path, frag_file.split('.')[0] + '.gt.gz')
+#     quotient_g = gt.load_graph(quotient_g_path)
 
-    new_graph = quotient_g.copy()
-    e_weights = new_graph.edge_properties["e_weights"]
-    # new_graph.clear_filters()
-    e_entropy = new_graph.new_edge_property("double")
+#     new_graph = quotient_g.copy()
+#     e_weights = new_graph.edge_properties["e_weights"]
+#     # new_graph.clear_filters()
+#     e_entropy = new_graph.new_edge_property("double")
 
-    # Loop over edges and assign entropy from the e_weights property
-    for e in new_graph.edges():
-        e_entropy[e] = e_weights[e]['entropy']
+#     # Loop over edges and assign entropy from the e_weights property
+#     for e in new_graph.edges():
+#         e_entropy[e] = e_weights[e]['entropy']
 
-    new_graph.ep['e_entropy'] = e_entropy
+#     new_graph.ep['e_entropy'] = e_entropy
 
-    chordless_cycles = get_chordless_cycles(new_graph)
+#     chordless_cycles = get_chordless_cycles(new_graph)
 
-    to_be_removed_nodes = []
+#     to_be_removed_nodes = []
 
-    for cyc_id, cyc in enumerate(chordless_cycles):
-        # print(cyc_id)        
-        edges = [new_graph.edge(cyc[-1], cyc[0])]
-        for i in range(len(cyc) - 1):
-            edges += [new_graph.edge(cyc[i], cyc[i+1])]
-        edges = [x for x in edges if x is not None]
-        while len(edges) > 3:
-            min_edge = min(edges, key=lambda e: new_graph.ep['e_entropy'][e])
-            source_label = new_graph.vp['v_label'][min_edge.source()]
-            target_label = new_graph.vp['v_label'][min_edge.target()]
-            # new node positions
-            poss = sorted(set([int(nn) for nn in source_label.split('-')] + [int(nn) for nn in target_label.split('-')]))
-            # new vertex properties:
-            new_vertex_name = '-'.join([str(nnn) for nnn in poss])
-            vertex_weights = new_graph.ep['e_weights'][min_edge]
-            vertex_weights_appr = get_top_k_weights(vertex_weights, k)
+#     for cyc_id, cyc in enumerate(chordless_cycles):
+#         # print(cyc_id)        
+#         edges = [new_graph.edge(cyc[-1], cyc[0])]
+#         for i in range(len(cyc) - 1):
+#             edges += [new_graph.edge(cyc[i], cyc[i+1])]
+#         edges = [x for x in edges if x is not None]
+#         while len(edges) > 3:
+#             min_edge = min(edges, key=lambda e: new_graph.ep['e_entropy'][e])
+#             source_label = new_graph.vp['v_label'][min_edge.source()]
+#             target_label = new_graph.vp['v_label'][min_edge.target()]
+#             # new node positions
+#             poss = sorted(set([int(nn) for nn in source_label.split('-')] + [int(nn) for nn in target_label.split('-')]))
+#             # new vertex properties:
+#             new_vertex_name = '-'.join([str(nnn) for nnn in poss])
+#             vertex_weights = new_graph.ep['e_weights'][min_edge]
+#             vertex_weights_appr = get_top_k_weights(vertex_weights, k)
 
-            new_graph.vertex_properties["v_weights"][min_edge.source()] = vertex_weights_appr
-            new_graph.vertex_properties["v_label"][min_edge.source()] = new_vertex_name
+#             new_graph.vertex_properties["v_weights"][min_edge.source()] = vertex_weights_appr
+#             new_graph.vertex_properties["v_label"][min_edge.source()] = new_vertex_name
 
-            source_nbrs = [n for n in min_edge.source().all_neighbors() if n != min_edge.target()]
-            target_nbrs = [n for n in min_edge.target().all_neighbors() if n != min_edge.source()]
-            common_nbrs = set(source_nbrs).intersection(set(target_nbrs))
+#             source_nbrs = [n for n in min_edge.source().all_neighbors() if n != min_edge.target()]
+#             target_nbrs = [n for n in min_edge.target().all_neighbors() if n != min_edge.source()]
+#             common_nbrs = set(source_nbrs).intersection(set(target_nbrs))
 
-            for n in common_nbrs:
+#             for n in common_nbrs:
                 
-                v_label = new_graph.vertex_properties["v_label"][n]
-                # e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
-                # print(len(e_poss))
-                # new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
-                sorted_labels = sort_nodes([new_vertex_name, v_label])
-                new_edge_name = '--'.join(sorted_labels)
-                (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+#                 v_label = new_graph.vertex_properties["v_label"][n]
+#                 # e_poss = sorted(set([int(nn) for nn in v_label.split('-')] + poss))
+#                 # print(len(e_poss))
+#                 # new_edge_name = '-'.join([str(nnn) for nnn in e_poss])
+#                 sorted_labels = sort_nodes([new_vertex_name, v_label])
+#                 new_edge_name = '--'.join(sorted_labels)
+#                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
 
-                first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
-                second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
-                final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
-                final_weights_appr = get_top_k_weights(final_weight, k)
+#                 first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+#                 second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+#                 final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+#                 final_weights_appr = get_top_k_weights(final_weight, k)
 
-                e1 = new_graph.edge(min_edge.source(), n)
-                e2 = new_graph.edge(min_edge.target(), n)
+#                 e1 = new_graph.edge(min_edge.source(), n)
+#                 e2 = new_graph.edge(min_edge.target(), n)
                 
-                new_graph.edge_properties["e_weights"][e1] = final_weights_appr
-                new_graph.edge_properties["e_label"][e1] = new_edge_name
-                new_graph.edge_properties['e_entropy'][e1] = final_weights_appr['entropy']
-                new_graph.remove_edge(e2)
+#                 new_graph.edge_properties["e_weights"][e1] = final_weights_appr
+#                 new_graph.edge_properties["e_label"][e1] = new_edge_name
+#                 new_graph.edge_properties['e_entropy'][e1] = final_weights_appr['entropy']
+#                 new_graph.remove_edge(e2)
 
-            for n in set(source_nbrs)-common_nbrs:
+#             for n in set(source_nbrs)-common_nbrs:
                 
-                v_label = new_graph.vertex_properties["v_label"][n]
+#                 v_label = new_graph.vertex_properties["v_label"][n]
 
-                sorted_labels = sort_nodes([new_vertex_name, v_label])
-                new_edge_name = '--'.join(sorted_labels)
-                (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+#                 sorted_labels = sort_nodes([new_vertex_name, v_label])
+#                 new_edge_name = '--'.join(sorted_labels)
+#                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
 
-                first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
-                second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
-                final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
-                final_weights_appr = get_top_k_weights(final_weight, k)
+#                 first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+#                 second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+#                 final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+#                 final_weights_appr = get_top_k_weights(final_weight, k)
 
 
-                e1 = new_graph.edge(min_edge.source(), n)
-                # e2 = new_graph.edge(min_edge.target(), n)
-                new_graph.edge_properties["e_weights"][e1] = final_weights_appr
-                new_graph.edge_properties["e_label"][e1] = new_edge_name
-                new_graph.edge_properties['e_entropy'][e1] = final_weights_appr['entropy']
-                # new_graph.edge_properties["e_weights"][e2]
+#                 e1 = new_graph.edge(min_edge.source(), n)
+#                 # e2 = new_graph.edge(min_edge.target(), n)
+#                 new_graph.edge_properties["e_weights"][e1] = final_weights_appr
+#                 new_graph.edge_properties["e_label"][e1] = new_edge_name
+#                 new_graph.edge_properties['e_entropy'][e1] = final_weights_appr['entropy']
+#                 # new_graph.edge_properties["e_weights"][e2]
 
             
-            for n in set(target_nbrs)-common_nbrs:
+#             for n in set(target_nbrs)-common_nbrs:
                 
-                v_label = new_graph.vertex_properties["v_label"][n]
-                sorted_labels = sort_nodes([new_vertex_name, v_label])
-                new_edge_name = '--'.join(sorted_labels)
+#                 v_label = new_graph.vertex_properties["v_label"][n]
+#                 sorted_labels = sort_nodes([new_vertex_name, v_label])
+#                 new_edge_name = '--'.join(sorted_labels)
 
-                (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
+#                 (first_label, first_node), (second_label, second_node) = [(new_vertex_name, min_edge.source()),(v_label, n)]
 
-                first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
-                second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
-                final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
-                final_weights_appr = get_top_k_weights(final_weight, k)
+#                 first_phasings = list(new_graph.vertex_properties["v_weights"][first_node]['weight'].keys())
+#                 second_phasings = list(new_graph.vertex_properties["v_weights"][second_node]['weight'].keys())
+#                 final_weight = compute_edge_weight(first_label, second_label, first_phasings, second_phasings, fragment_model, config)
+#                 final_weights_appr = get_top_k_weights(final_weight, k)
 
-                e2 = new_graph.edge(min_edge.target(), n)
-                new_graph.remove_edge(e2)
-                e1 = new_graph.add_edge(min_edge.source(), n)
-                new_graph.edge_properties["e_weights"][e1] = final_weights_appr
-                new_graph.edge_properties["e_label"][e1] = new_edge_name
-                new_graph.edge_properties['e_entropy'][e1] = final_weights_appr['entropy']
+#                 e2 = new_graph.edge(min_edge.target(), n)
+#                 new_graph.remove_edge(e2)
+#                 e1 = new_graph.add_edge(min_edge.source(), n)
+#                 new_graph.edge_properties["e_weights"][e1] = final_weights_appr
+#                 new_graph.edge_properties["e_label"][e1] = new_edge_name
+#                 new_graph.edge_properties['e_entropy'][e1] = final_weights_appr['entropy']
             
-            # to_be_removed_nodes += [min_edge.target()]
-            to_be_removed_nodes.append(min_edge.target())
-            new_graph.remove_edge(min_edge)
-            edges.remove(min_edge)
+#             # to_be_removed_nodes += [min_edge.target()]
+#             to_be_removed_nodes.append(min_edge.target())
+#             new_graph.remove_edge(min_edge)
+#             edges.remove(min_edge)
 
-    new_graph.remove_vertex(to_be_removed_nodes)
+#     new_graph.remove_vertex(to_be_removed_nodes)
 
-    e_labels_ch = new_graph.edge_properties["e_label"]
-    v_labels_ch = new_graph.vertex_properties["v_label"]
+#     e_labels_ch = new_graph.edge_properties["e_label"]
+#     v_labels_ch = new_graph.vertex_properties["v_label"]
         
-    v_label_reversed = {}
-    for v in new_graph.vertices():
-        v_label = v_labels_ch[v]
-        v_label_reversed[v_label] = int(v)
+#     v_label_reversed = {}
+#     for v in new_graph.vertices():
+#         v_label = v_labels_ch[v]
+#         v_label_reversed[v_label] = int(v)
     
-    e_label_reversed = {}
-    for e in new_graph.edges():
-        e_label = e_labels_ch[e]
-        v1_label, v2_label = e_label.split('--')
-        e_label_reversed[e_label] = [v_label_reversed[v1_label], v_label_reversed[v2_label]]
+#     e_label_reversed = {}
+#     for e in new_graph.edges():
+#         e_label = e_labels_ch[e]
+#         v1_label, v2_label = e_label.split('--')
+#         e_label_reversed[e_label] = [v_label_reversed[v1_label], v_label_reversed[v2_label]]
         
 
-    this_path = os.path.join(chordal_graph_path, frag_file.split('.')[0] + '.gt.gz')
-    new_graph.save(this_path)
+#     this_path = os.path.join(chordal_graph_path, frag_file.split('.')[0] + '.gt.gz')
+#     new_graph.save(this_path)
 
-    with open(chordal_v_label_revered_path, 'wb') as f:
-        pickle.dump(v_label_reversed, f)
+#     with open(chordal_v_label_revered_path, 'wb') as f:
+#         pickle.dump(v_label_reversed, f)
 
-    with open(chordal_e_label_revered_path, 'wb') as f:
-        pickle.dump(e_label_reversed, f)
+#     with open(chordal_e_label_revered_path, 'wb') as f:
+#         pickle.dump(e_label_reversed, f)
 
-    print('[Done]', this_path)
+#     print('[Done]', this_path)
 
 
-def run_FFBS_quotient(inp):
-    this_frag_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path, results_path = inp
-    print('Working on:', os.path.join(this_frag_path, frag_file))
-    # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
-    # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
-    # ploidy= 3
-    # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
-    # genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
+# def run_FFBS_quotient(inp):
+#     this_frag_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path, results_path = inp
+#     print('Working on:', os.path.join(this_frag_path, frag_file))
+#     # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
+#     # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
+#     # ploidy= 3
+#     # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
+#     # genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
 
-    class Args:
-        def __init__(self):
-            self.vcf_path = 'example/62_ID0.vcf'
-            self.data_path = os.path.join(this_frag_path, frag_file)
-            # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
-            self.bam_path = 'example/example.bam'
-            self.genotype_path = genotype_path
-            self.ploidy = ploidy
-            self.error_rate = 0.001
-            self.epsilon = 0.0001
-            self.output_path = 'output'
-            self.root_dir = 'D:/UCONN/HaplOrbit'
-            self.alleles = [0, 1]
+#     class Args:
+#         def __init__(self):
+#             self.vcf_path = 'example/62_ID0.vcf'
+#             self.data_path = os.path.join(this_frag_path, frag_file)
+#             # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
+#             self.bam_path = 'example/example.bam'
+#             self.genotype_path = genotype_path
+#             self.ploidy = ploidy
+#             self.error_rate = 0.001
+#             self.epsilon = 0.0001
+#             self.output_path = 'output'
+#             self.root_dir = 'D:/UCONN/HaplOrbit'
+#             self.alleles = [0, 1]
 
-    # Create the mock args object
-    args = Args()
+#     # Create the mock args object
+#     args = Args()
 
-    # Initialize classes with parsed arguments
-    input_handler = InputHandler(args)
+#     # Initialize classes with parsed arguments
+#     input_handler = InputHandler(args)
 
-    config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+#     config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
 
-    # frag_graph_path = os.path.join(this_frag_graph_path, frag_file.split('.')[0] + '.gt.gz')
-    # frag_graph = gt.load_graph(frag_graph_path)
+#     # frag_graph_path = os.path.join(this_frag_graph_path, frag_file.split('.')[0] + '.gt.gz')
+#     # frag_graph = gt.load_graph(frag_graph_path)
 
-    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
-    fragment_model.construct(input_handler, config)
+#     fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
+#     fragment_model.construct(input_handler, config)
 
-    quotient_g_path = os.path.join(this_quotient_coverage_path, frag_file.split('.')[0] + '.gt.gz')
-    quotient_g = gt.load_graph(quotient_g_path)
+#     quotient_g_path = os.path.join(this_quotient_coverage_path, frag_file.split('.')[0] + '.gt.gz')
+#     quotient_g = gt.load_graph(quotient_g_path)
 
-    edge_map_path = os.path.join(this_reverse_maps_path, 'qg_e_label_' + frag_file.split('.')[0] + '.pkl')
-    with open(edge_map_path, 'rb') as f:
-        edges_map_quotient = pickle.load(f)
+#     edge_map_path = os.path.join(this_reverse_maps_path, 'qg_e_label_' + frag_file.split('.')[0] + '.pkl')
+#     with open(edge_map_path, 'rb') as f:
+#         edges_map_quotient = pickle.load(f)
         
-    quotient_g_v_label_reversed_path = os.path.join(this_reverse_maps_path, 'qg_v_label_' + frag_file.split('.')[0] + '.pkl')
-    with open(quotient_g_v_label_reversed_path, 'rb') as f:
-        quotient_g_v_label_reversed = pickle.load(f)
+#     quotient_g_v_label_reversed_path = os.path.join(this_reverse_maps_path, 'qg_v_label_' + frag_file.split('.')[0] + '.pkl')
+#     with open(quotient_g_v_label_reversed_path, 'rb') as f:
+#         quotient_g_v_label_reversed = pickle.load(f)
 
-    start_time = time.time()
+#     start_time = time.time()
 
-    transitions_dict, transitions_dict_extra = transition_matrices_v2(quotient_g, edges_map_quotient, ploidy, config, fragment_model)
-    emission_dict = emissions_v2(ploidy, quotient_g, quotient_g_v_label_reversed, config.error_rate)
+#     transitions_dict, transitions_dict_extra = transition_matrices_v2(quotient_g, edges_map_quotient, ploidy, config, fragment_model)
+#     emission_dict = emissions_v2(ploidy, quotient_g, quotient_g_v_label_reversed, config.error_rate)
 
-    nodes = list(emission_dict.keys())
-    edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
+#     nodes = list(emission_dict.keys())
+#     edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
 
-    slices, _ =  assign_slices_and_interfaces(nodes, edges)
+#     slices, _ =  assign_slices_and_interfaces(nodes, edges)
 
-    assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, args.data_path)
+#     assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, args.data_path)
 
-    forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, args.data_path)
+#     forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, args.data_path)
 
-    # backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, args.data_path)
+#     # backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, args.data_path)
 
-    samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
-    # samples = sample_states(slices, edges, forward_messages, transitions_dict)
-    # for k in samples.keys():
-    #     kedges = samples[k].keys()
-    #     for e in kedges:
-    #         print(e, samples[k][e])
+#     samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
+#     # samples = sample_states(slices, edges, forward_messages, transitions_dict)
+#     # for k in samples.keys():
+#     #     kedges = samples[k].keys()
+#     #     for e in kedges:
+#     #         print(e, samples[k][e])
     
-    predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config)
-    end_time = time.time()
-    elapsed_time = round(end_time - start_time, 2)
+#     predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config)
+#     end_time = time.time()
+#     elapsed_time = round(end_time - start_time, 2)
 
 
-    # print('Predicted Haplotypes:\n', predicted_haplotypes)
-    # print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T)
-    sampled_positions = [c for c in predicted_haplotypes.columns.values if np.nan not in list(predicted_haplotypes[c].values)]
+#     # print('Predicted Haplotypes:\n', predicted_haplotypes)
+#     # print('\nTrue Haplotypes:\n', pd.read_csv(genotype_path).T)
+#     sampled_positions = [c for c in predicted_haplotypes.columns.values if np.nan not in list(predicted_haplotypes[c].values)]
 
-    predicted_haplotypes_np = predicted_haplotypes[sampled_positions].to_numpy()
-    true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()[:, sampled_positions]
+#     predicted_haplotypes_np = predicted_haplotypes[sampled_positions].to_numpy()
+#     true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()[:, sampled_positions]
 
-    vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes)
-    accuracy, _ = calculate_accuracy(predicted_haplotypes_np, true_haplotypes)
-    mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes)
-    mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
-    results_name = 'FFBS_{}.pkl'.format(frag_file.split('.')[0])
-    results = {}
-    results['evaluation'] = {'vector_error_rate': vector_error_rate, 'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 
-                             'dp_table': dp_table, 'accuracy': accuracy, 'mismatch_error': mismatch_error, 'mec': mec_}
-    results['predicted_haplotypes'] = predicted_haplotypes_np
-    results['true_haplotypes'] = true_haplotypes
-    results['forward_messages'] = forward_messages
-    # results['backward_messages'] = backward_messages
-    results['transitions_dict'] = transitions_dict
-    results['transitions_dict_extra'] = transitions_dict_extra
-    results['emission_dict'] = emission_dict
-    results['assignment_dict'] = assignment_dict
-    results['samples'] = samples
-    results['slices'] = slices
-    results['best_permutation'] = best_permutation
-    results['fragment_list'] = fragment_model.fragment_list
-    results['time'] = elapsed_time
+#     vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes)
+#     accuracy, _ = calculate_accuracy(predicted_haplotypes_np, true_haplotypes)
+#     mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes)
+#     mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
+#     results_name = 'FFBS_{}.pkl'.format(frag_file.split('.')[0])
+#     results = {}
+#     results['evaluation'] = {'vector_error_rate': vector_error_rate, 'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 
+#                              'dp_table': dp_table, 'accuracy': accuracy, 'mismatch_error': mismatch_error, 'mec': mec_}
+#     results['predicted_haplotypes'] = predicted_haplotypes_np
+#     results['true_haplotypes'] = true_haplotypes
+#     results['forward_messages'] = forward_messages
+#     # results['backward_messages'] = backward_messages
+#     results['transitions_dict'] = transitions_dict
+#     results['transitions_dict_extra'] = transitions_dict_extra
+#     results['emission_dict'] = emission_dict
+#     results['assignment_dict'] = assignment_dict
+#     results['samples'] = samples
+#     results['slices'] = slices
+#     results['best_permutation'] = best_permutation
+#     results['fragment_list'] = fragment_model.fragment_list
+#     results['time'] = elapsed_time
 
-    with open(os.path.join(results_path, results_name), 'wb') as f:
-        pickle.dump(results, f)
+#     with open(os.path.join(results_path, results_name), 'wb') as f:
+#         pickle.dump(results, f)
 
-    print('Saved results in {}.'.format(os.path.join(results_path, results_name)), 'vector_error_rate', vector_error_rate, 'accuracy', accuracy, 'mismatch_error', mismatch_error, 'mec', mec_)
-    
-
-def run_FFBS_quotient_count(inp):
-    this_frag_path, this_fragment_coverage_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path, results_path = inp
-    file_name = frag_file.split('.')[0]
-
-    fragment_v_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_v_label_' + file_name + '.pkl')
-    fragment_e_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_e_label_' + file_name + '.pkl')
-    quotient_v_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_v_label_' + file_name + '.pkl')
-    quotient_e_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_e_label_' + file_name + '.pkl')
-    print('Working on:', os.path.join(this_frag_path, frag_file))
-
-    class Args:
-        def __init__(self):
-            self.vcf_path = 'example/62_ID0.vcf'
-            self.data_path = os.path.join(this_frag_path, frag_file)
-            # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
-            self.bam_path = 'example/example.bam'
-            self.genotype_path = genotype_path
-            self.ploidy = ploidy
-            self.error_rate = 0.001
-            self.epsilon = 0.0001
-            self.output_path = 'output'
-            self.root_dir = 'D:/UCONN/HaplOrbit'
-            self.alleles = [0, 1]
-
-    # Create the mock args object
-    args = Args()
-
-    start_time = time.time()
-
-    # Initialize classes with parsed arguments
-    input_handler = InputHandler(args)
-
-    config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
-
-    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
-    fragment_model.construct(input_handler, config)
-
-    frag_graph_path = os.path.join(this_fragment_coverage_path, file_name + '.gt.gz')
-    fragment_model.graph.save(frag_graph_path)
-
-    with open(fragment_v_label_revered_path, "wb") as f:
-        pickle.dump(fragment_model.v_label_reversed, f)
-
-    edges_map_fragment = {}
-    for k in fragment_model.e_label_reversed.keys():
-        edges_map_fragment[k] = [int(fragment_model.e_label_reversed[k].source()), int(fragment_model.e_label_reversed[k].target())]
-
-    with open(fragment_e_label_revered_path, "wb") as f:
-        pickle.dump(edges_map_fragment, f)
-
-    # create quotient graph
-    quotient_g = QuotientGraph(fragment_model)
-    quotient_g.construct(input_handler, config)
-
-    # save quotient graph
-    quot_graph_path = os.path.join(this_quotient_coverage_path, file_name + '.gt.gz')
-    quotient_g.graph.save(quot_graph_path)
-
-    with open(quotient_v_label_revered_path, "wb") as f:
-        pickle.dump(quotient_g.v_label_reversed, f)
-
-    edges_map_quotient = {}
-    for k in quotient_g.e_label_reversed.keys():
-        edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
-
-    with open(quotient_e_label_revered_path, "wb") as f:
-        pickle.dump(edges_map_quotient, f)
-
-    quotient_g_v_label_reversed = quotient_g.v_label_reversed
-
-    edges_map_quotient = {}
-    for k in quotient_g.e_label_reversed.keys():
-        edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
-
-    transitions_dict, transitions_dict_extra = transition_matrices(quotient_g, edges_map_quotient, ploidy, fragment_model, config)
-    emission_dict = emissions(ploidy, quotient_g, quotient_g_v_label_reversed, config.error_rate)
-
-    nodes = list(emission_dict.keys())
-    edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
-
-    slices, interfaces =  assign_slices_and_interfaces(nodes, edges)
-
-    assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, input_handler.data_path)
-
-    forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)
-
-    samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
-
-    predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="counts")
-
-    end_time = time.time()
-
-    elapsed_time = round(end_time - start_time, 2)
-
-    sampled_positions = [c for c in predicted_haplotypes.columns.values if np.nan not in list(predicted_haplotypes[c].values)]
-
-    predicted_haplotypes_np = predicted_haplotypes[sampled_positions].to_numpy()
-    true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()[:, sampled_positions]
-
-    vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes)
-    accuracy, _ = calculate_accuracy(predicted_haplotypes_np, true_haplotypes)
-    mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes)
-    mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
-    results_name = 'FFBS_{}.pkl'.format(frag_file.split('.')[0])
-    results = {}
-    results['evaluation'] = {'vector_error_rate': vector_error_rate, 'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 
-                             'dp_table': dp_table, 'accuracy': accuracy, 'mismatch_error': mismatch_error, 'mec': mec_}
-    results['predicted_haplotypes'] = predicted_haplotypes_np
-    results['true_haplotypes'] = true_haplotypes
-    results['forward_messages'] = forward_messages
-    results['transitions_dict'] = transitions_dict
-    results['transitions_dict_extra'] = transitions_dict_extra
-    results['emission_dict'] = emission_dict
-    results['assignment_dict'] = assignment_dict
-    results['samples'] = samples
-    results['slices'] = slices
-    results['best_permutation'] = best_permutation
-    results['fragment_list'] = fragment_model.fragment_list
-    results['time'] = elapsed_time
-    # print('Results:', results['evaluation'])
-
-    with open(os.path.join(results_path, results_name), 'wb') as f:
-        pickle.dump(results, f)
-
-    print('Saved results in {}.'.format(os.path.join(results_path, results_name)), 'vector_error_rate', vector_error_rate, 'accuracy', accuracy, 'mismatch_error', mismatch_error, 'mec', mec_)
+#     print('Saved results in {}.'.format(os.path.join(results_path, results_name)), 'vector_error_rate', vector_error_rate, 'accuracy', accuracy, 'mismatch_error', mismatch_error, 'mec', mec_)
     
 
-def run_FFBS_quotient_likelihood(inp):
-    this_frag_path, this_fragment_coverage_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path, results_path = inp
-    file_name = frag_file.split('.')[0]
+# def run_FFBS_quotient_count(inp):
+#     this_frag_path, this_fragment_coverage_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path, results_path = inp
+#     file_name = frag_file.split('.')[0]
 
-    fragment_v_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_v_label_' + file_name + '.pkl')
-    fragment_e_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_e_label_' + file_name + '.pkl')
-    quotient_v_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_v_label_' + file_name + '.pkl')
-    quotient_e_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_e_label_' + file_name + '.pkl')
-    print('Working on:', os.path.join(this_frag_path, frag_file))
+#     fragment_v_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_v_label_' + file_name + '.pkl')
+#     fragment_e_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_e_label_' + file_name + '.pkl')
+#     quotient_v_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_v_label_' + file_name + '.pkl')
+#     quotient_e_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_e_label_' + file_name + '.pkl')
+#     print('Working on:', os.path.join(this_frag_path, frag_file))
 
-    class Args:
-        def __init__(self):
-            self.vcf_path = 'example/62_ID0.vcf'
-            self.data_path = os.path.join(this_frag_path, frag_file)
-            # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
-            self.bam_path = 'example/example.bam'
-            self.genotype_path = genotype_path
-            self.ploidy = ploidy
-            self.error_rate = 0.001
-            self.epsilon = 0.0001
-            self.output_path = 'output'
-            self.root_dir = 'D:/UCONN/HaplOrbit'
-            self.alleles = [0, 1]
+#     class Args:
+#         def __init__(self):
+#             self.vcf_path = 'example/62_ID0.vcf'
+#             self.data_path = os.path.join(this_frag_path, frag_file)
+#             # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
+#             self.bam_path = 'example/example.bam'
+#             self.genotype_path = genotype_path
+#             self.ploidy = ploidy
+#             self.error_rate = 0.001
+#             self.epsilon = 0.0001
+#             self.output_path = 'output'
+#             self.root_dir = 'D:/UCONN/HaplOrbit'
+#             self.alleles = [0, 1]
 
-    # Create the mock args object
-    args = Args()
+#     # Create the mock args object
+#     args = Args()
 
-    start_time = time.time()
+#     start_time = time.time()
 
-    # Initialize classes with parsed arguments
-    input_handler = InputHandler(args)
+#     # Initialize classes with parsed arguments
+#     input_handler = InputHandler(args)
 
-    config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+#     config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
 
-    fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
-    fragment_model.construct(input_handler, config)
+#     fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
+#     fragment_model.construct(input_handler, config)
 
-    frag_graph_path = os.path.join(this_fragment_coverage_path, file_name + '.gt.gz')
-    fragment_model.graph.save(frag_graph_path)
+#     frag_graph_path = os.path.join(this_fragment_coverage_path, file_name + '.gt.gz')
+#     fragment_model.graph.save(frag_graph_path)
 
-    frag_graph_plot_path = os.path.join(this_fragment_coverage_path, file_name + '.png')
+#     with open(fragment_v_label_revered_path, "wb") as f:
+#         pickle.dump(fragment_model.v_label_reversed, f)
 
-    e_labels = fragment_model.graph.edge_properties["e_label"]
-    v_labels = fragment_model.graph.vertex_properties["v_label"]
-    gt.graph_draw(fragment_model.graph, output_size=(1000, 1000), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=16,  
-    edge_font_size=10, output=frag_graph_plot_path)
+#     edges_map_fragment = {}
+#     for k in fragment_model.e_label_reversed.keys():
+#         edges_map_fragment[k] = [int(fragment_model.e_label_reversed[k].source()), int(fragment_model.e_label_reversed[k].target())]
 
-    with open(fragment_v_label_revered_path, "wb") as f:
-        pickle.dump(fragment_model.v_label_reversed, f)
+#     with open(fragment_e_label_revered_path, "wb") as f:
+#         pickle.dump(edges_map_fragment, f)
 
-    edges_map_fragment = {}
-    for k in fragment_model.e_label_reversed.keys():
-        edges_map_fragment[k] = [int(fragment_model.e_label_reversed[k].source()), int(fragment_model.e_label_reversed[k].target())]
+#     # create quotient graph
+#     quotient_g = QuotientGraph(fragment_model)
+#     quotient_g.construct(input_handler, config)
 
-    with open(fragment_e_label_revered_path, "wb") as f:
-        pickle.dump(edges_map_fragment, f)
+#     # save quotient graph
+#     quot_graph_path = os.path.join(this_quotient_coverage_path, file_name + '.gt.gz')
+#     quotient_g.graph.save(quot_graph_path)
 
-    # create quotient graph
-    quotient_g = QuotientGraph(fragment_model)
-    quotient_g.construct(input_handler, config)
+#     with open(quotient_v_label_revered_path, "wb") as f:
+#         pickle.dump(quotient_g.v_label_reversed, f)
 
-    # save quotient graph
-    quot_graph_path = os.path.join(this_quotient_coverage_path, file_name + '.gt.gz')
-    quotient_g.graph.save(quot_graph_path)
+#     edges_map_quotient = {}
+#     for k in quotient_g.e_label_reversed.keys():
+#         edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
 
+#     with open(quotient_e_label_revered_path, "wb") as f:
+#         pickle.dump(edges_map_quotient, f)
 
-    quotient_graph_plot_path = os.path.join(this_quotient_coverage_path, file_name + '.png')
-    e_labels = quotient_g.graph.edge_properties["e_label"]
-    v_labels = quotient_g.graph.vertex_properties["v_label"]
-    gt.graph_draw(quotient_g.graph, output_size=(1000, 1000), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=16,  
-    edge_font_size=10, output=quotient_graph_plot_path)
+#     quotient_g_v_label_reversed = quotient_g.v_label_reversed
 
-    # gt.graph_draw(quotient_g.graph, output_size=(1000, 1000), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=16,  
-    # edge_font_size=10)
+#     edges_map_quotient = {}
+#     for k in quotient_g.e_label_reversed.keys():
+#         edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
 
+#     transitions_dict, transitions_dict_extra = transition_matrices(quotient_g, edges_map_quotient, ploidy, fragment_model, config)
+#     emission_dict = emissions(ploidy, quotient_g, quotient_g_v_label_reversed, config.error_rate)
 
+#     nodes = list(emission_dict.keys())
+#     edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
 
-    with open(quotient_v_label_revered_path, "wb") as f:
-        pickle.dump(quotient_g.v_label_reversed, f)
+#     slices, interfaces =  assign_slices_and_interfaces(nodes, edges)
 
-    edges_map_quotient = {}
-    for k in quotient_g.e_label_reversed.keys():
-        edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
+#     assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, input_handler.data_path)
 
-    with open(quotient_e_label_revered_path, "wb") as f:
-        pickle.dump(edges_map_quotient, f)
+#     forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)
 
-    quotient_g_v_label_reversed = quotient_g.v_label_reversed
+#     samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
 
-    edges_map_quotient = {}
-    for k in quotient_g.e_label_reversed.keys():
-        edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
+#     predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="counts")
 
-    transitions_dict, transitions_dict_extra = transition_matrices(quotient_g, edges_map_quotient, ploidy, fragment_model, config)
-    emission_dict = emissions(ploidy, quotient_g, quotient_g_v_label_reversed, config.error_rate)
+#     end_time = time.time()
 
-    nodes = list(emission_dict.keys())
-    edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
+#     elapsed_time = round(end_time - start_time, 2)
 
-    slices, interfaces =  assign_slices_and_interfaces(nodes, edges)
+#     sampled_positions = [c for c in predicted_haplotypes.columns.values if np.nan not in list(predicted_haplotypes[c].values)]
 
-    assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, input_handler.data_path)
+#     predicted_haplotypes_np = predicted_haplotypes[sampled_positions].to_numpy()
+#     true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()[:, sampled_positions]
 
-    forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)
+#     vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes)
+#     accuracy, _ = calculate_accuracy(predicted_haplotypes_np, true_haplotypes)
+#     mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes)
+#     mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
+#     results_name = 'FFBS_{}.pkl'.format(frag_file.split('.')[0])
+#     results = {}
+#     results['evaluation'] = {'vector_error_rate': vector_error_rate, 'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 
+#                              'dp_table': dp_table, 'accuracy': accuracy, 'mismatch_error': mismatch_error, 'mec': mec_}
+#     results['predicted_haplotypes'] = predicted_haplotypes_np
+#     results['true_haplotypes'] = true_haplotypes
+#     results['forward_messages'] = forward_messages
+#     results['transitions_dict'] = transitions_dict
+#     results['transitions_dict_extra'] = transitions_dict_extra
+#     results['emission_dict'] = emission_dict
+#     results['assignment_dict'] = assignment_dict
+#     results['samples'] = samples
+#     results['slices'] = slices
+#     results['best_permutation'] = best_permutation
+#     results['fragment_list'] = fragment_model.fragment_list
+#     results['time'] = elapsed_time
+#     # print('Results:', results['evaluation'])
 
-    # backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)
+#     with open(os.path.join(results_path, results_name), 'wb') as f:
+#         pickle.dump(results, f)
+
+#     print('Saved results in {}.'.format(os.path.join(results_path, results_name)), 'vector_error_rate', vector_error_rate, 'accuracy', accuracy, 'mismatch_error', mismatch_error, 'mec', mec_)
     
-    # samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
-    samples = sample_states_book_multiple_times(slices, edges, forward_messages, transitions_dict, n=100)
-    # samples = sample_states_ground_truth(slices, nodes, genotype_path)
-    # fragment_list = fragment_model.fragment_list
-    # reads_dict = calculate_pair_counts(fragment_list)
 
-    # for i in range(10):
-    #     samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
-    #     # samples = sample_states_no_resample_optimized(slices, edges, forward_messages, backward_messages, transitions_dict)
-    #     ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples, ploidy)
-    #     print('FFBS Accuracy:', ffbs_acc)
-    ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples, ploidy)
-    # print('FFBS Accuracy:', ffbs_acc)
-    predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities")
+# def run_FFBS_quotient_likelihood(inp):
+#     this_frag_path, this_fragment_coverage_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path, results_path = inp
+#     file_name = frag_file.split('.')[0]
 
-    end_time = time.time()
+#     fragment_v_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_v_label_' + file_name + '.pkl')
+#     fragment_e_label_revered_path = os.path.join(this_reverse_maps_path, 'fg_e_label_' + file_name + '.pkl')
+#     quotient_v_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_v_label_' + file_name + '.pkl')
+#     quotient_e_label_revered_path = os.path.join(this_reverse_maps_path, 'qg_e_label_' + file_name + '.pkl')
+#     print('Working on:', os.path.join(this_frag_path, frag_file))
 
-    elapsed_time = round(end_time - start_time, 2)
+#     class Args:
+#         def __init__(self):
+#             self.vcf_path = 'example/62_ID0.vcf'
+#             self.data_path = os.path.join(this_frag_path, frag_file)
+#             # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
+#             self.bam_path = 'example/example.bam'
+#             self.genotype_path = genotype_path
+#             self.ploidy = ploidy
+#             self.error_rate = 0.001
+#             self.epsilon = 0.0001
+#             self.output_path = 'output'
+#             self.root_dir = 'D:/UCONN/HaplOrbit'
+#             self.alleles = [0, 1]
 
-    true_haplotypes = pd.read_csv(genotype_path).T
+#     # Create the mock args object
+#     args = Args()
 
-    block_info, components = get_block_info(quotient_g, predicted_haplotypes, true_haplotypes, fragment_model)
+#     start_time = time.time()
 
-    sampled_positions = [c for c in predicted_haplotypes.columns.values if np.nan not in list(predicted_haplotypes[c].values)]
+#     # Initialize classes with parsed arguments
+#     input_handler = InputHandler(args)
 
-    predicted_haplotypes_np = predicted_haplotypes[sampled_positions].to_numpy()
-    # true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()[:, sampled_positions]
+#     config = Configuration(args.ploidy, args.error_rate, args.epsilon, input_handler.alleles)
+
+#     fragment_model = FragmentGraph(input_handler.data_path, input_handler.genotype_path, input_handler.ploidy, input_handler.alleles)
+#     fragment_model.construct(input_handler, config)
+
+#     frag_graph_path = os.path.join(this_fragment_coverage_path, file_name + '.gt.gz')
+#     fragment_model.graph.save(frag_graph_path)
+
+#     frag_graph_plot_path = os.path.join(this_fragment_coverage_path, file_name + '.png')
+
+#     e_labels = fragment_model.graph.edge_properties["e_label"]
+#     v_labels = fragment_model.graph.vertex_properties["v_label"]
+#     gt.graph_draw(fragment_model.graph, output_size=(1000, 1000), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=16,  
+#     edge_font_size=10, output=frag_graph_plot_path)
+
+#     with open(fragment_v_label_revered_path, "wb") as f:
+#         pickle.dump(fragment_model.v_label_reversed, f)
+
+#     edges_map_fragment = {}
+#     for k in fragment_model.e_label_reversed.keys():
+#         edges_map_fragment[k] = [int(fragment_model.e_label_reversed[k].source()), int(fragment_model.e_label_reversed[k].target())]
+
+#     with open(fragment_e_label_revered_path, "wb") as f:
+#         pickle.dump(edges_map_fragment, f)
+
+#     # create quotient graph
+#     quotient_g = QuotientGraph(fragment_model)
+#     quotient_g.construct(input_handler, config)
+
+#     # save quotient graph
+#     quot_graph_path = os.path.join(this_quotient_coverage_path, file_name + '.gt.gz')
+#     quotient_g.graph.save(quot_graph_path)
+
+
+#     quotient_graph_plot_path = os.path.join(this_quotient_coverage_path, file_name + '.png')
+#     e_labels = quotient_g.graph.edge_properties["e_label"]
+#     v_labels = quotient_g.graph.vertex_properties["v_label"]
+#     gt.graph_draw(quotient_g.graph, output_size=(1000, 1000), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=16,  
+#     edge_font_size=10, output=quotient_graph_plot_path)
+
+#     # gt.graph_draw(quotient_g.graph, output_size=(1000, 1000), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=16,  
+#     # edge_font_size=10)
+
+#     with open(quotient_v_label_revered_path, "wb") as f:
+#         pickle.dump(quotient_g.v_label_reversed, f)
+
+#     edges_map_quotient = {}
+#     for k in quotient_g.e_label_reversed.keys():
+#         edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
+
+#     with open(quotient_e_label_revered_path, "wb") as f:
+#         pickle.dump(edges_map_quotient, f)
+
+#     quotient_g_v_label_reversed = quotient_g.v_label_reversed
+
+#     edges_map_quotient = {}
+#     for k in quotient_g.e_label_reversed.keys():
+#         edges_map_quotient[k] = [int(quotient_g.e_label_reversed[k].source()), int(quotient_g.e_label_reversed[k].target())]
+
+#     transitions_dict, transitions_dict_extra = transition_matrices(quotient_g, edges_map_quotient, ploidy, fragment_model, config)
+#     emission_dict = emissions(ploidy, quotient_g, quotient_g_v_label_reversed, config.error_rate)
+
+#     nodes = list(emission_dict.keys())
+#     edges = [(e.split('--')[0], e.split('--')[1]) for e in list(transitions_dict.keys())]
+
+#     slices, interfaces =  assign_slices_and_interfaces(nodes, edges)
+
+#     assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, input_handler.data_path)
+
+#     forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)
+
+#     # backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)   
+
+
+#     # samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
+#     samples = sample_states_book_multiple_times(slices, edges, forward_messages, transitions_dict, n=100)
+#     # samples = sample_states_ground_truth(slices, nodes, genotype_path)
+#     # fragment_list = fragment_model.fragment_list
+#     # reads_dict = calculate_pair_counts(fragment_list)
+
+#     ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples, ploidy)
+#     # print('FFBS Accuracy:', ffbs_acc)
+#     predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities")
+
+#     # for _ in range(10):
+#     #     samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
+#     #     predicted_haplotypes = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities")
+#     #     ffbs_acc = evaulate_ffbs_acc_sample(genotype_path, samples, ploidy)
+#     #     this_phasing_likelihood = compute_global_phasing_likelihood(predicted_haplotypes, fragment_model, config)
+#     #     print(ffbs_acc, this_phasing_likelihood)
+#     #     compute_vector_error_rate(predicted_haplotypes.to_numpy(), true_haplotypes.to_numpy())
+
+#     end_time = time.time()
+
+#     elapsed_time = round(end_time - start_time, 2)
+
+#     true_haplotypes = pd.read_csv(genotype_path).T
+
+#     block_info, components = get_block_info(quotient_g, predicted_haplotypes, true_haplotypes, fragment_model)
+
+#     sampled_positions = [c for c in predicted_haplotypes.columns.values if np.nan not in list(predicted_haplotypes[c].values)]
+
+#     predicted_haplotypes_np = predicted_haplotypes[sampled_positions].to_numpy()
+#     # true_haplotypes = pd.read_csv(genotype_path).T.to_numpy()[:, sampled_positions]
     
-    true_haplotypes_np = true_haplotypes.to_numpy()[:, sampled_positions]
+#     true_haplotypes_np = true_haplotypes.to_numpy()[:, sampled_positions]
 
-    vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes_np)
-    accuracy, _ = calculate_accuracy(predicted_haplotypes_np, true_haplotypes_np)
-    mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes_np)
-    mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
-    results_name = 'FFBS_{}.pkl'.format(frag_file.split('.')[0])
-    results = {}
-    results['block_evaluation'] = block_info
-    results['components'] = components
-    results['n_blocks'] = len(components.keys())
-    results['average_block_size'] = block_info['average_block_size']
-    results['length_phased'] = len(sampled_positions)
-    results['evaluation'] = {'vector_error_rate': vector_error_rate, 'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 
-                             'dp_table': dp_table, 'accuracy': accuracy, 'mismatch_error': mismatch_error, 'mec': mec_, 'ffbs_acc': ffbs_acc}
-    results['predicted_haplotypes'] = predicted_haplotypes
-    results['true_haplotypes'] = pd.read_csv(genotype_path).T
-    results['forward_messages'] = forward_messages
-    results['transitions_dict'] = transitions_dict
-    results['transitions_dict_extra'] = transitions_dict_extra
-    results['emission_dict'] = emission_dict
-    results['assignment_dict'] = assignment_dict
-    results['samples'] = samples
-    results['slices'] = slices
-    results['best_permutation'] = best_permutation
-    results['fragment_list'] = fragment_model.fragment_list
-    results['time'] = elapsed_time
-    # print('Results:', results['evaluation'])
+#     vector_error_rate, vector_error, backtracking_steps, dp_table = compute_vector_error_rate(predicted_haplotypes_np, true_haplotypes_np)
+#     accuracy, _ = calculate_accuracy(predicted_haplotypes_np, true_haplotypes_np)
+#     mismatch_error, best_permutation = calculate_mismatch_error(predicted_haplotypes_np, true_haplotypes_np)
+#     mec_ = mec(predicted_haplotypes_np, fragment_model.fragment_list)
+#     results_name = 'FFBS_{}.pkl'.format(frag_file.split('.')[0])
+#     results = {}
+#     results['block_evaluation'] = block_info
+#     results['components'] = components
+#     results['n_blocks'] = len(components.keys())
+#     results['average_block_size'] = block_info['average_block_size']
+#     results['length_phased'] = len(sampled_positions)
+#     results['evaluation'] = {'vector_error_rate': vector_error_rate, 'vector_error': vector_error, 'backtracking_steps': backtracking_steps, 
+#                              'dp_table': dp_table, 'accuracy': accuracy, 'mismatch_error': mismatch_error, 'mec': mec_, 'ffbs_acc': ffbs_acc}
+#     results['predicted_haplotypes'] = predicted_haplotypes
+#     results['true_haplotypes'] = pd.read_csv(genotype_path).T
+#     results['forward_messages'] = forward_messages
+#     results['transitions_dict'] = transitions_dict
+#     results['transitions_dict_extra'] = transitions_dict_extra
+#     results['emission_dict'] = emission_dict
+#     results['assignment_dict'] = assignment_dict
+#     results['samples'] = samples
+#     results['slices'] = slices
+#     results['best_permutation'] = best_permutation
+#     results['fragment_list'] = fragment_model.fragment_list
+#     results['time'] = elapsed_time
+#     # print('Results:', results['evaluation'])
 
-    with open(os.path.join(results_path, results_name), 'wb') as f:
-        pickle.dump(results, f)
+#     with open(os.path.join(results_path, results_name), 'wb') as f:
+#         pickle.dump(results, f)
 
-    print('Saved results in {}.'.format(os.path.join(results_path, results_name)), 'vector_error_rate', vector_error_rate, 'vector_error', vector_error, 'mismatch_error', mismatch_error, 'mec', mec_, 'ffbs_acc', ffbs_acc)
+#     print('Saved results in {}.'.format(os.path.join(results_path, results_name)), 'vector_error_rate', vector_error_rate, 'vector_error', vector_error, 'mismatch_error', mismatch_error, 'mec', mec_, 'ffbs_acc', ffbs_acc)
     
 
 def simulate_na12878():
@@ -2140,36 +2071,36 @@ def simulate_awri():
         run_FFBS_quotient_likelihood(inp)
 
 
-def save_inputs(inputs, output_dir):
-    """
-    Save each input as a separate pickle file in the specified output directory.
-    """
-    output_dir = '/mnt/research/aguiarlab/proj/HaplOrbit/inputs100_2'
-    if not os.path.exists(output_dir):
-        os.makedirs(output_dir)
+# def save_inputs(inputs, output_dir):
+#     """
+#     Save each input as a separate pickle file in the specified output directory.
+#     """
+#     output_dir = '/mnt/research/aguiarlab/proj/HaplOrbit/inputs100_2'
+#     if not os.path.exists(output_dir):
+#         os.makedirs(output_dir)
 
-    for i, inp in enumerate(inputs):
-        input_file = os.path.join(output_dir, f"input_{i}.pkl")
-        with open(input_file, "wb") as f:
-            pickle.dump(inp, f)
-    print(f"Saved {len(inputs)} inputs to {output_dir}")
-
-
-def run_FFBS_quotient_likelihood_from_input(input_file):
-    with open(input_file, "rb") as f:
-        inp = pickle.load(f)
-
-    run_FFBS_quotient_likelihood(inp)
+#     for i, inp in enumerate(inputs):
+#         input_file = os.path.join(output_dir, f"input_{i}.pkl")
+#         with open(input_file, "wb") as f:
+#             pickle.dump(inp, f)
+#     print(f"Saved {len(inputs)} inputs to {output_dir}")
 
 
-if __name__ == '__main__':
+# def run_FFBS_quotient_likelihood_from_input(input_file):
+#     with open(input_file, "rb") as f:
+#         inp = pickle.load(f)
 
-    # simulate_na12878()
-    # simulate_awri()
+#     run_FFBS_quotient_likelihood(inp)
 
-    if len(sys.argv) != 2:
-        print("Usage: python3 simulator_paper.py <input_file>")
-        sys.exit(1)
+
+# if __name__ == '__main__':
+
+#     # simulate_na12878()
+#     # simulate_awri()
+
+#     if len(sys.argv) != 2:
+#         print("Usage: python3 simulator_paper.py <input_file>")
+#         sys.exit(1)
     
-    input_file = sys.argv[1]
-    run_FFBS_quotient_likelihood_from_input(input_file)
+#     input_file = sys.argv[1]
+#     run_FFBS_quotient_likelihood_from_input(input_file)

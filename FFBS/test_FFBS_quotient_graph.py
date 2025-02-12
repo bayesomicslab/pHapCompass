@@ -1576,8 +1576,7 @@ def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_mo
         # Compute candidates
         all_combinations, all_probabilities, candidate_counts, all_positions = compute_candidate_phasings(
             selected_position, relevant_edges, phased_positions, transitions_dict_extra,
-            phasing_samples, ploidy, predicted_haplotypes, config, fragment_model
-        )
+            phasing_samples, ploidy, predicted_haplotypes, config, fragment_model)
 
         # Select and update
         if all_combinations:
