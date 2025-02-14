@@ -8,6 +8,7 @@ import itertools
 from scipy.optimize import linear_sum_assignment
 from collections import defaultdict
 from utils.utils import sort_nodes, str_2_phas_1
+import graph_tool.all as gt
 
 
 def calculate_correct_phasing_rate(reconstructed_haplotypes, true_haplotypes):
@@ -410,3 +411,179 @@ def get_block_info(quotient_g, predicted_haplotypes, true_haplotypes, fragment_m
 
     return block_info, components
 
+
+
+
+def find_blocks(H, H_star):
+    """
+    Splits the columns of H (possibly containing NaNs) into consecutive blocks,
+    based on how many rows (out of k) are non-NaN in each column.
+
+    We define four block types:
+      Type 1: completely filled (m == k)
+      Type 2: completely empty (m == 0)
+      Type 3: partially filled with m < k - 1
+      Type 4: partially filled with m == k - 1
+
+    Inputs:
+      H      : (k x n) numpy array, can have NaNs
+      H_star : (k x n) numpy array, assumed fully filled (though here
+               we mainly just validate shape, not used in block splitting)
+
+    Returns:
+      blocks : a list of dictionaries, each having:
+         {
+           'start': start_col_index (0-based),
+           'end'  : end_col_index (0-based),
+           'type' : block_type (1, 2, 3, or 4),
+           'm'    : number of non-NaN rows in these columns
+         }
+        The columns 'start' through 'end' (inclusive) all have the same m-value
+        and thus fall into the same type of block.
+    """
+
+    # --- Validate shapes ---
+    k, n = H.shape
+    if H_star.shape != (k, n):
+        raise ValueError("H and H_star must have the same shape.")
+
+    # --- Helper to determine block type by 'm' ---
+    def get_block_type(m, k):
+        if m == 0:
+            return 2  # completely empty
+        elif m == k:
+            return 1  # completely filled
+        elif m == k - 1:
+            return 4  # partially filled, m = k - 1
+        else:
+            return 3  # partially filled, m < k - 1
+
+    # --- If there are no columns, return empty list ---
+    if n == 0:
+        return []
+
+    # --- Identify blocks ---
+    blocks = []
+
+    # Count how many rows are non-NaN for the first column
+    prev_m = np.sum(~np.isnan(H[:, 0]))
+    start_col = 0
+
+    # Iterate over columns 1..n-1
+    for col in range(1, n):
+        current_m = np.sum(~np.isnan(H[:, col]))
+        # If current_m changes from prev_m, we finalize the previous block
+        if current_m != prev_m:
+            blocks.append({
+                'start': start_col,
+                'end'  : col - 1,
+                'type' : get_block_type(prev_m, k),
+                'm'    : prev_m
+            })
+            # Start a new block
+            start_col = col
+            prev_m = current_m
+
+    # Close the last block (from start_col .. n-1)
+    blocks.append({
+        'start': start_col,
+        'end'  : n - 1,
+        'type' : get_block_type(prev_m, k),
+        'm'    : prev_m
+    })
+
+    return blocks
+
+
+def generate_example_H_Hstar():
+    """
+    Generates an example pair of H and H_star matrices for testing.
+
+    H_star: Fully filled haplotype matrix (no NaNs).
+    H     : Partially filled haplotype matrix with NaNs.
+    
+    Returns:
+        H (numpy array): Partially filled haplotype matrix
+        H_star (numpy array): Fully filled haplotype matrix (ground truth)
+    """
+    # Set random seed for reproducibility
+    np.random.seed(42)
+
+    # Define k (rows) and n (columns)
+    k = 4  # Number of rows (haplotypes)
+    n = 16  # Number of columns (positions)
+
+    # Generate a fully filled matrix H_star with random values (0/1)
+    H_star = np.random.randint(0, 2, size=(k, n))
+
+    # Create a copy of H_star to modify for H (introducing NaNs)
+    H = H_star.astype(float)  # Convert to float to allow NaNs
+
+    # Introduce NaNs to match the given example blocks:
+    # Block 1: columns 0-2 (fully filled, keep as is)
+    # Block 2: columns 3-4 (completely empty)
+    H[:, 3:5] = np.nan
+    
+    # Block 3: columns 5-6 (partially filled, 2 non-NaN per column)
+    H[:, 5] = [np.nan, np.nan, 1, 0]  # Only last 2 rows filled
+    H[:, 6] = [np.nan, np.nan, 0, 1]  # Only last 2 rows filled
+    
+    # Block 4: columns 7-8 (completely empty)
+    H[:, 7:9] = np.nan
+    
+    # Block 5: columns 9-10 (fully filled, keep as is)
+    
+    # Block 6: columns 11-12 (partially filled, 2 non-NaN per column)
+    H[:, 11] = [np.nan, np.nan, 1, 0]
+    H[:, 12] = [np.nan, np.nan, 0, 1]
+    
+    # Block 7: column 13 (partially filled, only 1 row filled)
+    H[:, 13] = [np.nan, np.nan, np.nan, 1]
+    
+    # Block 8: column 14 (partially filled, 3 out of 4 rows filled)
+    H[:, 14] = [1, 0, 1, np.nan]
+    H[:, 15] = [0, 0, 1, np.nan]
+    
+    return H, H_star
+
+
+def compute_vector_error_rate_with_missing_positions(H, H_star):
+    # H, H_star = generate_example_H_Hstar()
+    blocks = find_blocks(H, H_star)
+    vector_error = 0
+    for block in blocks:
+        block_H = H[:, block['start']:block['end']+1]
+        block_H_star = H_star[:, block['start']:block['end']+1]
+        if block['type'] == 1:
+          this_vector_error = compute_vector_error_rate(block_H, block_H_star)[1]
+          vector_error += this_vector_error
+        elif block['type'] == 2:
+          for col in range(block['start'], block['end']+1):
+            H_star_col = H_star[:, col]
+            m0 = np.count_nonzero(H_star_col == 0)
+            m1 = np.count_nonzero(H_star_col == 1)
+            s0 = int(m0 > 1)  # 1 if m0 > 1, else 0
+            s1 = int(m1 > 1)  # 1 if m1 > 1, else 0
+            vector_error += s0 + s1
+        elif block['type'] == 3:
+          completed_rows = block['m']
+          block_H = H[:, block['start']:block['end']+1]
+          block_H_star = H_star[:, block['start']:block['end']+1]
+          # TO DO: Implement the logic for block type 3
+        elif block['type'] == 4:
+          block_H = H[:, block['start']:block['end']+1]
+          block_H_star = H_star[:, block['start']:block['end']+1]
+          for col_id, col in enumerate(range(block['start'], block['end']+1)):
+            # print(col_id, col)
+            H_star_col = H_star[:, col]
+            H_col = H[:, col]
+            unphased_val = np.sum(H_star_col) - np.nansum(H_col)
+            if unphased_val > 1:
+              unphased_val = 1
+              print('Unphased value is greater than 1')
+            nan_index = np.where(np.isnan(H_col))[0]
+            block_H[nan_index, col_id] = unphased_val
+          this_vector_error = compute_vector_error_rate(block_H, block_H_star)[1]
+          vector_error += this_vector_error
+    vector_error_rate = vector_error/H.shape[1]
+    return vector_error_rate, vector_error, blocks
