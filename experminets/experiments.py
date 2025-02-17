@@ -478,15 +478,14 @@ def run_chordal_contraction_graph_tool_top_k(inp):
     print('[Done]', this_path)
 
 
-
 def run_FFBS_quotient(inp):
     this_frag_path, this_quotient_coverage_path, this_reverse_maps_path, frag_file, ploidy, genotype_path, results_path = inp
     print('Working on:', os.path.join(this_frag_path, frag_file))
-    # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/test.frag'
-    # frag_path = '/labs/Aguiar/pHapCompass/test/test2.frag'
+    # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/FFBS/test.frag'
+    # frag_path = '/labs/Aguiar/pHapCompass/FFBS/test2.frag'
     # ploidy= 3
-    # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/test/haplotypes.csv'
-    # genotype_path = '/labs/Aguiar/pHapCompass/test/haplotypes.csv'
+    # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/FFBS/haplotypes.csv'
+    # genotype_path = '/labs/Aguiar/pHapCompass/FFBS/haplotypes.csv'
 
     class Args:
         def __init__(self):
@@ -729,9 +728,11 @@ def run_FFBS_quotient_likelihood(inp):
 
     class Args:
         def __init__(self):
+            # frag_path = '/mnt/research/aguiarlab/proj/HaplOrbit/FFBS/test.frag'
+            # genotype_path = '/mnt/research/aguiarlab/proj/HaplOrbit/FFBS/haplotypes.csv'
             self.vcf_path = 'example/62_ID0.vcf'
             self.data_path = os.path.join(this_frag_path, frag_file)
-            # self.data_path = '/home/mok23003/BML/HaplOrbit/simulated_data/Contig1_k3/c2/ART_90.frag.txt'
+            # self.data_path = frag_path
             self.bam_path = 'example/example.bam'
             self.genotype_path = genotype_path
             self.ploidy = ploidy
@@ -791,6 +792,7 @@ def run_FFBS_quotient_likelihood(inp):
 
     # gt.graph_draw(quotient_g.graph, output_size=(1000, 1000), vertex_text=v_labels, edge_text=e_labels, vertex_font_size=16,  
     # edge_font_size=10)
+    gt.graph_draw(quotient_g.graph, output_size=(1000, 1000), vertex_text=v_labels, vertex_font_size=24)
 
     with open(quotient_v_label_revered_path, "wb") as f:
         pickle.dump(quotient_g.v_label_reversed, f)
@@ -823,8 +825,8 @@ def run_FFBS_quotient_likelihood(inp):
     # backward_messages = compute_backward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)   
 
 
-    # samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
-    samples = sample_states_book_multiple_times(slices, edges, forward_messages, transitions_dict, n=100)
+    samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
+    # samples = sample_states_book_multiple_times(slices, edges, forward_messages, transitions_dict, n=100)
     # samples = sample_states_ground_truth(slices, nodes, genotype_path)
     # fragment_list = fragment_model.fragment_list
     # reads_dict = calculate_pair_counts(fragment_list)

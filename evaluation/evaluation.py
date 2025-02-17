@@ -5,6 +5,7 @@ import pandas as pd
 import pickle
 import os
 import itertools
+from itertools import combinations, permutations
 from scipy.optimize import linear_sum_assignment
 from collections import defaultdict
 from utils.utils import sort_nodes, str_2_phas_1
@@ -84,6 +85,39 @@ def find_matches(h_star_col, h_col):
   return matches
 
 
+def find_partial_matches(h_star_col, h_col):
+    """
+    returns all of the ways to match the alleles
+    in a partial column of H_star (length m) to a column of H (length k)
+    """
+    m = len(h_star_col)
+    
+    # Get indices for allele 1 and 0 in the reconstructed column (length m).
+    one_indices_star = [i for i, val in enumerate(h_star_col) if val == 1]
+    zero_indices_star = [i for i, val in enumerate(h_star_col) if val == 0]
+    
+    # Get indices for allele 1 and 0 in the ground truth column (length k).
+    one_indices = [j for j, val in enumerate(h_col) if val == 1]
+    zero_indices = [j for j, val in enumerate(h_col) if val == 0]
+    
+    matches = []
+    # choose which of the 1s we will be using in the m-subset
+    # then consider all orderings (matchings) of that chosen subset.
+    for chosen_ones in combinations(one_indices, len(one_indices_star)):
+        for perm_ones in permutations(chosen_ones):
+            # Similarly for zeros.
+            for chosen_zeros in combinations(zero_indices, len(zero_indices_star)):
+                for perm_zeros in permutations(chosen_zeros):
+                    # Build a mapping vector of length m.
+                    mapping = [None] * m
+                    for idx, gt_idx in zip(one_indices_star, perm_ones):
+                        mapping[idx] = gt_idx
+                    for idx, gt_idx in zip(zero_indices_star, perm_zeros):
+                        mapping[idx] = gt_idx
+                    matches.append(tuple(mapping))
+    return matches
+
+
 def compute_vector_error_rate(H, H_star):
   """
   input:
@@ -150,6 +184,62 @@ def compute_vector_error_rate(H, H_star):
   backtracking_steps.reverse()
 
   return vector_error_rate, vector_error, backtracking_steps, dp_table
+
+
+def compute_vector_error_rate_partial(H, H_star_full):
+    '''
+    for full ground truth matrix H and 
+    partial reconstruction H_star_full (k by n but with only m rows phased)
+      assuming that all rows are either fully phased or fully unphased 
+    computes vector error rate for the phased rows of H_star 
+    some of the rows in the ground truth matrix will not be matched with any reconstructed rows for a given SNP, 
+      maybe it is matched for a part of the reconstructed row, 
+      then the reconstructed row switches to another ground truth row and 
+      incurs a vector error and that ground truth row is no longer used,
+      but m haplotypes are used for any given SNP (not always the same m for different SNPs)
+    '''
+    k, n = H.shape
+    H_star = H_star_full[~np.isnan(H_star_full).any(axis=1),:]
+    m = H_star.shape[0]
+    dp_table = [{} for _ in range(n)]
+    
+    # Use the new helper for the first column.
+    first_col_matchings = find_partial_matches(H_star[:, 0], H[:, 0])
+    for matching in first_col_matchings:
+        dp_table[0][matching] = (0, None)
+    
+    # Forward pass: iterate over columns.
+    for col in range(1, n):
+        all_matches = find_partial_matches(H_star[:, col], H[:, col])
+        for matching in all_matches:
+            best_ve = np.inf
+            best_prev = None
+            for prev_matching in dp_table[col-1]:
+                prev_cost = dp_table[col-1][prev_matching][0]
+                # Count the number of reconstructed rows that switch their ground truth match.
+                switches = np.count_nonzero(np.array(prev_matching) != np.array(matching))
+                temp_ve = prev_cost + switches
+                if temp_ve < best_ve:
+                    best_ve = temp_ve
+                    best_prev = prev_matching
+            if best_prev is not None:
+                dp_table[col][matching] = (best_ve, best_prev)
+    
+    # Backtracking to obtain the matching sequence.
+    vector_error, _ = min(dp_table[n-1].values(), key=lambda x: x[0])
+    vector_error_rate = vector_error / n
+    last_matching = min(dp_table[n-1], key=lambda m: dp_table[n-1][m][0])
+    backtracking_steps = []
+    matching = last_matching
+    for col in range(n-1, -1, -1):
+        backtracking_steps.append(matching)
+        cost, prev_match = dp_table[col][matching]
+        if prev_match is None:
+            break
+        matching = prev_match
+    backtracking_steps.reverse()
+
+    return vector_error_rate, vector_error, backtracking_steps, dp_table
 
 
 def mec(reconstructed_haplotypes, list_of_reads):
@@ -412,8 +502,6 @@ def get_block_info(quotient_g, predicted_haplotypes, true_haplotypes, fragment_m
     return block_info, components
 
 
-
-
 def find_blocks(H, H_star):
     """
     Splits the columns of H (possibly containing NaNs) into consecutive blocks,
@@ -547,15 +635,22 @@ def generate_example_H_Hstar():
     return H, H_star
 
 
-def compute_vector_error_rate_with_missing_positions(H, H_star):
+def compute_vector_error_rate_with_missing_positions(H_star, H):
+    """
+    Computes the vector error rate between two haplotype matrices, allowing for missing positions.
+    H_star is assumed to be fully filled, while H may contain NaNs.
+    H_star: True haplotype
+    H: Assembled haplotype with NaNs for missing positions
+    """
     # H, H_star = generate_example_H_Hstar()
     blocks = find_blocks(H, H_star)
     vector_error = 0
     for block in blocks:
+        print(block)
         block_H = H[:, block['start']:block['end']+1]
         block_H_star = H_star[:, block['start']:block['end']+1]
         if block['type'] == 1:
-          this_vector_error = compute_vector_error_rate(block_H, block_H_star)[1]
+          this_vector_error = compute_vector_error_rate(block_H_star, block_H)[1]
           vector_error += this_vector_error
         elif block['type'] == 2:
           for col in range(block['start'], block['end']+1):
@@ -566,10 +661,23 @@ def compute_vector_error_rate_with_missing_positions(H, H_star):
             s1 = int(m1 > 1)  # 1 if m1 > 1, else 0
             vector_error += s0 + s1
         elif block['type'] == 3:
-          completed_rows = block['m']
+          # completed_rows = block['m']
           block_H = H[:, block['start']:block['end']+1]
           block_H_star = H_star[:, block['start']:block['end']+1]
-          # TO DO: Implement the logic for block type 3
+          this_vector_error1 = compute_vector_error_rate_partial(block_H_star, block_H)[1]
+          vector_error += this_vector_error1
+          for col in range(block['start'], block['end']+1):
+            H_star_col = H_star[:, col]
+            H_col = H[:, col]
+            H_star_0_count = np.count_nonzero(H_star_col == 0)
+            H_star_1_count = np.count_nonzero(H_star_col == 1)
+            H_0_count = np.count_nonzero(H_col == 0)
+            H_1_count = np.count_nonzero(H_col == 1)
+            m0 = H_star_0_count - H_0_count
+            m1 = H_star_1_count - H_1_count
+            s0 = int(m0 > 1)
+            s1 = int(m1 > 1)
+            vector_error += s0 + s1
         elif block['type'] == 4:
           block_H = H[:, block['start']:block['end']+1]
           block_H_star = H_star[:, block['start']:block['end']+1]
@@ -583,7 +691,8 @@ def compute_vector_error_rate_with_missing_positions(H, H_star):
               print('Unphased value is greater than 1')
             nan_index = np.where(np.isnan(H_col))[0]
             block_H[nan_index, col_id] = unphased_val
-          this_vector_error = compute_vector_error_rate(block_H, block_H_star)[1]
+          this_vector_error = compute_vector_error_rate(block_H_star, block_H)[1]
           vector_error += this_vector_error
+        print(block, vector_error)
     vector_error_rate = vector_error/H.shape[1]
     return vector_error_rate, vector_error, blocks

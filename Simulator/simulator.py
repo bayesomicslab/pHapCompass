@@ -1110,14 +1110,16 @@ def plot_positions_distances(positions):
     positions = sorted(positions)
     differences = [positions[i] - positions[i - 1] for i in range(1, len(positions))]
     plt.figure(figsize=(12, 6))
-    plt.hist(differences, bins=50, color='blue', alpha=0.7, edgecolor='black')
-    plt.xlabel('Distances (bp)')
-    plt.ylabel('Frequency')
-    plt.title('Histogram of Differences Between Consecutive VCF Positions')
+    plt.hist(differences, bins=50, color='tab:blue', alpha=0.7, edgecolor='black')
+    plt.xlabel('Distances (bp)', fontdict={'size': 20})
+    plt.ylabel('Frequency', fontdict={'size': 20})
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    # plt.title('Histogram of Differences Between Consecutive VCF Positions')
     plt.grid(axis='y', linestyle='--', alpha=0.7)
     plt.xscale('log')
     # plt.xlim(0, 100000)
-    # plt.show()
+    plt.show()
     plt.savefig('/mnt/research/aguiarlab/proj/HaplOrbit/results/position_differences.png')
 
 

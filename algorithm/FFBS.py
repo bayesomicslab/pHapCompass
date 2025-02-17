@@ -1155,7 +1155,7 @@ def compute_candidate_phasings_target_based(
     return candidate_phasings, probabilities
 
 
-def compute_candidate_phasings(
+def compute_candidate_phasings0(
     selected_position, relevant_edges, phased_positions, transitions_dict_extra,
     samples_brief, ploidy, predicted_haplotypes, config, fragment_model
 ):
@@ -1298,6 +1298,312 @@ def compute_candidate_phasings(
     return all_combinations, all_probabilities, candidate_counts, all_positions
 
 
+def compute_candidate_phasings(
+    selected_position,            # Not really used anymore for multi-position
+    relevant_edges,
+    phased_positions,
+    transitions_dict_extra,
+    samples_brief,
+    ploidy,
+    predicted_haplotypes,
+    config,
+    fragment_model
+):
+    """
+    Compute candidate phasings for *all newly introduced positions* within 'relevant_edges',
+    using an iterative "node-by-node" approach. We maintain a list of partial solutions,
+    each a (ploidy x len(all_positions)) array. We fill columns for new nodes one by one.
+    
+    At the end, each candidate solution is fully assigned (no NaN columns) for the subgraph.
+    Then we compute the total likelihood and return them.
+    
+    Parameters:
+        selected_position (int): Old param, not used here. Kept for signature compatibility.
+        relevant_edges (list): List of edges describing the subgraph of newly introduced nodes
+                               plus edges to phased nodes.
+        phased_positions (set): Positions already phased. We won't alter those columns.
+        transitions_dict_extra (dict): Weighted phasing constraints for edges. 
+                                       { "node1--node2": {...} }
+        samples_brief (dict): Map node -> string. The "base" phasing for each node.
+        ploidy (int): Ploidy level => # rows in the final alignment array.
+        predicted_haplotypes (pd.DataFrame): Already phased haplotypes table, shape:
+                         (#haplotypes = ploidy) x (#positions).
+        config: Contains e.g. error_rate.
+        fragment_model: For retrieving matching reads.
+
+    Returns:
+        all_combinations (list of np.ndarray):
+            Each is shape (ploidy, len(all_positions)) with no NaNs.
+        all_probabilities (list of float):
+            Sums of read-likelihood for each final candidate.
+        candidate_counts (list of int):
+            How many edges' target phasing is matched by each candidate (old measure).
+        all_positions (list of int):
+            The sorted union of positions in this subgraph.
+    """
+
+    # -----------------------------
+    # 1) Identify subgraph nodes & positions
+    # -----------------------------
+    subgraph_nodes = set()
+    for (n1, n2) in relevant_edges:
+        subgraph_nodes.add(n1)
+        subgraph_nodes.add(n2)
+
+    all_positions = sorted({
+        int(pos)
+        for (n1, n2) in relevant_edges
+        for node in (n1, n2)
+        for pos in node.split('-')
+    })
+
+    # Map each node -> sorted list of integer positions
+    node_positions_map = {}
+    for nd in subgraph_nodes:
+        nd_positions = sorted(int(p) for p in nd.split('-'))
+        node_positions_map[nd] = nd_positions
+
+    # Distinguish which subgraph nodes are "already phased" vs "new"
+    # A node is fully phased if all its positions in phased_positions
+    def node_is_fully_phased(nd):
+        return all(pos in phased_positions for pos in node_positions_map[nd])
+
+    # We'll pick an ordering of subgraph nodes. E.g. sorted by node name:
+    subgraph_nodes_sorted = sorted(subgraph_nodes)
+
+    # For quick "edge label" check
+    def get_edge_label(a, b):
+        # In your data, it might be "a--b" only if (a<b) or so. But let's be
+        # consistent with how transitions_dict_extra was built. We'll check both:
+        if f"{a}--{b}" in transitions_dict_extra:
+            return f"{a}--{b}"
+        if f"{b}--{a}" in transitions_dict_extra:
+            return f"{b}--{a}"
+        return None
+
+    # -----------------------------
+    # 2) Prepare "initial" partial solution(s)
+    # We store them as (ploidy x len(all_positions)) arrays. The columns for
+    # already phased positions are filled from predicted_haplotypes, the rest are NaN.
+    # We'll keep a list "candidate_solutions" of these arrays.
+    # Start with exactly one partial solution (with only phased columns filled).
+    # -----------------------------
+    init_array = np.full((ploidy, len(all_positions)), np.nan, dtype=float)
+
+    # Fill from predicted_haplotypes for columns that are in phased_positions
+    for col_i, pos in enumerate(all_positions):
+        if pos in phased_positions:
+            # Copy from predicted_haplotypes
+            init_array[:, col_i] = predicted_haplotypes.loc[:, pos - 1].values
+
+    candidate_solutions = [init_array]
+
+    # -----------------------------
+    # 3) Helper to get "all permutations" for a node's base phasing
+    #    This duplicates old logic where we permute the rows of str_2_phas_1(...)
+    # -----------------------------
+    def get_node_all_permutations(node_str):
+        """Return list of 2D arrays shape (ploidy, #positions_in_node) for all row permutations."""
+        base_np = str_2_phas_1(node_str, ploidy)
+        out = []
+        for perm in itertools.permutations(base_np):
+            arr_ = np.array(perm)
+            out.append(arr_)
+        return out
+
+    # -----------------------------
+    # 4) Helper: For an "edge" constraint, we want to see if the node1 partial columns
+    #    are consistent with node2's candidate block. We can also check transitions_dict_extra
+    #    for matched phasings. This is somewhat simpler if we only keep solutions that
+    #    match the base "samples_brief[node]" anyway, as in older code.
+    # -----------------------------
+    def is_compatible_edge(nd1, nd2, full_sol):
+        """
+        Return True if nd1<->nd2 is consistent under transitions_dict_extra + the
+        current partial columns for nd1 and nd2 in full_sol.
+        We'll check:
+         1) Each node's assigned sub-block vs samples_brief[node]
+         2) The edge must exist => find matched phasings => see if there's a row assignment that matches.
+        A simpler approach is "If the node array in full_sol is the same row arrangement as samples_brief[node], then check transitions_dict_extra edge if it is present".
+        But that can get tricky quickly...
+        
+        For now, we replicate old logic: the "source_phasing" must be samples_brief[nd1], "target_phasing" must be samples_brief[nd2]. Then check if there's a 'matched_phasings'.
+        We'll see if the row pattern in full_sol for nd1,nd2 matches one of those 'matched_phasings'.
+        """
+        edge_label = get_edge_label(nd1, nd2)
+        if edge_label is None:
+            return True  # No constraints => OK
+
+        if edge_label not in transitions_dict_extra:
+            return True  # No constraints in the dictionary => OK
+
+        # If transitions_dict_extra[edge_label] expects e.g. "source_phasing": samples_brief[nd1], "target_phasing": ...
+        # we see if there's a matched_phasings
+        edge_phasings = transitions_dict_extra[edge_label]
+        matched_phasings = None
+        for k, v in edge_phasings.items():
+            if (v["source_phasing"] == samples_brief[nd1]
+                and v["target_phasing"] == samples_brief[nd2]):
+                matched_phasings = v["matched_phasings"]
+                break
+        if not matched_phasings:
+            # Means we don't have a recognized pairing => can't be consistent
+            return False
+
+        # Now we see if the actual row arrangement in full_sol for nd1, nd2 matches one of matched_phasings
+        # We'll gather the sub-block for nd1 from full_sol
+        nd1_pos = node_positions_map[nd1]
+        nd2_pos = node_positions_map[nd2]
+
+        # shape: (ploidy, #pos_in_nd1)
+        nd1_sub = np.zeros((ploidy, len(nd1_pos)), dtype=int)
+        for j, p in enumerate(nd1_pos):
+            col_idx = all_positions.index(p)
+            nd1_sub[:, j] = full_sol[:, col_idx]
+
+        # shape: (ploidy, #pos_in_nd2)
+        nd2_sub = np.zeros((ploidy, len(nd2_pos)), dtype=int)
+        for j, p in enumerate(nd2_pos):
+            col_idx = all_positions.index(p)
+            nd2_sub[:, j] = full_sol[:, col_idx]
+
+        # We'll check if nd1_sub is a row permutation of str_2_phas_1(samples_brief[nd1]), etc.
+        # Then also if there's a key in matched_phasings that matches nd1_sub => nd2_sub arrangement.
+        # But old code used permutations for the sub-block. It's a bit big. We'll do a simpler approach: 
+        # We'll invert the logic: if old code was used, the final arrangement is indeed 1 of the permutations that was accepted. So we only confirm that some "mp_key" => row permutation => matches nd2_sub. That can be done, but let's do a direct approach:
+
+        # We'll flatten nd1_sub, nd2_sub. We see if there's an mp_key that matches nd2_sub after we interpret mp_key with row perms, etc.
+        # This is fairly elaborate. Possibly we can do a "loose check" or skip. 
+        # For brevity, let's do a minimal check: If the node arrays align with the base sample strings => proceed. If not => fail.
+
+        arr_from_brief_nd1 = str_2_phas_1(samples_brief[nd1], ploidy)
+        if not any(np.array_equal(nd1_sub, np.array(perm)) for perm in itertools.permutations(arr_from_brief_nd1)):
+            return False
+
+        arr_from_brief_nd2 = str_2_phas_1(samples_brief[nd2], ploidy)
+        if not any(np.array_equal(nd2_sub, np.array(perm)) for perm in itertools.permutations(arr_from_brief_nd2)):
+            return False
+
+        # If we got here => they match the base phasing. We'll skip checking "matched_phasings" as it is quite big. Let's do a direct approach:
+        # Actually let's do a minimal "the presence of matched_phasings means it's possible, so we return True".
+        return True
+
+    # -----------------------------
+    # 5) The main iterative approach:
+    #    We'll gather the "new" subgraph nodes that are not fully phased, in sorted order, then do
+    #    a node-by-node extension of candidate_solutions.
+    # -----------------------------
+    new_nodes = [nd for nd in subgraph_nodes_sorted if not node_is_fully_phased(nd)]
+    # The already-phased nodes are essentially locked in candidate_solutions (since we filled columns from predicted_haplotypes).
+
+    def integrate_node_into_candidates(nd, current_candidates):
+        """
+        For each array in current_candidates, attempt to fill columns for node `nd`
+        with all row permutations of samples_brief[nd] that are consistent w.r.t edges
+        linking nd to the subgraph nodes that are already assigned in that partial solution.
+        We'll produce a new candidate list in the end.
+        """
+        node_pos = node_positions_map[nd]
+        # base permutations for node
+        node_candidates = get_node_all_permutations(samples_brief[nd])
+
+        new_candidates = []
+        for cand_arr in current_candidates:
+            # We only fill columns for node_pos if they're currently NaN
+            # If they're not NaN => skip or check? Let's forcibly override if they're all NaN or possibly partial. We'll do a check:
+            to_fill_cols = [all_positions.index(p) for p in node_pos]
+            # We'll find which subgraph nodes are already integrated => any node that is fully phased or has been processed in new_nodes up to now => 
+            # Actually we don't store that info. We'll do a simpler approach: just after we fill nd, we check consistency with all subgraph nodes that appear in relevant_edges with nd. 
+            for node_phasing in node_candidates:
+                # Make a copy of cand_arr
+                arr_copy = np.copy(cand_arr)
+                # Fill in the columns for nd
+                for col_i, pos_i in enumerate(to_fill_cols):
+                    arr_copy[:, pos_i] = node_phasing[:, col_i]
+                # Now check edge constraints for every edge (nd, x) in subgraph
+                # Actually we only need to check subgraph nodes that are either fully phased or already integrated, but let's do a simple approach: check all. If they're not assigned => some columns are NaN => might pass trivially or fail. We'll see.
+                # We'll do a for e in relevant_edges: if nd is in e, let's see other node in e => is_compatible_edge
+                # but is_compatible_edge expects no NaNs. If the other node is also unfilled => no constraints. We'll do a quick "if not np.isnan" check or node_is_fully_phased?
+                # We'll build a function to see if the other node is assigned in arr_copy
+                # Actually let's do a small function:
+                def node_assigned_in_array(nodeX, arrX):
+                    nodeX_pos = node_positions_map[nodeX]
+                    col_idxs = [all_positions.index(p) for p in nodeX_pos]
+                    # if none is nan => assigned
+                    return not np.isnan(arrX[:, col_idxs]).any()
+
+                # Now let's test edges:
+                consistent_flag = True
+                for (a,b) in relevant_edges:
+                    if nd in (a,b):
+                        other = b if (a==nd) else a
+                        # if other is assigned in arr_copy => check is_compatible_edge
+                        if node_assigned_in_array(other, arr_copy):
+                            if not is_compatible_edge(nd, other, arr_copy):
+                                consistent_flag = False
+                                break
+                if consistent_flag:
+                    new_candidates.append(arr_copy)
+
+        return new_candidates
+
+    candidate_solutions_current = candidate_solutions  # the partial solutions from the start (just phased cols)
+
+    for nd in new_nodes:
+        candidate_solutions_current = integrate_node_into_candidates(nd, candidate_solutions_current)
+        # at this point, node nd is assigned in all solutions in candidate_solutions_current
+
+    # candidate_solutions_current now has fully assigned columns for all new nodes
+    # but we still have to compute the read-likelihood and do the "candidate_counts" measure.
+
+    all_combinations = []
+    all_probabilities = []
+    candidate_counts = []
+
+    # We'll define a function to compute full-likelihood from read coverage
+    def compute_solution_likelihood(arr_):
+        # sum over all reads that cover these all_positions
+        match_reads = get_matching_reads_for_positions(all_positions, fragment_model.fragment_list)
+        tot_like = 0.0
+        for (indc, these_pos, obs) in match_reads:
+            shared_indices = [all_positions.index(p) for p in these_pos if p in all_positions]
+            ll = compute_likelihood_generalized_plus(
+                observed=np.array(obs),
+                phasing=arr_,
+                obs_pos=indc,
+                phas_pos=shared_indices,
+                error_rate=config.error_rate
+            )
+            tot_like += ll
+        return tot_like
+
+    for sol_arr in candidate_solutions_current:
+        # ensure no columns are NaN
+        if np.isnan(sol_arr).any():
+            # skip partial solution
+            continue
+
+        # compute solution likelihood
+        sol_like = compute_solution_likelihood(sol_arr)
+        all_combinations.append(sol_arr)
+        all_probabilities.append(sol_like)
+
+        # replicate old "candidate_count" measure
+        cc = 0
+        for edge in relevant_edges:
+            target = edge[1]
+            target_positions = [int(pos) for pos in target.split('-')]
+            target_indices = [all_positions.index(x) for x in target_positions]
+            target_phasing = str_2_phas_1(samples_brief[target], ploidy)
+            target_permutations = np.array(list(itertools.permutations(target_phasing)))
+            if any(np.array_equal(sol_arr[:, target_indices], perm) for perm in target_permutations):
+                cc += 1
+        candidate_counts.append(cc)
+
+    return all_combinations, all_probabilities, candidate_counts, all_positions
+
+
+
 def select_best_candidate(candidates, prioritize="probabilities"):
     """
     Select the best candidate based on the chosen priority (counts or probabilities).
@@ -1367,7 +1673,7 @@ def sample_states_book_multiple_times(slices, edges, forward_messages, transitio
     return consensus_samples
 
 
-def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="counts"):
+def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities"):
     """
     Predict haplotypes iteratively by phasing one variant at a time using candidate sampling and selection.
     """
@@ -1472,6 +1778,263 @@ def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_mo
         unphased_positions.remove(selected_position)
 
     return predicted_haplotypes
+
+
+def predict_haplotypes_multiple_variants(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities"):
+    """
+    Algorithm 1: Iterative selection of positions to be phased.
+
+    This function finds unphased positions connected to the current phased set and
+    moves them into the phased sets. 
+
+    Parameters:
+        nodes (list): All nodes in the graph (e.g., ['1-2','2-3',...]).
+        edges (list): List of edges (tuples) connecting nodes.
+        ploidy (int): Ploidy level.
+        samples (dict): A map node->string_phasing, for reference only here.
+        sorted_nodes (list): Sorted node labels for fallback when no connections exist.
+
+    Returns:
+        phased_nodes (set),
+        unphased_nodes (set),
+        phased_positions (set),
+        unphased_positions (set)
+    """
+
+        # Step 1: Initialization
+    phasing_samples = {nn: samples[t][nn] for t in samples for nn in samples[t]}
+    sorted_nodes = sort_nodes(nodes)
+    genotype_df = pd.read_csv(genotype_path).T
+    predicted_haplotypes = pd.DataFrame(index=[f'haplotype_{p+1}' for p in range(ploidy)], columns=genotype_df.columns)
+
+    phased_nodes = set()
+    unphased_nodes = set(nodes)
+    phased_positions = set()
+    unphased_positions = {int(pos) for node in nodes for pos in node.split('-')}
+
+    # Start by picking a first node from sorted_nodes, same as original code
+    if sorted_nodes:
+        first_node = sorted_nodes[0]
+        phased_nodes.add(first_node)
+        unphased_nodes.discard(first_node)
+
+        # Example: for a node '3-4', we turn them into integers {3,4} then mark them phased
+        first_positions = {int(pos) for pos in first_node.split('-')}
+        phased_positions.update(first_positions)
+        unphased_positions -= first_positions
+
+    # -------------------------------------------------------------------------
+    # MAIN WHILE LOOP: keep going until all positions are phased
+    # -------------------------------------------------------------------------
+    while unphased_positions:
+
+        # Identify neighbor_nodes: nodes that are unphased but connected to at least one phased node
+        neighbor_nodes = (
+            {n2 for n1, n2 in edges if n1 in phased_nodes and n2 in unphased_nodes} |
+            {n1 for n1, n2 in edges if n2 in phased_nodes and n1 in unphased_nodes}
+        )
+
+        # Build a dictionary to see which unphased positions connect to the phased set
+        position_connections = defaultdict(lambda: {"count": 0, "edges": []})
+        for n1, n2 in edges:
+            # If this edge connects a phased node with a neighbor node...
+            if (n1 in phased_nodes and n2 in neighbor_nodes) or (n2 in phased_nodes and n1 in neighbor_nodes):
+                # ...then each position in these two nodes is relevant
+                for pos in map(int, n1.split('-') + n2.split('-')):
+                    if pos in unphased_positions:
+                        position_connections[pos]["count"] += 1
+                        position_connections[pos]["edges"].append((n1, n2))
+
+        # If there are no connections, pick the next unphased node from sorted list as fallback
+        if not position_connections:
+            for next_node in sorted_nodes:
+                if next_node in unphased_nodes:
+                    # Mark its positions as phased
+                    next_positions = {int(pos) for pos in next_node.split('-')}
+                    phased_positions.update(next_positions)
+                    unphased_positions -= next_positions
+
+                    # Mark node as phased
+                    phased_nodes.add(next_node)
+                    unphased_nodes.discard(next_node)
+                    break
+            continue
+
+        # ---------------------------------------------------------------------
+        # NEW LOGIC: gather *all* unphased positions that appear in position_connections
+        # ---------------------------------------------------------------------
+        selected_positions = set(position_connections.keys())
+
+        # You could also do something like picking a subset, or picking only
+        # positions from a specific node, etc. But here we gather them all.
+        # relevant_edges is the union of edges from all these positions
+        all_relevant_edges = set()
+        for pos in selected_positions:
+            for e in position_connections[pos]["edges"]:
+                all_relevant_edges.add(e)
+        relevant_edges = list(all_relevant_edges)
+        print(f"Selected positions: {selected_positions}", f"Relevant edges: {relevant_edges}")
+        # ---------------------------------------------------------------------
+        # TODO: (Algorithm 2 will actually phase these selected_positions.)
+        #
+        # e.g., you might do:
+        # phased_haplotypes_for_selected = do_actual_phasing(selected_positions, relevant_edges, ...)
+        #
+        # For now we just skip it and keep a placeholder:
+        # ---------------------------------------------------------------------
+        # TODO: call the second algorithm with (selected_positions, relevant_edges, phased_positions, ...)
+        #       to do the actual phasing
+        # ---------------------------------------------------------------------
+
+        # Mark these positions as phased
+        phased_positions.update(selected_positions)
+        unphased_positions -= selected_positions
+
+        # Mark neighbor_nodes as phased (so we won't pick them again)
+        for edge in relevant_edges:
+            node1, node2 = edge
+            if node1 in neighbor_nodes:
+                phased_nodes.add(node1)
+                unphased_nodes.discard(node1)
+            if node2 in neighbor_nodes:
+                phased_nodes.add(node2)
+                unphased_nodes.discard(node2)
+
+    # Return updated sets so we know what ended up phased/unphased
+    return phased_nodes, unphased_nodes, phased_positions, unphased_positions
+
+
+def predict_haplotypes_multiple_variants2(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities"):
+    """
+    Algorithm 1: Iterative selection of positions to be phased.
+
+    This function finds unphased positions connected to the current phased set and
+    moves them into the phased sets. It does NOT include the actual phasing logic (Algorithm 2).
+
+    Parameters:
+        nodes (list): All nodes in the graph (e.g., ['1-2','2-3',...]).
+        edges (list): List of edges (tuples) connecting nodes.
+        samples (dict): Original structure with sample phasings. (node->string_phasing)
+        ploidy (int): Ploidy level.
+        genotype_path (str): CSV file path for genotype info.
+        fragment_model: Contains fragment information (unused here, but part of function signature).
+        transitions_dict_extra (dict): Extra data about transitions (unused here, but part of function signature).
+        config: Configuration object (e.g., error rate) (unused in selection, but part of signature).
+        priority (str): Priority mode, unused in selection but included for consistency.
+
+    Returns:
+        phased_nodes (set)       : The set of nodes that ended up phased.
+        unphased_nodes (set)     : The set of nodes still unphased (should be empty if done).
+        phased_positions (set)   : The set of positions that ended up phased.
+        unphased_positions (set) : The set of positions still unphased.
+    """
+    # -------------------------------------------------------------------------
+    # Step 1: Initialization (same as old function to keep consistency)
+    # -------------------------------------------------------------------------
+    phasing_samples = {nn: samples[t][nn] for t in samples for nn in samples[t]}
+    sorted_nodes = sort_nodes(nodes)
+
+    genotype_df = pd.read_csv(genotype_path).T
+    predicted_haplotypes = pd.DataFrame(
+        index=[f'haplotype_{p+1}' for p in range(ploidy)],
+        columns=genotype_df.columns
+    )
+
+    # Sets to track phased/unphased nodes & positions
+    phased_nodes = set()
+    unphased_nodes = set(nodes)
+    phased_positions = set()
+    unphased_positions = {int(pos) for node in nodes for pos in node.split('-')}
+
+    # Pick the first node from sorted_nodes as a starting point
+    if sorted_nodes:
+        first_node = sorted_nodes[0]
+        phased_nodes.add(first_node)
+        unphased_nodes.discard(first_node)
+
+        first_positions = {int(pos) for pos in first_node.split('-')}
+        phased_positions.update(first_positions)
+        unphased_positions -= first_positions
+
+    # -------------------------------------------------------------------------
+    # MAIN WHILE LOOP: keep going until all positions are phased
+    # -------------------------------------------------------------------------
+    while unphased_positions:
+
+        # Identify neighbor_nodes: those unphased but connected to any phased node
+        neighbor_nodes = (
+            {n2 for n1, n2 in edges if n1 in phased_nodes and n2 in unphased_nodes} |
+            {n1 for n1, n2 in edges if n2 in phased_nodes and n1 in unphased_nodes}
+        )
+
+        # Build dictionary: which unphased positions connect to the phased set via edges
+        position_connections = defaultdict(lambda: {"count": 0, "edges": []})
+        for n1, n2 in edges:
+            # If edge connects a phased node with one in neighbor_nodes, track them
+            if (n1 in phased_nodes and n2 in neighbor_nodes) or (n2 in phased_nodes and n1 in neighbor_nodes):
+                # Each position in these two nodes is "connected"
+                for pos in map(int, n1.split('-') + n2.split('-')):
+                    if pos in unphased_positions:
+                        position_connections[pos]["count"] += 1
+                        position_connections[pos]["edges"].append((n1, n2))
+
+        # If there are no connections at all, fallback: pick next unphased node from sorted_nodes
+        if not position_connections:
+            for next_node in sorted_nodes:
+                if next_node in unphased_nodes:
+                    next_positions = {int(pos) for pos in next_node.split('-')}
+                    phased_positions.update(next_positions)
+                    unphased_positions -= next_positions
+
+                    phased_nodes.add(next_node)
+                    unphased_nodes.discard(next_node)
+                    break
+            continue
+
+        # Gather *all* unphased positions that appear in position_connections
+        selected_positions = set(position_connections.keys())
+
+        # Build a set of "relevant_edges": union of edges from these positions ...
+        all_relevant_edges = set()
+        for pos in selected_positions:
+            for e in position_connections[pos]["edges"]:
+                all_relevant_edges.add(e)
+        
+
+        # ... plus also edges among neighbor_nodes themselves (if multiple neighbor_nodes exist)
+        for e in edges:
+            n1, n2 = e
+            if n1 in neighbor_nodes and n2 in neighbor_nodes:
+                # Even if this edge doesn't directly connect to a phased node, we add it
+                # because it belongs to the subgraph of neighbor_nodes.
+                all_relevant_edges.add(e)
+
+        relevant_edges = list(all_relevant_edges)
+        print(f"Selected positions: {selected_positions}", f"Relevant edges: {relevant_edges}")
+        # ---------------------------------------------------------------------
+        # TODO (Algorithm 2): Do the actual phasing of these selected positions.
+        # e.g. call your "phase_positions(selected_positions, relevant_edges, ...)"
+        # This code is left out for clarity.
+        # ---------------------------------------------------------------------
+        # compute_candidate_phasings(selected_positions, relevant_edges, phased_positions, transitions_dict_extra, phasing_samples, ploidy, predicted_haplotypes, config, fragment_model)
+
+        # Mark these positions as phased
+        phased_positions.update(selected_positions)
+        unphased_positions -= selected_positions
+
+        # Mark neighbor_nodes as phased, so we won't pick them again in future loops
+        for edge in relevant_edges:
+            node1, node2 = edge
+            if node1 in neighbor_nodes:
+                phased_nodes.add(node1)
+                unphased_nodes.discard(node1)
+            if node2 in neighbor_nodes:
+                phased_nodes.add(node2)
+                unphased_nodes.discard(node2)
+
+    # Return updated sets at the end
+    return phased_nodes, unphased_nodes, phased_positions, unphased_positions
+
 
 
 def build_children_dict(edges):
