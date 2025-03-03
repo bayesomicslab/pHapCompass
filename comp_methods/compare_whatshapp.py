@@ -3,7 +3,7 @@ import numpy as np
 import pysam
 import random
 import pandas as pd 
-from evaluation import evaluation as ev
+from evaluation.evaluation import *
 import pickle
 import sys
 
@@ -282,7 +282,6 @@ def parse_vcf_consecutive_blocks(vcf_path, true_haplotypes, fragment_list):
     return blocks_dict, block_info
 
 
-
 def randomize_orders():
     vcf_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_test/contig_100/ploidy_6/NA12878_ploidy6_contig100.vcf'
     output_vcf_path = "/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_test/contig_100/ploidy_6/randomized_NA12878_ploidy6_contig100.vcf"
@@ -335,15 +334,15 @@ def get_fragment_list(frag_path):
     return fragment_list
 
 
-def collect_results_whatshap():
+def collect_results_whatshap_missing():
     main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
     output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/whatshap_results_simulated_data_NA12878_346.csv'
     contig_lens = [100]
     ploidies = [3, 4, 6]
     coverages = [10, 30, 50, 70, 100]
     n_samples = 100
-    metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
-    result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value', 'length_phased'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*len(metrics)))
+    # metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
+    result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*2))
     counter = 0
     for contig_len in contig_lens:
         for ploidy in ploidies:
@@ -355,28 +354,31 @@ def collect_results_whatshap():
                 for rd in range(n_samples):
                     print(f"Collecting results for contig {contig_len}, ploidy {ploidy}, coverage {coverage}, sample {rd}")
                     result_file = os.path.join(results_path, str(rd).zfill(2) + '.vcf.gz')
-                    predicted_haplotypes, indices = vcf_to_haplotypes(result_file)
+                    predicted_haplotypes, _ = vcf_to_haplotypes(result_file)
+                    
                     valid_columns = [c for c in range(predicted_haplotypes.shape[1]) if not np.any(np.isnan(predicted_haplotypes[:, c]))]
-                    cut_predicted_haplotypes = predicted_haplotypes[:, valid_columns]
-                    cut_true_haplotypes = true_haplotypes[:, valid_columns]
-                    fragment_list = get_fragment_list(os.path.join(frag_path, str(rd).zfill(2) + '.frag'))
-                    wpmec = ev.mec(cut_predicted_haplotypes, fragment_list)
-                    wpvector_error_rate, wpvector_error, backtracking_steps, dp_table = ev.compute_vector_error_rate(cut_predicted_haplotypes, cut_true_haplotypes)
-                    wpmismatch_error, best_permutation = ev.calculate_mismatch_error(cut_predicted_haplotypes, cut_true_haplotypes)
-                    wpaccuracy, _ = ev.calculate_accuracy(cut_predicted_haplotypes, cut_true_haplotypes)
-                    phased_snp = cut_predicted_haplotypes.shape[1]
-                    evals = {'vector_error_rate': wpvector_error_rate, 'vector_error': wpvector_error, 'accuracy': wpaccuracy, 'mismatch_error': wpmismatch_error, 'mec': wpmec}
-                    for metric in metrics:
-                        result_df.loc[counter, 'Contig'] = contig_len
-                        result_df.loc[counter, 'Ploidy'] = ploidy
-                        result_df.loc[counter, 'Coverage'] = coverage
-                        result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
-                        result_df.loc[counter, 'Metric'] = metric
-                        result_df.loc[counter, 'Value'] = evals[metric]
-                        result_df.loc[counter, 'length_phased'] = phased_snp
-                        counter += 1
+
+                    length_phased = len(valid_columns)
+                    vector_error_rate, _, _ = compute_vector_error_rate_with_missing_positions(true_haplotypes, predicted_haplotypes)
+                    result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
+                    result_df.loc[counter, 'Metric'] = 'Vector Error Rate'
+                    result_df.loc[counter, 'Value'] = vector_error_rate
+                    result_df.loc[counter, 'Contig'] = contig_len
+                    result_df.loc[counter, 'Ploidy'] = ploidy
+                    result_df.loc[counter, 'Coverage'] = coverage
+                    counter += 1
+                    result_df.loc[counter, 'Contig'] = contig_len
+                    result_df.loc[counter, 'Ploidy'] = ploidy
+                    result_df.loc[counter, 'Coverage'] = coverage
+                    result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
+                    result_df.loc[counter, 'Metric'] = '# Phased Variants'
+                    result_df.loc[counter, 'Value'] = length_phased
+                    counter += 1
+
     result_df['Method'] = 'WhatsHap'
     result_df.to_csv(output_path, index=False)
+    print("WhatsHap results collected")
+
 
 
 def collect_results_whatshap_block():
@@ -421,8 +423,8 @@ def collect_results_whatshap_from_pkl():
     ploidies = [8]
     coverages = [10, 30, 50, 70, 100]
     n_samples = 100
-    metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
-    result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value', 'length_phased'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*len(metrics)))
+    # metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
+    result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*2))
     counter = 0
     for contig_len in contig_lens:
         for ploidy in ploidies:
@@ -437,16 +439,22 @@ def collect_results_whatshap_from_pkl():
 
                     with open(result_file, 'rb') as f:
                         evals = pickle.load(f)
-                    phased_snp = evals['length_phased']
-                    for metric in metrics:
-                        result_df.loc[counter, 'Contig'] = contig_len
-                        result_df.loc[counter, 'Ploidy'] = ploidy
-                        result_df.loc[counter, 'Coverage'] = coverage
-                        result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
-                        result_df.loc[counter, 'Metric'] = metric
-                        result_df.loc[counter, 'Value'] = evals[metric]
-                        result_df.loc[counter, 'length_phased'] = phased_snp
-                        counter += 1
+
+                    result_df.loc[counter, 'Sample'] = evals['Sample']
+                    result_df.loc[counter, 'Metric'] = 'Vector Error Rate'
+                    result_df.loc[counter, 'Value'] = evals['vector_error_rate']
+                    result_df.loc[counter, 'Contig'] = contig_len
+                    result_df.loc[counter, 'Ploidy'] = ploidy
+                    result_df.loc[counter, 'Coverage'] = coverage
+                    counter += 1
+                    result_df.loc[counter, 'Contig'] = contig_len
+                    result_df.loc[counter, 'Ploidy'] = ploidy
+                    result_df.loc[counter, 'Coverage'] = coverage
+                    result_df.loc[counter, 'Sample'] = evals['Sample']
+                    result_df.loc[counter, 'Metric'] = '# Phased Variants'
+                    result_df.loc[counter, 'Value'] = evals['length_phased']
+                    counter += 1
+
     result_df['Method'] = 'WhatsHap'
     result_df.to_csv(output_path, index=False)
 
@@ -519,22 +527,19 @@ def make_inputs_for_evals():
     # return inputs
 
 
-def eval_one_input(inp):
+def eval_one_input_missing(inp):
     result_file, true_haplotypes_path, frag_path, rd, contig_len, ploidy, coverage = inp
     true_haplotypes = pd.read_csv(true_haplotypes_path).T.to_numpy()
-    predicted_haplotypes, indices = vcf_to_haplotypes(result_file)
+    predicted_haplotypes, _ = vcf_to_haplotypes(result_file)
     valid_columns = [c for c in range(predicted_haplotypes.shape[1]) if not np.any(np.isnan(predicted_haplotypes[:, c]))]
-    cut_predicted_haplotypes = predicted_haplotypes[:, valid_columns]
-    cut_true_haplotypes = true_haplotypes[:, valid_columns]
-    fragment_list = get_fragment_list(os.path.join(frag_path, str(rd).zfill(2) + '.frag'))
-    wpmec = ev.mec(cut_predicted_haplotypes, fragment_list)
-    wpvector_error_rate, wpvector_error, backtracking_steps, dp_table = ev.compute_vector_error_rate(cut_predicted_haplotypes, cut_true_haplotypes)
-    wpmismatch_error, best_permutation = ev.calculate_mismatch_error(cut_predicted_haplotypes, cut_true_haplotypes)
-    wpaccuracy, _ = ev.calculate_accuracy(cut_predicted_haplotypes, cut_true_haplotypes)
+    
+    length_phased = len(valid_columns)
+    vector_error_rate, _, _ = compute_vector_error_rate_with_missing_positions(true_haplotypes, predicted_haplotypes)
     pkl_name = result_file.replace('.vcf.gz', '.pkl')
-    phased_snp = cut_predicted_haplotypes.shape[1]
-    evals = {'Contig': contig_len, 'Ploidy': ploidy, 'Coverage': coverage , 'Sample': str(rd).zfill(2),'vector_error_rate': wpvector_error_rate, 
-             'vector_error': wpvector_error, 'accuracy': wpaccuracy, 'mismatch_error': wpmismatch_error, 'mec': wpmec, 'length_phased': phased_snp}
+    
+    evals = {'Contig': contig_len, 'Ploidy': ploidy, 'Coverage': coverage , 'Sample': str(rd).zfill(2),
+             'vector_error_rate': vector_error_rate, 'length_phased': length_phased}
+    
     with open(pkl_name, 'wb') as f:
         pickle.dump(evals, f)
     print(f"Done with {pkl_name}")
@@ -561,11 +566,12 @@ def eval_one_input_block(inp):
 def eval_one_input_from_input(input_file):
     with open(input_file, "rb") as f:
         inp = pickle.load(f)
-    eval_one_input_block(inp)
+    eval_one_input_missing(inp)
 
 
 if __name__ == '__main__':
-    # collect_results_whatshap()
+    # collect_results_whatshap_missing()
+
 
     if len(sys.argv) != 2:
         print("Usage: python3 compare_whatshapp.py <input_file>")

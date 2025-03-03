@@ -1,9 +1,11 @@
 import numpy as np
+import pandas as pd
 from matplotlib import pyplot as plt
 import pysam
 import os
 import seaborn as sns
 import graph_tool.all as gt
+from scipy.spatial.distance import pdist, squareform
 
 
 def snp_distance_distribution():
@@ -71,8 +73,6 @@ def snp_distance_distribution():
     plt.savefig(os.path.join(plot_path, 'snp_distance_histogram_hg19_chr21.png'))
 
 
-
-
 def plot_example_graph():
     # Initialize the graph
     g = gt.Graph(directed=True)
@@ -134,4 +134,25 @@ def plot_example_graph():
     )
 
 
-# Call the function to plot the graph
+plot_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/plots'
+for ploidy in [3,4,6,8]:
+    true_haplotypes_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878/contig_100/ploidy_{}/haplotypes.csv'.format(ploidy)
+
+    true_haplotype = pd.read_csv(true_haplotypes_path).T.to_numpy()
+
+    # Compute pairwise Hamming distances
+    hamming_distances = pdist(true_haplotype, metric='hamming')  # Compute condensed distance matrix
+    hamming_matrix = squareform(hamming_distances)  # Convert to square form
+    hamming_similarity = 1 - squareform(hamming_distances)  # Convert to similarity (1 - distance)
+    labels = [f"$h_{{{i+1}}}$" for i in range(true_haplotype.shape[0])]
+
+    # Plot heatmap
+    plt.figure(figsize=(8, 6))
+    sns.heatmap(hamming_similarity, annot=True, cmap="Blues", xticklabels=labels, yticklabels=labels, annot_kws={"size": 16})
+    # plt.title("Pairwise Hamming Distance Heatmap")
+    plt.xlabel("Haplotypes", fontsize=26, labelpad=10)
+    plt.ylabel("Haplotypes", fontsize=26, labelpad=10)
+    plt.xticks(rotation=0, fontsize=22)  # Rotate x-tick labels for better readability
+    plt.yticks(rotation=0, fontsize=22)   # Keep y-tick labels horizontal
+    # plt.show()
+    plt.savefig(os.path.join(plot_path, f'hamming_similarity_ploidy_{ploidy}.png'))

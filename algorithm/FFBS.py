@@ -1155,10 +1155,7 @@ def compute_candidate_phasings_target_based(
     return candidate_phasings, probabilities
 
 
-def compute_candidate_phasings0(
-    selected_position, relevant_edges, phased_positions, transitions_dict_extra,
-    samples_brief, ploidy, predicted_haplotypes, config, fragment_model
-):
+def compute_candidate_phasings_single_variable(selected_position, relevant_edges, phased_positions, transitions_dict_extra, samples_brief, ploidy, predicted_haplotypes, config, fragment_model):
     """
     Compute candidate phasings and probabilities for nodes connected to the selected position.
 
@@ -1191,7 +1188,8 @@ def compute_candidate_phasings0(
     for edge in relevant_edges:
         source, target = edge
         edge_label = f"{source}--{target}"
-
+        print(edge_label)
+        
         if edge_label not in transitions_dict_extra:
             continue
 
@@ -1233,13 +1231,15 @@ def compute_candidate_phasings0(
 
                 # Ensure fixed positions match for this edge
                 if not np.array_equal(fixed_values, permuted_key_np[:, fixed_positions_indices]):
+                    print('11111')
                     continue
-
+                print('noooot 11111')
                 # Ensure at least one permutation of the target phasing matches
                 if not any(
                     np.array_equal(permuted_key_np[:, target_positions_indices], perm)
                     for perm in target_phasing_permutations
                 ):
+                    print('22222')
                     continue
 
                 # Compute likelihood
@@ -1254,7 +1254,8 @@ def compute_candidate_phasings0(
                         error_rate=config.error_rate
                     )
                     this_phas_weight += this_phas_read_weight
-
+                
+                
                 # Create a full array with NaN for all positions
                 aligned_key_np = np.full((ploidy, len(all_positions)), np.nan)
 
@@ -1298,17 +1299,7 @@ def compute_candidate_phasings0(
     return all_combinations, all_probabilities, candidate_counts, all_positions
 
 
-def compute_candidate_phasings(
-    selected_position,            # Not really used anymore for multi-position
-    relevant_edges,
-    phased_positions,
-    transitions_dict_extra,
-    samples_brief,
-    ploidy,
-    predicted_haplotypes,
-    config,
-    fragment_model
-):
+def compute_candidate_phasings_multi_variable(selected_positions, relevant_edges, phased_positions, transitions_dict_extra, samples_brief, ploidy, predicted_haplotypes, config, fragment_model):
     """
     Compute candidate phasings for *all newly introduced positions* within 'relevant_edges',
     using an iterative "node-by-node" approach. We maintain a list of partial solutions,
@@ -1345,262 +1336,207 @@ def compute_candidate_phasings(
     # -----------------------------
     # 1) Identify subgraph nodes & positions
     # -----------------------------
-    subgraph_nodes = set()
-    for (n1, n2) in relevant_edges:
-        subgraph_nodes.add(n1)
-        subgraph_nodes.add(n2)
-
-    all_positions = sorted({
-        int(pos)
-        for (n1, n2) in relevant_edges
-        for node in (n1, n2)
-        for pos in node.split('-')
-    })
-
-    # Map each node -> sorted list of integer positions
-    node_positions_map = {}
-    for nd in subgraph_nodes:
-        nd_positions = sorted(int(p) for p in nd.split('-'))
-        node_positions_map[nd] = nd_positions
-
-    # Distinguish which subgraph nodes are "already phased" vs "new"
-    # A node is fully phased if all its positions in phased_positions
-    def node_is_fully_phased(nd):
-        return all(pos in phased_positions for pos in node_positions_map[nd])
-
-    # We'll pick an ordering of subgraph nodes. E.g. sorted by node name:
-    subgraph_nodes_sorted = sorted(subgraph_nodes)
-
-    # For quick "edge label" check
-    def get_edge_label(a, b):
-        # In your data, it might be "a--b" only if (a<b) or so. But let's be
-        # consistent with how transitions_dict_extra was built. We'll check both:
-        if f"{a}--{b}" in transitions_dict_extra:
-            return f"{a}--{b}"
-        if f"{b}--{a}" in transitions_dict_extra:
-            return f"{b}--{a}"
-        return None
-
-    # -----------------------------
-    # 2) Prepare "initial" partial solution(s)
-    # We store them as (ploidy x len(all_positions)) arrays. The columns for
-    # already phased positions are filled from predicted_haplotypes, the rest are NaN.
-    # We'll keep a list "candidate_solutions" of these arrays.
-    # Start with exactly one partial solution (with only phased columns filled).
-    # -----------------------------
-    init_array = np.full((ploidy, len(all_positions)), np.nan, dtype=float)
-
-    # Fill from predicted_haplotypes for columns that are in phased_positions
-    for col_i, pos in enumerate(all_positions):
-        if pos in phased_positions:
-            # Copy from predicted_haplotypes
-            init_array[:, col_i] = predicted_haplotypes.loc[:, pos - 1].values
-
-    candidate_solutions = [init_array]
-
-    # -----------------------------
-    # 3) Helper to get "all permutations" for a node's base phasing
-    #    This duplicates old logic where we permute the rows of str_2_phas_1(...)
-    # -----------------------------
-    def get_node_all_permutations(node_str):
-        """Return list of 2D arrays shape (ploidy, #positions_in_node) for all row permutations."""
-        base_np = str_2_phas_1(node_str, ploidy)
-        out = []
-        for perm in itertools.permutations(base_np):
-            arr_ = np.array(perm)
-            out.append(arr_)
-        return out
-
-    # -----------------------------
-    # 4) Helper: For an "edge" constraint, we want to see if the node1 partial columns
-    #    are consistent with node2's candidate block. We can also check transitions_dict_extra
-    #    for matched phasings. This is somewhat simpler if we only keep solutions that
-    #    match the base "samples_brief[node]" anyway, as in older code.
-    # -----------------------------
-    def is_compatible_edge(nd1, nd2, full_sol):
-        """
-        Return True if nd1<->nd2 is consistent under transitions_dict_extra + the
-        current partial columns for nd1 and nd2 in full_sol.
-        We'll check:
-         1) Each node's assigned sub-block vs samples_brief[node]
-         2) The edge must exist => find matched phasings => see if there's a row assignment that matches.
-        A simpler approach is "If the node array in full_sol is the same row arrangement as samples_brief[node], then check transitions_dict_extra edge if it is present".
-        But that can get tricky quickly...
-        
-        For now, we replicate old logic: the "source_phasing" must be samples_brief[nd1], "target_phasing" must be samples_brief[nd2]. Then check if there's a 'matched_phasings'.
-        We'll see if the row pattern in full_sol for nd1,nd2 matches one of those 'matched_phasings'.
-        """
-        edge_label = get_edge_label(nd1, nd2)
-        if edge_label is None:
-            return True  # No constraints => OK
-
-        if edge_label not in transitions_dict_extra:
-            return True  # No constraints in the dictionary => OK
-
-        # If transitions_dict_extra[edge_label] expects e.g. "source_phasing": samples_brief[nd1], "target_phasing": ...
-        # we see if there's a matched_phasings
-        edge_phasings = transitions_dict_extra[edge_label]
-        matched_phasings = None
-        for k, v in edge_phasings.items():
-            if (v["source_phasing"] == samples_brief[nd1]
-                and v["target_phasing"] == samples_brief[nd2]):
-                matched_phasings = v["matched_phasings"]
-                break
-        if not matched_phasings:
-            # Means we don't have a recognized pairing => can't be consistent
-            return False
-
-        # Now we see if the actual row arrangement in full_sol for nd1, nd2 matches one of matched_phasings
-        # We'll gather the sub-block for nd1 from full_sol
-        nd1_pos = node_positions_map[nd1]
-        nd2_pos = node_positions_map[nd2]
-
-        # shape: (ploidy, #pos_in_nd1)
-        nd1_sub = np.zeros((ploidy, len(nd1_pos)), dtype=int)
-        for j, p in enumerate(nd1_pos):
-            col_idx = all_positions.index(p)
-            nd1_sub[:, j] = full_sol[:, col_idx]
-
-        # shape: (ploidy, #pos_in_nd2)
-        nd2_sub = np.zeros((ploidy, len(nd2_pos)), dtype=int)
-        for j, p in enumerate(nd2_pos):
-            col_idx = all_positions.index(p)
-            nd2_sub[:, j] = full_sol[:, col_idx]
-
-        # We'll check if nd1_sub is a row permutation of str_2_phas_1(samples_brief[nd1]), etc.
-        # Then also if there's a key in matched_phasings that matches nd1_sub => nd2_sub arrangement.
-        # But old code used permutations for the sub-block. It's a bit big. We'll do a simpler approach: 
-        # We'll invert the logic: if old code was used, the final arrangement is indeed 1 of the permutations that was accepted. So we only confirm that some "mp_key" => row permutation => matches nd2_sub. That can be done, but let's do a direct approach:
-
-        # We'll flatten nd1_sub, nd2_sub. We see if there's an mp_key that matches nd2_sub after we interpret mp_key with row perms, etc.
-        # This is fairly elaborate. Possibly we can do a "loose check" or skip. 
-        # For brevity, let's do a minimal check: If the node arrays align with the base sample strings => proceed. If not => fail.
-
-        arr_from_brief_nd1 = str_2_phas_1(samples_brief[nd1], ploidy)
-        if not any(np.array_equal(nd1_sub, np.array(perm)) for perm in itertools.permutations(arr_from_brief_nd1)):
-            return False
-
-        arr_from_brief_nd2 = str_2_phas_1(samples_brief[nd2], ploidy)
-        if not any(np.array_equal(nd2_sub, np.array(perm)) for perm in itertools.permutations(arr_from_brief_nd2)):
-            return False
-
-        # If we got here => they match the base phasing. We'll skip checking "matched_phasings" as it is quite big. Let's do a direct approach:
-        # Actually let's do a minimal "the presence of matched_phasings means it's possible, so we return True".
-        return True
-
-    # -----------------------------
-    # 5) The main iterative approach:
-    #    We'll gather the "new" subgraph nodes that are not fully phased, in sorted order, then do
-    #    a node-by-node extension of candidate_solutions.
-    # -----------------------------
-    new_nodes = [nd for nd in subgraph_nodes_sorted if not node_is_fully_phased(nd)]
-    # The already-phased nodes are essentially locked in candidate_solutions (since we filled columns from predicted_haplotypes).
-
-    def integrate_node_into_candidates(nd, current_candidates):
-        """
-        For each array in current_candidates, attempt to fill columns for node `nd`
-        with all row permutations of samples_brief[nd] that are consistent w.r.t edges
-        linking nd to the subgraph nodes that are already assigned in that partial solution.
-        We'll produce a new candidate list in the end.
-        """
-        node_pos = node_positions_map[nd]
-        # base permutations for node
-        node_candidates = get_node_all_permutations(samples_brief[nd])
-
-        new_candidates = []
-        for cand_arr in current_candidates:
-            # We only fill columns for node_pos if they're currently NaN
-            # If they're not NaN => skip or check? Let's forcibly override if they're all NaN or possibly partial. We'll do a check:
-            to_fill_cols = [all_positions.index(p) for p in node_pos]
-            # We'll find which subgraph nodes are already integrated => any node that is fully phased or has been processed in new_nodes up to now => 
-            # Actually we don't store that info. We'll do a simpler approach: just after we fill nd, we check consistency with all subgraph nodes that appear in relevant_edges with nd. 
-            for node_phasing in node_candidates:
-                # Make a copy of cand_arr
-                arr_copy = np.copy(cand_arr)
-                # Fill in the columns for nd
-                for col_i, pos_i in enumerate(to_fill_cols):
-                    arr_copy[:, pos_i] = node_phasing[:, col_i]
-                # Now check edge constraints for every edge (nd, x) in subgraph
-                # Actually we only need to check subgraph nodes that are either fully phased or already integrated, but let's do a simple approach: check all. If they're not assigned => some columns are NaN => might pass trivially or fail. We'll see.
-                # We'll do a for e in relevant_edges: if nd is in e, let's see other node in e => is_compatible_edge
-                # but is_compatible_edge expects no NaNs. If the other node is also unfilled => no constraints. We'll do a quick "if not np.isnan" check or node_is_fully_phased?
-                # We'll build a function to see if the other node is assigned in arr_copy
-                # Actually let's do a small function:
-                def node_assigned_in_array(nodeX, arrX):
-                    nodeX_pos = node_positions_map[nodeX]
-                    col_idxs = [all_positions.index(p) for p in nodeX_pos]
-                    # if none is nan => assigned
-                    return not np.isnan(arrX[:, col_idxs]).any()
-
-                # Now let's test edges:
-                consistent_flag = True
-                for (a,b) in relevant_edges:
-                    if nd in (a,b):
-                        other = b if (a==nd) else a
-                        # if other is assigned in arr_copy => check is_compatible_edge
-                        if node_assigned_in_array(other, arr_copy):
-                            if not is_compatible_edge(nd, other, arr_copy):
-                                consistent_flag = False
-                                break
-                if consistent_flag:
-                    new_candidates.append(arr_copy)
-
-        return new_candidates
-
-    candidate_solutions_current = candidate_solutions  # the partial solutions from the start (just phased cols)
-
-    for nd in new_nodes:
-        candidate_solutions_current = integrate_node_into_candidates(nd, candidate_solutions_current)
-        # at this point, node nd is assigned in all solutions in candidate_solutions_current
-
-    # candidate_solutions_current now has fully assigned columns for all new nodes
-    # but we still have to compute the read-likelihood and do the "candidate_counts" measure.
-
     all_combinations = []
-    all_probabilities = []
-    candidate_counts = []
 
-    # We'll define a function to compute full-likelihood from read coverage
-    def compute_solution_likelihood(arr_):
-        # sum over all reads that cover these all_positions
-        match_reads = get_matching_reads_for_positions(all_positions, fragment_model.fragment_list)
-        tot_like = 0.0
-        for (indc, these_pos, obs) in match_reads:
-            shared_indices = [all_positions.index(p) for p in these_pos if p in all_positions]
-            ll = compute_likelihood_generalized_plus(
+
+    # **Step 1: Identify the full set of positions involved in relevant edges**
+    all_positions = sorted(set(
+        int(pos) for edge in relevant_edges for node in edge for pos in node.split('-')
+    ))
+
+    # **Step 2: Identify Target Nodes (Nodes that are NOT already phased)**
+
+    target_nodes = sorted(set(
+        node for edge in relevant_edges for node in edge
+        if any(int(pos) in selected_positions for pos in node.split('-'))  # Ensure at least one position matches
+    ))
+    # **Step 3: Collect positions *only from target nodes** (excluding phased nodes)
+    all_positions_in_target_nodes = sorted(set(
+        int(pos) for node in target_nodes for pos in node.split('-')
+    ))
+
+    ffbs_candidates = generate_candidate_phasings_among_FFBS_samples(target_nodes, all_positions_in_target_nodes, samples_brief, ploidy)
+
+
+    # TODO: Implement the rest of the function which is now
+    #  consider the entire space of phasings which is all the phased variants + all the variants that should be phased now. 
+    #  then fixed variants (phased variants) configurations in the predicted haplotypes are fixed and we dont change the rows. 
+    #  but we can change the rows of ffbs_candidates such that the fixed variants are fixed and they match. 
+    all_combinations = []
+
+    # **Step 1: Identify shared positions between phased and target nodes**
+    shared_positions = sorted(set(all_positions_in_target_nodes) & set(phased_positions))
+
+    # Identify column indices of shared positions in all_positions
+    shared_columns_in_all_positions = [all_positions.index(pos) for pos in shared_positions]
+
+    # Iterate over each candidate in ffbs_candidates
+    for candidate in ffbs_candidates:
+        # Create a full matrix that includes **all positions** (phased + new)
+        aligned_key_np = np.full((ploidy, len(all_positions)), np.nan)
+
+        # **Step 2: Fix the already phased variants**
+        for i, pos in enumerate(all_positions):
+            if pos in phased_positions:
+                aligned_key_np[:, i] = predicted_haplotypes.loc[:, pos - 1].values
+
+        # **Step 3: Identify new positions that need to be filled from candidate**
+        new_positions_indices = [all_positions.index(pos) for pos in all_positions_in_target_nodes]
+
+        # **Step 4: Generate and filter all row permutations**
+        for perm in itertools.permutations(range(ploidy)):  # Generate all row orderings
+            permuted_candidate = candidate[list(perm), :]  # Apply row permutation
+            
+            # **Ensure that shared positions match fixed values**
+            valid = True
+            # Get indices of shared positions in all_positions_in_target_nodes
+            shared_indices_in_candidate = [all_positions_in_target_nodes.index(pos) for pos in shared_positions]
+
+            # Get shared part from aligned_key_np and permuted_candidate
+            aligned_shared_part = aligned_key_np[:, shared_columns_in_all_positions]
+            candidate_shared_part = permuted_candidate[:, shared_indices_in_candidate]
+
+            # Check if they match
+            if not np.array_equal(aligned_shared_part, candidate_shared_part):
+                valid = False
+
+
+            if valid:
+                # **Apply the valid permutation to the matrix**
+                new_matrix = aligned_key_np.copy()
+                for idx, pos in enumerate(all_positions_in_target_nodes):
+                    global_col_idx = all_positions.index(pos)
+                    new_matrix[:, global_col_idx] = permuted_candidate[:, idx]
+
+                all_combinations.append(new_matrix)
+
+    all_probabilities = []
+
+    # Retrieve matching reads for all positions in these edges
+    match_reads = get_matching_reads_for_positions(all_positions, fragment_model.fragment_list)
+
+    for candidate in all_combinations:
+        # Compute likelihood
+        this_phas_weight = 0
+        for indc, this_po, obs in match_reads:
+            
+            # Map observed positions to columns in `candidate`
+            shared_indices = [all_positions.index(pos) for pos in this_po if pos in all_positions]
+
+            # Compute the likelihood of the phasing given the observed reads
+            this_phas_read_weight = compute_likelihood_generalized_plus(
                 observed=np.array(obs),
-                phasing=arr_,
+                phasing=candidate,
                 obs_pos=indc,
                 phas_pos=shared_indices,
                 error_rate=config.error_rate
             )
-            tot_like += ll
-        return tot_like
+            this_phas_weight += this_phas_read_weight
 
-    for sol_arr in candidate_solutions_current:
-        # ensure no columns are NaN
-        if np.isnan(sol_arr).any():
-            # skip partial solution
-            continue
+        all_probabilities.append(this_phas_weight)
 
-        # compute solution likelihood
-        sol_like = compute_solution_likelihood(sol_arr)
-        all_combinations.append(sol_arr)
-        all_probabilities.append(sol_like)
+    #  then we compute how many times one candidate respected the FFBS phasing constraints of the edges.
 
-        # replicate old "candidate_count" measure
-        cc = 0
-        for edge in relevant_edges:
-            target = edge[1]
-            target_positions = [int(pos) for pos in target.split('-')]
-            target_indices = [all_positions.index(x) for x in target_positions]
-            target_phasing = str_2_phas_1(samples_brief[target], ploidy)
-            target_permutations = np.array(list(itertools.permutations(target_phasing)))
-            if any(np.array_equal(sol_arr[:, target_indices], perm) for perm in target_permutations):
-                cc += 1
-        candidate_counts.append(cc)
+
+
+
+
 
     return all_combinations, all_probabilities, candidate_counts, all_positions
+
+
+
+def generate_candidate_phasings_among_FFBS_samples(target_nodes, all_positions, samples_brief, ploidy):
+    """
+    Generates all valid permutations of FFBS samples for target nodes, ensuring consistency.
+
+    Parameters:
+        target_nodes (list): List of nodes that should be phased in this iteration.
+        all_positions (list): Sorted list of all variant positions in the subgraph.
+        samples_brief (dict): Mapping of node -> FFBS sampled phasing string.
+        ploidy (int): Number of haplotypes.
+
+    Returns:
+        all_combinations (list of np.ndarray): List of valid haplotype matrices (ploidy, len(all_positions)).
+    """
+
+    # -------------------------------
+    # 1) Generate All FFBS Sample Permutations for Each Target Node
+    # -------------------------------
+
+    node_permutations = {}
+    for node in target_nodes:
+        base_phasing = samples_brief[node]  # FFBS sampled phasing string
+        node_permutations[node] = list(itertools.permutations(str_2_phas_1(base_phasing, ploidy)))
+
+    # -------------------------------
+    # 2) Pre-create Solution Space and Insert First Node Sample Directly
+    # -------------------------------
+
+    # Initialize an empty candidate list (one empty matrix for all_positions)
+    candidate_solutions = [np.full((ploidy, len(all_positions)), np.nan)]
+
+    # Fix the first node by inserting its **original FFBS sample without permutation**
+    first_node = target_nodes[0]
+    first_node_sample = str_2_phas_1(samples_brief[first_node], ploidy)  # Get original phasing
+    first_node_pos_list = list(map(int, first_node.split('-')))  # Get positions of first node
+    first_node_col_indices = [all_positions.index(pos) for pos in first_node_pos_list]
+
+    # Assign the first node's sample **without permutation** into all candidate solutions
+    for cand in candidate_solutions:
+        for i, pos in enumerate(first_node_pos_list):
+            cand[:, first_node_col_indices[i]] = first_node_sample[:, i]
+
+    # -------------------------------
+    # 3) Iterate Through Remaining Nodes and Match Their Permutations
+    # -------------------------------
+
+    new_nodes = target_nodes[1:]  # All nodes except the first one
+
+    for node in new_nodes:
+        node_pos_list = list(map(int, node.split('-')))  # List of positions in this node
+        node_column_indices = [all_positions.index(pos) for pos in node_pos_list]
+
+        # Expand each existing candidate solution by inserting this node's permutations
+        new_candidates = []
+
+        for cand in candidate_solutions:
+            for perm in map(np.array, node_permutations[node]):  # Convert `perm` into NumPy array
+                # Copy existing candidate
+                updated_cand = cand.copy()
+
+                # Check if we are consistent with previous assignments
+                consistent = True
+                for i, pos in enumerate(node_pos_list):
+                    col_idx = node_column_indices[i]
+
+                    # Ensure consistency with already assigned positions
+                    if not np.isnan(updated_cand[:, col_idx]).all() and not np.array_equal(updated_cand[:, col_idx], perm[:, i]):
+                        consistent = False
+                        break
+
+                if consistent:
+                    # Fill new columns
+                    for i, pos in enumerate(node_pos_list):
+                        col_idx = node_column_indices[i]
+                        updated_cand[:, col_idx] = perm[:, i]
+
+                    new_candidates.append(updated_cand)
+
+        candidate_solutions = new_candidates  # Update candidate list
+
+    valid_solutions = set()  # To avoid duplicate solutions
+    all_combinations = []
+
+    # Remove duplicates and store results
+    for sol in candidate_solutions:
+        key = tuple(sol.flatten())
+        if key not in valid_solutions:
+            valid_solutions.add(key)
+            all_combinations.append(sol)
+
+    return all_combinations
+
 
 
 
@@ -1741,7 +1677,7 @@ def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_mo
         relevant_edges = position_connections[selected_position]["edges"]
 
         # Compute candidates
-        all_combinations, all_probabilities, candidate_counts, all_positions = compute_candidate_phasings(
+        all_combinations, all_probabilities, candidate_counts, all_positions = compute_candidate_phasings_single_variable(
             selected_position, relevant_edges, phased_positions, transitions_dict_extra,
             phasing_samples, ploidy, predicted_haplotypes, config, fragment_model)
 
@@ -1800,9 +1736,8 @@ def predict_haplotypes_multiple_variants(nodes, edges, samples, ploidy, genotype
         phased_positions (set),
         unphased_positions (set)
     """
-
-        # Step 1: Initialization
-    phasing_samples = {nn: samples[t][nn] for t in samples for nn in samples[t]}
+    # Step 1: Initialization
+    samples_brief = {nn: samples[t][nn] for t in samples for nn in samples[t]}
     sorted_nodes = sort_nodes(nodes)
     genotype_df = pd.read_csv(genotype_path).T
     predicted_haplotypes = pd.DataFrame(index=[f'haplotype_{p+1}' for p in range(ploidy)], columns=genotype_df.columns)
@@ -1815,8 +1750,18 @@ def predict_haplotypes_multiple_variants(nodes, edges, samples, ploidy, genotype
     # Start by picking a first node from sorted_nodes, same as original code
     if sorted_nodes:
         first_node = sorted_nodes[0]
+        initial_positions = sorted({int(pos) for pos in first_node.split('-')})
+        initial_positions = [p - 1 for p in initial_positions]
+
+        predicted_haplotypes.loc[:, initial_positions] = str_2_phas_1(samples_brief[first_node], ploidy)
+
+
         phased_nodes.add(first_node)
         unphased_nodes.discard(first_node)
+
+
+    # Start with the first node
+
 
         # Example: for a node '3-4', we turn them into integers {3,4} then mark them phased
         first_positions = {int(pos) for pos in first_node.split('-')}
@@ -1879,6 +1824,12 @@ def predict_haplotypes_multiple_variants(nodes, edges, samples, ploidy, genotype
         #
         # e.g., you might do:
         # phased_haplotypes_for_selected = do_actual_phasing(selected_positions, relevant_edges, ...)
+
+        # Compute candidates
+        candidates = compute_candidate_phasings_multi_variable(selected_positions, relevant_edges, phased_positions, transitions_dict_extra, samples_brief, ploidy, predicted_haplotypes, config, fragment_model)
+
+
+        # Select the best candidate        
         #
         # For now we just skip it and keep a placeholder:
         # ---------------------------------------------------------------------
@@ -2036,7 +1987,6 @@ def predict_haplotypes_multiple_variants2(nodes, edges, samples, ploidy, genotyp
     return phased_nodes, unphased_nodes, phased_positions, unphased_positions
 
 
-
 def build_children_dict(edges):
     """
     Builds a dictionary where keys are nodes and values are lists of their child nodes.
@@ -2174,7 +2124,6 @@ def transition_matrices_v2(quotient_g, edges_map_quotient, ploidy, config, fragm
                         this_phas_weight += this_phas_read_weight
                     transitions_dict_extra[edge][str(i) + '-' + str(j)]['matched_phasings'][phas] = this_phas_weight
                 transitions_mtx[i, j] = wei
-
         transitions_mtx = transitions_mtx / transitions_mtx.sum(axis=1, keepdims=True)
         transitions_dict[edge] = transitions_mtx
     return transitions_dict, transitions_dict_extra

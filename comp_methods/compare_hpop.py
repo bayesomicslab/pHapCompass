@@ -3,12 +3,12 @@ import numpy as np
 import pysam
 import random
 import pandas as pd 
-from evaluation import evaluation as ev
+from evaluation.evaluation import *
 import pickle
 import sys
 
 
-def single_hpop_g(contig, ploidy, coverage, scaffold):
+def single_hpop_g_command_line(contig, ploidy, coverage, scaffold):
     cmd = f"""java -jar /mnt/research/aguiarlab/proj/HaplOrbit/comp_methods/H-PoPG/H-PoPG.jar -p {ploidy} \\
     -w 0.9 -f /mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_{contig}/ploidy_{ploidy}/cov_{coverage}/frag/{scaffold}.frag \\
     -vcf /mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_awri/contig_{contig}/ploidy_{ploidy}/HPOP_AWRI_ploidy{ploidy}_contig{contig}.vcf \\
@@ -16,7 +16,7 @@ def single_hpop_g(contig, ploidy, coverage, scaffold):
     return cmd
 
 
-def generate_hpop_runs():
+def generate_hpop_command_runs():
     sh_path = '/mnt/research/aguiarlab/proj/HaplOrbit/scripts/comp_methods/hpop_runs/simulated_data_NA12878.sh'
     main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
     hpop_path = '/mnt/research/aguiarlab/proj/HaplOrbit/comp_methods/H-PoPG/H-PoPG.jar'
@@ -121,10 +121,10 @@ def parse_hpop_blocks_numpy(filename, true_haplotypes, fragment_list):
                 block_mismatch_error = np.nan
                 block_mec_ = np.nan
             else:
-                block_vector_error_rate, block_vector_error, _, _ = ev.compute_vector_error_rate(filtered_block_pred_haplotype, filtered_block_true_haplotype)
-                block_accuracy, _ = ev.calculate_accuracy(filtered_block_pred_haplotype, filtered_block_true_haplotype)
-                block_mismatch_error, _ = ev.calculate_mismatch_error(filtered_block_pred_haplotype, filtered_block_true_haplotype) 
-                block_mec_ = ev.mec(filtered_block_pred_haplotype, fragment_list) 
+                block_vector_error_rate, block_vector_error, _, _ = compute_vector_error_rate(filtered_block_pred_haplotype, filtered_block_true_haplotype)
+                block_accuracy, _ = calculate_accuracy(filtered_block_pred_haplotype, filtered_block_true_haplotype)
+                block_mismatch_error, _ = calculate_mismatch_error(filtered_block_pred_haplotype, filtered_block_true_haplotype) 
+                block_mec_ = mec(filtered_block_pred_haplotype, fragment_list) 
 
             metrics = {
                 'vector_error_rate': block_vector_error_rate,
@@ -158,7 +158,6 @@ def parse_hpop_blocks_numpy(filename, true_haplotypes, fragment_list):
                 'n_blocks': len(blocks_dict.keys()), 'length_phased': len(valid_predicted_columns), 'haplotypes': predicted_haplotypes}
 
     return blocks_dict, block_info
-
 
 
 def hpop_to_haplotypes(result_file):
@@ -259,6 +258,51 @@ def collect_results_hpop():
     print("H-PoPG results collected")
 
 
+def collect_results_hpop_missing():
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
+    output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/hpop_results_simulated_data_NA12878_346.csv'
+    contig_lens = [100]
+    ploidies = [3, 4, 6]
+    coverages = [10, 30, 50, 70, 100]
+    n_samples = 100
+    # metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
+    result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*2))
+    counter = 0
+    for contig_len in contig_lens:
+        for ploidy in ploidies:
+            true_haplotypes = pd.read_csv(os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')).T.to_numpy()
+            for coverage in coverages:
+                this_cov_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+                results_path = os.path.join(this_cov_path, 'hpop_results')
+                # frag_path = os.path.join(this_cov_path, 'frag')
+                for rd in range(n_samples):
+                    print(f"Collecting results for contig {contig_len}, ploidy {ploidy}, coverage {coverage}, sample {rd}")
+                    result_file = os.path.join(results_path, str(rd).zfill(2) + '.txt')
+                    cut_predicted_haplotypes, valid_columns = hpop_to_haplotypes(result_file)
+                    predicted_haplotypes = np.full((ploidy, contig_len), np.nan)
+                    predicted_haplotypes[:, valid_columns] = cut_predicted_haplotypes
+                    length_phased = cut_predicted_haplotypes.shape[1]
+                    vector_error_rate, _, _ = compute_vector_error_rate_with_missing_positions(true_haplotypes, predicted_haplotypes)
+                    result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
+                    result_df.loc[counter, 'Metric'] = 'Vector Error Rate'
+                    result_df.loc[counter, 'Value'] = vector_error_rate
+                    result_df.loc[counter, 'Contig'] = contig_len
+                    result_df.loc[counter, 'Ploidy'] = ploidy
+                    result_df.loc[counter, 'Coverage'] = coverage
+                    counter += 1
+                    result_df.loc[counter, 'Contig'] = contig_len
+                    result_df.loc[counter, 'Ploidy'] = ploidy
+                    result_df.loc[counter, 'Coverage'] = coverage
+                    result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
+                    result_df.loc[counter, 'Metric'] = '# Phased Variants'
+                    result_df.loc[counter, 'Value'] = length_phased
+                    counter += 1
+
+    result_df['Method'] = 'H-PoPG'
+    result_df.to_csv(output_path, index=False)
+    print("H-PoPG results collected")
+
+
 def collect_results_hpop_blocks():
     main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
     output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/hpop_results_simulated_data_NA12878_346_block.csv'
@@ -302,8 +346,8 @@ def collect_results_hpop_from_pkl():
     ploidies = [8]
     coverages = [10, 30, 50, 70, 100]
     n_samples = 100
-    metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
-    result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value', 'length_phased'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*len(metrics)))
+    # metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
+    result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*2))
     counter = 0
     for contig_len in contig_lens:
         for ploidy in ploidies:
@@ -317,16 +361,21 @@ def collect_results_hpop_from_pkl():
                     result_file = os.path.join(results_path, str(rd).zfill(2) + '.pkl')
                     with open(result_file, "rb") as f:
                         evals = pickle.load(f)
-                    phased_snp = evals['length_phased']
-                    for metric in metrics:
-                        result_df.loc[counter, 'Contig'] = contig_len
-                        result_df.loc[counter, 'Ploidy'] = ploidy
-                        result_df.loc[counter, 'Coverage'] = coverage
-                        result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
-                        result_df.loc[counter, 'Metric'] = metric
-                        result_df.loc[counter, 'Value'] = evals[metric]
-                        result_df.loc[counter, 'length_phased'] = phased_snp
-                        counter += 1
+                    result_df.loc[counter, 'Sample'] = evals['Sample']
+                    result_df.loc[counter, 'Metric'] = 'Vector Error Rate'
+                    result_df.loc[counter, 'Value'] = evals['vector_error_rate']
+                    result_df.loc[counter, 'Contig'] = contig_len
+                    result_df.loc[counter, 'Ploidy'] = ploidy
+                    result_df.loc[counter, 'Coverage'] = coverage
+                    counter += 1
+                    result_df.loc[counter, 'Contig'] = contig_len
+                    result_df.loc[counter, 'Ploidy'] = ploidy
+                    result_df.loc[counter, 'Coverage'] = coverage
+                    result_df.loc[counter, 'Sample'] = evals['Sample']
+                    result_df.loc[counter, 'Metric'] = '# Phased Variants'
+                    result_df.loc[counter, 'Value'] = evals['length_phased']
+                    counter += 1
+
     result_df['Method'] = 'H-PoPG'
     result_df.to_csv(output_path, index=False)
     print("H-PoPG results collected")
@@ -402,22 +451,19 @@ def make_inputs_for_evals_hpop():
     print(f"Saved {len(inputs)} inputs to {output_dir}")
 
 
-def eval_one_input_hpop(inp):
+def eval_one_input_hpop_missing(inp):
     result_file, true_haplotypes_path, frag_path, contig_len, ploidy, coverage, rd = inp
     true_haplotypes = pd.read_csv(true_haplotypes_path).T.to_numpy()
     cut_predicted_haplotypes, valid_columns = hpop_to_haplotypes(result_file)
-    cut_true_haplotypes = true_haplotypes[:, valid_columns]
-    fragment_list = get_fragment_list(os.path.join(frag_path, str(rd).zfill(2) + '.frag'))
-    hpmec = ev.mec(cut_predicted_haplotypes, fragment_list)
-    hpvector_error_rate, hpvector_error, backtracking_steps, dp_table = ev.compute_vector_error_rate(cut_predicted_haplotypes, cut_true_haplotypes)
-    hpmismatch_error, best_permutation = ev.calculate_mismatch_error(cut_predicted_haplotypes, cut_true_haplotypes)
-    hpaccuracy, _ = ev.calculate_accuracy(cut_predicted_haplotypes, cut_true_haplotypes)
-    phased_snp = cut_predicted_haplotypes.shape[1]
+
+    predicted_haplotypes = np.full((ploidy, contig_len), np.nan)
+    predicted_haplotypes[:, valid_columns] = cut_predicted_haplotypes
+    length_phased = cut_predicted_haplotypes.shape[1]
+    vector_error_rate, _, _ = compute_vector_error_rate_with_missing_positions(true_haplotypes, predicted_haplotypes)
 
     pkl_name = result_file.replace('.txt', '.pkl')
-    evals = {'Contig': contig_len, 'Ploidy': ploidy, 'Coverage': coverage , 'Sample': str(rd).zfill(2), 'vector_error_rate': hpvector_error_rate, 
-             'vector_error': hpvector_error, 'accuracy': hpaccuracy, 'mismatch_error': hpmismatch_error, 'mec': hpmec, 'length_phased': phased_snp}
-    
+
+    evals = {'Contig': contig_len, 'Ploidy': ploidy, 'Coverage': coverage , 'Sample': str(rd).zfill(2), 'vector_error_rate': vector_error_rate, 'length_phased': length_phased}    
     with open(pkl_name, "wb") as f:
         pickle.dump(evals, f)
     print(f"Done with {pkl_name}")
@@ -444,8 +490,8 @@ def eval_one_input_from_input_hpop(input_file):
     with open(input_file, "rb") as f:
         inp = pickle.load(f)
 
-    eval_one_input_hpop_block(inp)
-
+    # eval_one_input_hpop_block(inp)
+    eval_one_input_hpop_missing(inp)
 
 
 if __name__ == '__main__':

@@ -1,4 +1,5 @@
 import os
+import sys
 import pickle
 import pandas as pd
 import seaborn as sns
@@ -8,7 +9,7 @@ import numpy as np
 import itertools
 from collections import defaultdict
 import pysam
-from evaluation.evaluation import evaulate_ffbs_acc_sample
+from evaluation.evaluation import *
 
 
 def prepare_results_ismb():
@@ -163,6 +164,97 @@ def prepare_results():
     all_results.to_csv(os.path.join(agg_results_path, 'all_methods_results_simulated_data_NA12878.csv'), index=False)
 
 
+def prepare_results_partial_haplotypes_pHapcompass346():
+    agg_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
+    sim_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
+    metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
+    contigs = ['100'] 
+    ploidies = ['3', '4', '6', '8']
+    coverages = ['10', '30', '50', '70', '100']
+    results_dfs = []
+    for contig in contigs:
+        for ploidy in ploidies:
+            for coverage in coverages:
+                # results_path = os.path.join(sim_data_path, 'contig_' + contig, 'ploidy_' + ploidy, 'cov_' + coverage, 'results')
+                results_path = os.path.join(sim_data_path, 'contig_' + contig, 'ploidy_' + ploidy, 'cov_' + coverage, 'results_LBP_FFBS_Single')
+                if os.path.exists(results_path):
+                    samples = [f for f in os.listdir(results_path) if 'FFBS' in f]
+                    this_result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value'], index=range(len(samples)*2))
+                    this_result_df['Contig'] = contig
+                    this_result_df['Ploidy'] = ploidy
+                    this_result_df['Coverage'] = coverage
+                    this_result_df['Method'] = 'pHapCompass + LBP'                
+                    counter = 0
+                    for sample in samples:
+                        # print(contig, ploidy, coverage, sample) 
+                        sample_result = os.path.join(results_path, sample)
+                        with open(sample_result, 'rb') as f:
+                            this_results = pickle.load(f)
+                        
+                        sample_name = sample.split('.pkl')[0].split('_')[-1]
+                        
+                        # H = this_results['predicted_haplotypes'].to_numpy()
+                        # H_star = this_results['true_haplotypes'].to_numpy()
+                        # vector_error_rate, _, _ = compute_vector_error_rate_with_missing_positions(H_star, H)
+                        # length_phased = np.sum(~np.isnan(np.array(H, dtype=np.float64)).any(axis=0))
+                        vector_error_rate = this_results['evaluation']['vector_error_rate']
+                        length_phased = this_results['length_phased']
+                        this_result_df.loc[counter, 'Sample'] = sample_name
+                        this_result_df.loc[counter, 'Metric'] = 'Vector Error Rate'
+                        this_result_df.loc[counter, 'Value'] = vector_error_rate
+                        counter += 1
+                        this_result_df.loc[counter, 'Sample'] = sample_name
+                        this_result_df.loc[counter, 'Metric'] = '# Phased Variants'
+                        this_result_df.loc[counter, 'Value'] = length_phased
+                        counter += 1
+                    results_dfs.append(this_result_df)
+
+    results_df = pd.concat(results_dfs, ignore_index=True)
+    results_df.to_csv(os.path.join(agg_results_path, 'pHapCompass_LBP_results_simulated_data_NA12878.csv'), index=False)
+
+
+def prepare_results_partial_haplotypes_pHapcompass8():
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
+    output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/pHapCompass_results_simulated_data_NA12878_8.csv'
+    contig_lens = [100]
+    ploidies = [8]
+    coverages = [10, 30, 50, 70, 100]
+    n_samples = 100
+    # metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
+    result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*2))
+    counter = 0
+    for contig_len in contig_lens:
+        for ploidy in ploidies:
+            # true_haplotypes = pd.read_csv(os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')).T.to_numpy()
+            for coverage in coverages:
+                this_cov_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+                results_path = os.path.join(this_cov_path, 'results_likelihood')
+                # frag_path = os.path.join(this_cov_path, 'frag')
+                for rd in range(n_samples):
+                    print(f"Collecting results for contig {contig_len}, ploidy {ploidy}, coverage {coverage}, sample {rd}")
+                    result_file = os.path.join(results_path, 'dict_' + str(rd).zfill(2) + '.pkl')
+                    with open(result_file, "rb") as f:
+                        evals = pickle.load(f)
+                    result_df.loc[counter, 'Sample'] = evals['Sample']
+                    result_df.loc[counter, 'Metric'] = 'Vector Error Rate'
+                    result_df.loc[counter, 'Value'] = evals['vector_error_rate']
+                    result_df.loc[counter, 'Contig'] = contig_len
+                    result_df.loc[counter, 'Ploidy'] = ploidy
+                    result_df.loc[counter, 'Coverage'] = coverage
+                    counter += 1
+                    result_df.loc[counter, 'Contig'] = contig_len
+                    result_df.loc[counter, 'Ploidy'] = ploidy
+                    result_df.loc[counter, 'Coverage'] = coverage
+                    result_df.loc[counter, 'Sample'] = evals['Sample']
+                    result_df.loc[counter, 'Metric'] = '# Phased Variants'
+                    result_df.loc[counter, 'Value'] = evals['length_phased']
+                    counter += 1
+
+    result_df['Method'] = 'pHapCompass'
+    result_df.to_csv(output_path, index=False)
+    print("pHapcompass results collected")
+
+
 def collect_ground_truth_results():
     agg_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
     sim_data_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
@@ -288,14 +380,51 @@ def collect_results_blocks_all():
     all_results.to_csv(os.path.join(agg_results_path, 'all_methods_results_simulated_data_NA12878_block.csv'), index=False)
 
 
+def collect_results_all():
+    agg_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
+    phapcompass_results346 = pd.read_csv(os.path.join(agg_results_path, 'pHapCompass_results_simulated_data_NA12878_346.csv'))
+    phapcompass_results8 = pd.read_csv(os.path.join(agg_results_path, 'pHapCompass_results_simulated_data_NA12878_8.csv'))
+    whatshapp_results346 = pd.read_csv(os.path.join(agg_results_path, 'whatshap_results_simulated_data_NA12878_346.csv'))
+    hpopg_results346 = pd.read_csv(os.path.join(agg_results_path, 'hpop_results_simulated_data_NA12878_346.csv'))
+    whatshapp_results8 = pd.read_csv(os.path.join(agg_results_path, 'whatshap_results_simulated_data_NA12878_ploidy8.csv'))
+    hpopg_results8 = pd.read_csv(os.path.join(agg_results_path, 'hpop_results_simulated_data_NA12878_8.csv'))
+
+
+    all_results = pd.concat([phapcompass_results346, phapcompass_results8, whatshapp_results346, whatshapp_results8, hpopg_results346, hpopg_results8], ignore_index=True)
+    all_results['Contig'] = all_results['Contig'].astype(int)
+    all_results['Ploidy'] = all_results['Ploidy'].astype(int)
+    all_results['Coverage'] = all_results['Coverage'].astype(int)
+    # all_results['length_phased'] = all_results['length_phased'].astype(int)
+
+    all_results = all_results.sort_values(by=['Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric']).reset_index(drop=True)
+    
+    methods_order = ['pHapCompass', 'WhatsHap' , 'H-PoPG']
+    all_results = all_results.sort_values(by=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric'],
+        key=lambda col: col.map({method: i for i, method in enumerate(methods_order)})).reset_index(drop=True)
+
+    all_results.to_csv(os.path.join(agg_results_path, 'all_methods_results_simulated_data_NA12878_missing.csv'), index=False)
+
+
+
 def compare_metric_methods(all_results, agg_results_path):
+    plot_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/plots/'
+
+    all_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/all_methods_results_simulated_data_NA12878_missing.csv'
+    method_palette = {
+    "pHapCompass": "tab:blue",  # Blue
+    "WhatsHap": "tab:orange",  # Orange
+    "H-PoPG": "tab:green",  # Green  
+}
+    
     # compare metrics for different methods:
     for contig in [100]:
-        for metric in ['vector_error_rate', 'mismatch_error', 'mec', 'accuracy', 'vector_error' ,'length_phased', 'n_blocks', 'average_block_size',]:
+        # for metric in ['vector_error_rate', 'mismatch_error', 'mec', 'accuracy', 'vector_error' ,'length_phased', 'n_blocks', 'average_block_size',]:
+        for metric in ['# Phased Variants', 'Vector Error Rate']:
             for ploidy in [3, 4, 6, 8]:
                 print('Contig:', contig, 'Metric:', metric, 'Ploidy:', ploidy)
                 metric_df = all_results[(all_results['Metric'] == metric) & (all_results['Ploidy'] == ploidy)].reset_index(drop=True)
-                g = sns.catplot(x="Coverage", y="Value", hue="Method", data=metric_df, kind="box", height=6, aspect=1.5)
+                
+                g = sns.catplot(x="Coverage", y="Value", hue="Method", data=metric_df, kind="box", height=6, aspect=1.5, palette=method_palette)
 
                 # Add the title and labels
                 g.fig.suptitle(f"Contig: {str(contig)}, Metric: {metric.capitalize()}, Ploidy: {str(ploidy).capitalize()}", y=1.05)
@@ -309,9 +438,51 @@ def compare_metric_methods(all_results, agg_results_path):
                 # Adjust the layout to ensure everything fits within the figure
                 g.fig.subplots_adjust(top=0.85, right=0.9)
 
-                # Save the figure
+                # # Save the figure
                 # plt.show()
-                plt.savefig(os.path.join(agg_results_path, f"compare_{contig}_{metric}_{ploidy}.png"), bbox_inches="tight", dpi=300)
+                plt.savefig(os.path.join(plot_path, f"compare_{contig}_{metric}_{ploidy}.png"), bbox_inches="tight", dpi=300)
+                plt.close()
+
+def compare_metric_methods_line(all_results, agg_results_path):
+    plot_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/plots/'
+
+    all_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/all_methods_results_simulated_data_NA12878_missing.csv'
+    all_results = pd.read_csv(all_results_path)
+    method_palette = {
+    "pHapCompass": "tab:blue",  # Blue
+    "WhatsHap": "tab:orange",  # Orange
+    "H-PoPG": "tab:green"}
+    
+    # compare metrics for different methods:
+    for contig in [100]:
+        for metric in ['# Phased Variants', 'Vector Error Rate']:
+            for ploidy in [3, 4, 6, 8]:
+                print('Contig:', contig, 'Metric:', metric, 'Ploidy:', ploidy)
+                metric_df = all_results[(all_results['Metric'] == metric) & (all_results['Ploidy'] == ploidy)].reset_index(drop=True)
+                
+                # Create figure and axis
+                plt.figure(figsize=(6, 6))
+                ax = sns.lineplot(x="Coverage", y="Value", hue="Method", data=metric_df, marker="o", linewidth=4, palette=method_palette)
+
+                # Add the title and labels
+                # plt.title(f"Contig: {str(contig)}, Metric: {metric.capitalize()}, Ploidy: {str(ploidy).capitalize()}", y=1.05, fontdict={"size": 20})
+                plt.xlabel("Coverage", fontdict={"size": 20})
+                # plt.ylabel("Value", fontdict={"size": 20})
+                plt.ylabel(metric, fontdict={"size": 20})
+
+                # Ensure x-ticks match only the unique Coverage values
+                unique_coverage = sorted(metric_df["Coverage"].unique())
+                plt.xticks(unique_coverage)
+                plt.xticks(fontsize=16)
+                plt.yticks(fontsize=16)
+                # Move the legend to the top-right, inside the plot area
+                plt.legend(title="Method", loc="upper right", bbox_to_anchor=(0.95, 0.9), frameon=True, fontsize=16, title_fontsize=20)
+
+                # Adjust layout
+                plt.tight_layout()
+
+                # Save the figure
+                plt.savefig(os.path.join(plot_path, f"line_compare_{contig}_{metric}_{ploidy}.png"), bbox_inches="tight", dpi=300)
                 plt.close()
 
 
@@ -386,7 +557,7 @@ def plot_ffbs_accuracy():
     ffbs_df = pd.read_csv(ffbs_df_path)
     ffbs_df['Ploidy'] = ffbs_df['Ploidy'].astype(int)
     ffbs_df['Coverage'] = ffbs_df['Coverage'].astype(int)
-    g = sns.catplot(x="Ploidy", y="FFBS_Acc", hue="Coverage",  data=ffbs_df, kind="violin", height=6, aspect=1.5)
+    g = sns.catplot(x="Ploidy", y="FFBS_Acc", hue="Coverage",  data=ffbs_df, kind="box", height=6, aspect=1.5)
 
     # Add the title and labels
     g.fig.suptitle("FFBS accuracy" , y=1.05)
@@ -402,9 +573,34 @@ def plot_ffbs_accuracy():
     g.fig.subplots_adjust(top=1, right=1)
 
     # Save the figure
-    # plt.show()
+    plt.show()
     plt.savefig(os.path.join(agg_results_path, f"FFBS_acc_NA12878.png"), bbox_inches="tight", dpi=300)
     plt.close()
+
+    # linegraph pallet:
+    ploidy_palette = {
+    3: "tab:blue",  # Blue
+    4: "tab:orange",  # Orange
+    6: "tab:green", 
+    8: "tab:red"}
+
+    plt.figure(figsize=(6, 6))
+    ax = sns.lineplot(x="Coverage", y="FFBS_Acc", hue="Ploidy", data=ffbs_df, marker="o", linewidth=4, palette=ploidy_palette)
+    
+    plt.xlabel("Coverage", fontdict={"size": 20})
+    # plt.ylabel("Value", fontdict={"size": 20})
+    plt.ylabel('FFBS Acuuracy', fontdict={"size": 20})
+    unique_coverage = sorted(ffbs_df["Coverage"].unique())
+    plt.xticks(unique_coverage)
+    plt.xticks(fontsize=16)
+    plt.yticks(fontsize=16)
+    # plt.legend(title="Method", loc="upper right", bbox_to_anchor=(0.95, 0.9), frameon=True, fontsize=16, title_fontsize=20)
+    plt.legend(title="Ploidy", loc="lower right", bbox_to_anchor=(0.9, 0.1), frameon=True, fontsize=16, title_fontsize=20)
+
+    plt.tight_layout()
+    plt.show()
+
+    # Adjust layout
 
 
 def generate_fragmentfile_test():
@@ -1048,3 +1244,82 @@ def make_vector_error_rate_vs_FFBS_plot():
 
             # Show plot
             plt.show()
+
+
+def make_inputs_for_pHapcompass_eval():
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
+    output_dir = '/mnt/research/aguiarlab/proj/HaplOrbit/pHapcompass_evals'
+    # output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/hpop_results_simulated_data_NA12878.csv'
+    contig_lens = [100]
+    ploidies = [8]
+    coverages = [10, 30, 50, 70, 100]
+    n_samples = 100
+    inputs = []
+    # metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
+    # result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value', 'length_phased'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*len(metrics)))
+    # counter = 0
+    for contig_len in contig_lens:
+        for ploidy in ploidies:
+            true_haplotypes_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')
+            # true_haplotypes = pd.read_csv(os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')).T.to_numpy()
+            for coverage in coverages:
+                this_cov_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+                results_path = os.path.join(this_cov_path, 'results_likelihood')
+                frag_path = os.path.join(this_cov_path, 'frag')
+                for rd in range(n_samples):
+                    print(f"Collecting results for contig {contig_len}, ploidy {ploidy}, coverage {coverage}, sample {rd}")
+                    result_file = os.path.join(results_path, 'FFBS_' + str(rd).zfill(2) + '.pkl')
+                    inputs.append([result_file, true_haplotypes_path, frag_path, contig_len, ploidy, coverage, rd])
+
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+
+    for i, inp in enumerate(inputs):
+        input_file = os.path.join(output_dir, f"input_{i}.pkl")
+        with open(input_file, "wb") as f:
+            pickle.dump(inp, f)
+    print(f"Saved {len(inputs)} inputs to {output_dir}")
+
+
+def eval_one_input_pHapcompass_missing(inp):
+    result_file, true_haplotypes_path, frag_path, contig_len, ploidy, coverage, rd = inp
+    # true_haplotypes = pd.read_csv(true_haplotypes_path).T.to_numpy()
+
+    with open(result_file, 'rb') as f:
+        this_results = pickle.load(f)
+    
+    # sample_name = result_file.split('.pkl')[0].split('_')[-1]
+    H = this_results['predicted_haplotypes'].to_numpy()
+    H_star = this_results['true_haplotypes'].to_numpy()
+    vector_error_rate, _, _ = compute_vector_error_rate_with_missing_positions(H_star, H)
+    length_phased = np.sum(~np.isnan(np.array(H, dtype=np.float64)).any(axis=0))
+    evals = {'Contig': contig_len, 'Ploidy': ploidy, 'Coverage': coverage , 'Sample': str(rd).zfill(2), 
+             'vector_error_rate': vector_error_rate, 'length_phased': length_phased}
+    pkl_name = result_file.replace('FFBS', 'dict')
+
+    with open(pkl_name, "wb") as f:
+        pickle.dump(evals, f)
+    print(f"Done with {pkl_name}")
+
+
+def eval_one_input_from_input_pHapcompass(input_file):
+    with open(input_file, "rb") as f:
+        inp = pickle.load(f)
+
+    # eval_one_input_hpop_block(inp)
+    eval_one_input_pHapcompass_missing(inp)
+
+
+
+if __name__ == '__main__':
+    # # results from 3 4 6 ploidies
+    # prepare_results_partial_haplotypes_pHapcompass346()
+    # make_inputs_for_pHapcompass_eval()
+    # prepare_results_partial_haplotypes_pHapcompass8()
+
+    if len(sys.argv) != 2:
+        print("Usage: python3 results.py <input_file>")
+        sys.exit(1)
+    
+    input_file = sys.argv[1]
+    eval_one_input_from_input_pHapcompass(input_file)

@@ -354,14 +354,13 @@ def one_fmpr(f_ij, j_idx, f_ik, k_idx, haplotype):
   return 0
 
 
-def evaluate_ffbs_acc(results_path):
+def evaluate_ffbs_acc():
     results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
     main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
     eval_df = pd.DataFrame(columns=['Contig', 'Ploidy', 'Coverage', 'Sample', 'FFBS_Acc'], index=range(2*3*5))
     counter = 0 
     for contig in [100]:
         for ploidy in [3, 4, 6, 8]:
-            genotype_path = os.path.join(main_path, 'contig_{}/ploidy_{}/haplotypes.csv'.format(contig, ploidy))
             for cov in [10, 30, 50, 70, 100]:
                 for sample in range(100):
                     sample_name = str(sample).zfill(2)
@@ -371,31 +370,7 @@ def evaluate_ffbs_acc(results_path):
                     with open(sample_result, 'rb') as f:
                         this_results = pickle.load(f)
                         f.close()
-                    samples = this_results['samples']
-                    samples_brief = {}
-                    for t in samples.keys():
-                        for nn in samples[t].keys():
-                            if nn not in samples_brief.keys():
-                                samples_brief[nn] = samples[t][nn]
-
-                    true_haplotypes = pd.read_csv(genotype_path).T
-                    sorted_nodes = sort_nodes(samples_brief.keys())
-                    eval_ffbs = {node: 0 for node in sorted_nodes}
-                    evals = []
-                    for node in sorted_nodes:
-                        positions = [int(i)-1 for i in node.split('-')]
-                        true_phasing = true_haplotypes.loc[:, positions].values
-                        true_phasing_permutations = np.array(list(itertools.permutations(true_phasing)))
-
-                        phasing = samples_brief[node]
-                        phas_np = str_2_phas_1(phasing, ploidy)
-                        if not any(np.array_equal(phas_np, perm) for perm in true_phasing_permutations):
-                            evals.append(0)
-                            continue
-                        eval_ffbs[node] = 1
-                        evals.append(1)
-
-                    ffbs_acc = np.sum(evals)/len(evals)
+                    ffbs_acc = this_results['evaluation']['ffbs_acc']
                     eval_df.loc[counter, 'Contig'] = contig
                     eval_df.loc[counter, 'Ploidy'] = ploidy
                     eval_df.loc[counter, 'Coverage'] = cov
@@ -643,10 +618,10 @@ def compute_vector_error_rate_with_missing_positions(H_star, H):
     H: Assembled haplotype with NaNs for missing positions
     """
     # H, H_star = generate_example_H_Hstar()
-    blocks = find_blocks(H, H_star)
+    blocks = find_blocks(np.array(H, dtype=np.float64), np.array(H_star, dtype=np.float64))
     vector_error = 0
     for block in blocks:
-        print(block)
+        # print(block)
         block_H = H[:, block['start']:block['end']+1]
         block_H_star = H_star[:, block['start']:block['end']+1]
         if block['type'] == 1:
@@ -693,6 +668,7 @@ def compute_vector_error_rate_with_missing_positions(H_star, H):
             block_H[nan_index, col_id] = unphased_val
           this_vector_error = compute_vector_error_rate(block_H_star, block_H)[1]
           vector_error += this_vector_error
-        print(block, vector_error)
+        # print(block, vector_error)
     vector_error_rate = vector_error/H.shape[1]
     return vector_error_rate, vector_error, blocks
+
