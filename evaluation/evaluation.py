@@ -242,7 +242,7 @@ def compute_vector_error_rate_partial(H, H_star_full):
     return vector_error_rate, vector_error, backtracking_steps, dp_table
 
 
-def mec(reconstructed_haplotypes, list_of_reads):
+def map_back_proportion(reconstructed_haplotypes, list_of_reads):
   """
   input:
   reconstucted haplotypes - numpy array assembled phasing
@@ -264,6 +264,25 @@ def mec(reconstructed_haplotypes, list_of_reads):
               # once we find a match for this read, we can stop checking other rows
               break
   return np.sum(map_back)/len(pos_allele_pairs)
+
+'''
+map each read to the haplotype that it fits with best
+returns the proportion of alleles that have to be coerced to make them match
+** since we are taking the haplotype that matches best, it should never match with a nan row 
+'''
+def mec(reconstructed_haplotypes, list_of_reads):
+  pos_allele_pairs = [(list_of_reads[i], list_of_reads[i + 1]) for i in range(0, len(list_of_reads), 2)]
+
+  error_coercion_count = 0
+  total_reads_size = 0
+  
+  for idx, (position_seq, allele_seq) in enumerate(pos_allele_pairs):
+    subarray = reconstructed_haplotypes[position_seq[0] : position_seq[-1]]
+    best_match_haplotype = np.argmax(np.sum(subarray==allele_seq, axis=1))
+    error_coercion_count += np.sum(best_match_haplotype != allele_seq)
+    total_reads_size += len(allele_seq)
+  
+  return error_coercion_count/total_reads_size
   
   
 def calculate_accuracy(reconstructed_haplotypes, true_haplptypes):
