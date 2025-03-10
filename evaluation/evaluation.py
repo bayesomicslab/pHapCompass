@@ -138,8 +138,11 @@ def compute_vector_error_rate(H, H_star):
 
   # vector error is 0 when we only consider the first column
   first_col_matchings = find_matches(H_star[:, 0], H[:, 0])
+  first_col = H_star[:,0]
+  m0 = np.count_nonzero(first_col == 0)
+  m1 = np.count_nonzero(first_col == 1)
   for first_col_matching in first_col_matchings:
-    dp_table[0][first_col_matching] = (0, None)
+    dp_table[0][first_col_matching] = (int(m0 > 1)+int(m1 > 1), None)
 
   # Forward pass
   for col in range(1, n):
@@ -205,8 +208,11 @@ def compute_vector_error_rate_partial(H, H_star_full):
     
     # Use the new helper for the first column.
     first_col_matchings = find_partial_matches(H_star[:, 0], H[:, 0])
+    first_col = H_star[:,0]
+    m0 = np.count_nonzero(first_col == 0)
+    m1 = np.count_nonzero(first_col == 1)
     for matching in first_col_matchings:
-        dp_table[0][matching] = (0, None)
+        dp_table[0][matching] = (int(m0 > 1)+int(m1 > 1), None)
     
     # Forward pass: iterate over columns.
     for col in range(1, n):
