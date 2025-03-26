@@ -891,6 +891,7 @@ def match_np(np1,np2):
             premutations.append(correct_permuted)
     return premutations
 
+
         
 def compute_solution_likelihood(predicted_haplotypes_np, fragment_model, config):
     wei = 0

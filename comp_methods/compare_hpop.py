@@ -17,12 +17,13 @@ def single_hpop_g_command_line(contig, ploidy, coverage, scaffold):
 
 
 def generate_hpop_command_runs():
-    sh_path = '/mnt/research/aguiarlab/proj/HaplOrbit/scripts/comp_methods/hpop_runs/simulated_data_NA12878.sh'
-    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
+    # sh_path = '/mnt/research/aguiarlab/proj/HaplOrbit/scripts/comp_methods/hpop_runs/simulated_controlled.sh'
+    sh_path = '/mnt/research/aguiarlab/proj/HaplOrbit/run_hpopg.sh'
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_controlled'
     hpop_path = '/mnt/research/aguiarlab/proj/HaplOrbit/comp_methods/H-PoPG/H-PoPG.jar'
     contig_lens = [100]
-    ploidies = [3, 4, 6, 8]
-    coverages = [10, 30, 50, 70, 100]
+    ploidies = [2, 3, 4, 6, 8]
+    coverages = [5, 10, 30, 50, 70, 100]
     n_samples = 100
     to_print = ''
     for contig_len in contig_lens:
@@ -340,11 +341,11 @@ def collect_results_hpop_blocks():
 
 
 def collect_results_hpop_from_pkl():
-    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
-    output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/hpop_results_simulated_data_NA12878_8.csv'
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_controlled'
+    output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/hpop_simulated_controlled.csv'
     contig_lens = [100]
-    ploidies = [8]
-    coverages = [10, 30, 50, 70, 100]
+    ploidies = [2, 3, 4, 6, 8]
+    coverages = [5, 10, 30, 50, 70, 100]
     n_samples = 100
     # metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
     result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*2))
@@ -417,12 +418,12 @@ def collect_results_hpop_from_pkl_block():
 
 
 def make_inputs_for_evals_hpop():
-    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_controlled'
     output_dir = '/mnt/research/aguiarlab/proj/HaplOrbit/hpopg_inputs'
     # output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/hpop_results_simulated_data_NA12878.csv'
     contig_lens = [100]
-    ploidies = [8]
-    coverages = [10, 30, 50, 70, 100]
+    ploidies = [2, 3, 4, 6, 8]
+    coverages = [5, 10, 30, 50, 70, 100]
     n_samples = 100
     inputs = []
     # metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']

@@ -9,11 +9,11 @@ import sys
 
 
 def generate_whatshapp_runs():
-    sh_path = '/mnt/research/aguiarlab/proj/HaplOrbit/scripts/comp_methods/whatshapp_runs/simulated_data_NA12878.sh'
-    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
+    sh_path = '/mnt/research/aguiarlab/proj/HaplOrbit/run_whatshapp.sh'
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_controlled'
     contig_lens = [100]
-    ploidies = [3, 4, 6, 8]
-    coverages = [10, 30, 50, 70, 100]
+    ploidies = [2, 3, 4, 6, 8]
+    coverages = [5, 10, 30, 50, 70, 100]
     n_samples = 100
     to_print = ''
     for contig_len in contig_lens:
@@ -335,34 +335,36 @@ def get_fragment_list(frag_path):
 
 
 def collect_results_whatshap_missing():
-    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
-    output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/whatshap_results_simulated_data_NA12878_346.csv'
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_controlled'
+    output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/whatshap_simulated_controlled.csv'
     contig_lens = [100]
-    ploidies = [3, 4, 6]
-    coverages = [10, 30, 50, 70, 100]
+    ploidies = [2, 3, 4, 6, 8]
+    coverages = [5, 10, 30, 50, 70, 100]
     n_samples = 100
     # metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
     result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*2))
     counter = 0
     for contig_len in contig_lens:
         for ploidy in ploidies:
-            true_haplotypes = pd.read_csv(os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')).T.to_numpy()
+            # true_haplotypes = pd.read_csv(os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')).T.to_numpy()
             for coverage in coverages:
                 this_cov_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
                 results_path = os.path.join(this_cov_path, 'whatshapp_results')
-                frag_path = os.path.join(this_cov_path, 'frag')
+                # frag_path = os.path.join(this_cov_path, 'frag')
                 for rd in range(n_samples):
                     print(f"Collecting results for contig {contig_len}, ploidy {ploidy}, coverage {coverage}, sample {rd}")
-                    result_file = os.path.join(results_path, str(rd).zfill(2) + '.vcf.gz')
-                    predicted_haplotypes, _ = vcf_to_haplotypes(result_file)
                     
-                    valid_columns = [c for c in range(predicted_haplotypes.shape[1]) if not np.any(np.isnan(predicted_haplotypes[:, c]))]
+                    # result_file = os.path.join(results_path, str(rd).zfill(2) + '.vcf.gz')
+                    # predicted_haplotypes, _ = vcf_to_haplotypes(result_file)
 
-                    length_phased = len(valid_columns)
-                    vector_error_rate, _, _ = compute_vector_error_rate_with_missing_positions(true_haplotypes, predicted_haplotypes)
-                    result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
+                    result_file = os.path.join(results_path, str(rd).zfill(2) + '.pkl')
+
+                    with open(result_file, 'rb') as f:
+                        evals = pickle.load(f)
+
+                    result_df.loc[counter, 'Sample'] = evals['Sample']
                     result_df.loc[counter, 'Metric'] = 'Vector Error Rate'
-                    result_df.loc[counter, 'Value'] = vector_error_rate
+                    result_df.loc[counter, 'Value'] = evals['vector_error_rate']
                     result_df.loc[counter, 'Contig'] = contig_len
                     result_df.loc[counter, 'Ploidy'] = ploidy
                     result_df.loc[counter, 'Coverage'] = coverage
@@ -370,15 +372,31 @@ def collect_results_whatshap_missing():
                     result_df.loc[counter, 'Contig'] = contig_len
                     result_df.loc[counter, 'Ploidy'] = ploidy
                     result_df.loc[counter, 'Coverage'] = coverage
-                    result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
+                    result_df.loc[counter, 'Sample'] = evals['Sample']
                     result_df.loc[counter, 'Metric'] = '# Phased Variants'
-                    result_df.loc[counter, 'Value'] = length_phased
+                    result_df.loc[counter, 'Value'] = evals['length_phased']
                     counter += 1
+                    # valid_columns = [c for c in range(predicted_haplotypes.shape[1]) if not np.any(np.isnan(predicted_haplotypes[:, c]))]
+                    # length_phased = len(valid_columns)
+                    # vector_error_rate, _, _ = compute_vector_error_rate_with_missing_positions(true_haplotypes, predicted_haplotypes)
+                    # result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
+                    # result_df.loc[counter, 'Metric'] = 'Vector Error Rate'
+                    # result_df.loc[counter, 'Value'] = vector_error_rate
+                    # result_df.loc[counter, 'Contig'] = contig_len
+                    # result_df.loc[counter, 'Ploidy'] = ploidy
+                    # result_df.loc[counter, 'Coverage'] = coverage
+                    # counter += 1
+                    # result_df.loc[counter, 'Contig'] = contig_len
+                    # result_df.loc[counter, 'Ploidy'] = ploidy
+                    # result_df.loc[counter, 'Coverage'] = coverage
+                    # result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
+                    # result_df.loc[counter, 'Metric'] = '# Phased Variants'
+                    # result_df.loc[counter, 'Value'] = length_phased
+                    # counter += 1
 
     result_df['Method'] = 'WhatsHap'
     result_df.to_csv(output_path, index=False)
     print("WhatsHap results collected")
-
 
 
 def collect_results_whatshap_block():
@@ -463,8 +481,8 @@ def collect_results_whatshap_from_pkl_block():
     main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
     output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/whatshap_results_simulated_data_NA12878_ploidy8_block.csv'
     contig_lens = [100]
-    ploidies = [8]
-    coverages = [10, 30, 50, 70, 100]
+    ploidies = [2, 3, 4, 6, 8]
+    coverages = [5, 10, 30, 50, 70, 100]
     n_samples = 100
     metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec', 'length_phased', 'n_blocks', 'average_block_size']
     result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*len(metrics)))
@@ -493,15 +511,14 @@ def collect_results_whatshap_from_pkl_block():
     result_df.to_csv(output_path, index=False)
 
 
-
 def make_inputs_for_evals():
-    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_controlled'
     output_dir = '/mnt/research/aguiarlab/proj/HaplOrbit/whatshap_inputs'
     # output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/whatshap_results_simulated_data_NA12878.csv'
     inputs = []
     contig_lens = [100]
-    ploidies = [8]
-    coverages = [10, 30, 50, 70, 100]
+    ploidies = [2, 3, 4, 6, 8]
+    coverages = [5, 10, 30, 50, 70, 100]
     n_samples = 100
     for contig_len in contig_lens:
         for ploidy in ploidies:

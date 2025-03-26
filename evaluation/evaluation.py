@@ -8,7 +8,7 @@ import itertools
 from itertools import combinations, permutations
 from scipy.optimize import linear_sum_assignment
 from collections import defaultdict
-from utils.utils import sort_nodes, str_2_phas_1
+from utils.utils import sort_nodes, str_2_phas_1, compute_likelihood
 import graph_tool.all as gt
 
 
@@ -263,7 +263,7 @@ def map_back_proportion(reconstructed_haplotypes, list_of_reads):
 
   for idx, (position_seq, allele_seq) in enumerate(pos_allele_pairs):
       for reconstructed_hap in reconstructed_haplotypes:
-          subarray = reconstructed_hap[position_seq[0] : position_seq[-1]]
+          subarray = reconstructed_hap[position_seq[0] : position_seq[-1]+1]
 
           if np.array_equal(subarray, allele_seq):
               map_back[idx] = 1
@@ -283,13 +283,60 @@ def mec(reconstructed_haplotypes, list_of_reads):
   total_reads_size = 0
   
   for idx, (position_seq, allele_seq) in enumerate(pos_allele_pairs):
-    subarray = reconstructed_haplotypes[position_seq[0] : position_seq[-1]]
+    subarray = reconstructed_haplotypes[position_seq[0] : position_seq[-1]+1]
     best_match_haplotype = np.argmax(np.sum(subarray==allele_seq, axis=1))
     error_coercion_count += np.sum(best_match_haplotype != allele_seq)
     total_reads_size += len(allele_seq)
   
   return error_coercion_count/total_reads_size
+
+'''
+helper for probabalistic MEC
+likelihood that a read is truly from a given haplotype
+works for unphased (nan)
+potential edit - instead of having a penalty of 1 for unphased,
+define penalty based on allele frequency
+(penalty = prob that it is not the correct one)
+'''
+def likelihood_haplotype(read, haplotype, seq_error=0.001):
+  difference = np.abs(read-haplotype)
+  num_not_same = np.count_nonzero(difference)
+  likelihood = (seq_error ** num_not_same) * ( (1 - seq_error) ** (len(read) - num_not_same) )
+  return likelihood
   
+'''
+can be used when not all haplotypes are phased
+'''
+def mec_probabalistic(reconstructed_haplotypes, list_of_reads):
+  pos_allele_pairs = [(list_of_reads[i], list_of_reads[i + 1]) for i in range(0, len(list_of_reads), 2)]
+
+  expected_error = 0
+  
+  for idx, (position_seq, allele_seq) in enumerate(pos_allele_pairs):
+    subarray = reconstructed_haplotypes[:, position_seq[0] : position_seq[-1]+1]
+    for reconst_hap in subarray:
+      likelihood = likelihood_haplotype(allele_seq, reconst_hap)
+      error = np.sum(reconst_hap != allele_seq)
+      expected_error += likelihood*error
+
+  return expected_error
+
+def mec_multiple_blocks(H_star, list_of_reads):
+  '''
+  H_star = reconstructed haplotypes, can be multiple blocks
+  '''
+  blocks = find_blocks(np.array(H_star, dtype=np.float64), np.array(H_star, dtype=np.float64))
+  total_mec = 0
+  for block in blocks:
+    # print(block)
+    block_H_star = H_star[:, block['start']:block['end']+1]
+    if block['type'] == 1:
+      total_mec += mec(block)
+    elif block["type"] == 2 or block["type"] == 3:
+      total_mec += mec_probabalistic(block, list_of_reads) 
+    elif block["type"] ==4:
+      continue
+      # should i fill in the last row using the genotype?
   
 def calculate_accuracy(reconstructed_haplotypes, true_haplptypes):
   """
@@ -561,6 +608,8 @@ def find_blocks(H, H_star):
     for col in range(1, n):
         current_m = np.sum(~np.isnan(H[:, col]))
         # If current_m changes from prev_m, we finalize the previous block
+        # not sure if this works, 
+        # what if the unphased haplotype is a different one from prev to current?
         if current_m != prev_m:
             blocks.append({
                 'start': start_col,
