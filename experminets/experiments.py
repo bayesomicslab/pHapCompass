@@ -1367,8 +1367,8 @@ def run_viterbi_experiment(inp):
     predicted_haplotypes_single = predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities")
     predicted_haplotypes_np_single = predicted_haplotypes_single.to_numpy()
 
-    predicted_haplotypes_mv = predict_haplotypes_multiple_variants(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities")
-    predicted_haplotypes_np_mv = predicted_haplotypes_mv.to_numpy()
+    # predicted_haplotypes_mv = predict_haplotypes_multiple_variants(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities")
+    # predicted_haplotypes_np_mv = predicted_haplotypes_mv.to_numpy()
 
     end_time = time.time()
 
@@ -1377,22 +1377,21 @@ def run_viterbi_experiment(inp):
     true_haplotypes = pd.read_csv(genotype_path).T
 
     sampled_positions_single = [c for c in predicted_haplotypes_single.columns.values if np.nan not in list(predicted_haplotypes_single[c].values)]
-    sampled_positions_mv = [c for c in predicted_haplotypes_mv.columns.values if np.nan not in list(predicted_haplotypes_mv[c].values)]
+    # sampled_positions_mv = [c for c in predicted_haplotypes_mv.columns.values if np.nan not in list(predicted_haplotypes_mv[c].values)]
 
     true_haplotypes_np = true_haplotypes.to_numpy()
 
     vector_error_rate_single, _, _ = compute_vector_error_rate_with_missing_positions(true_haplotypes_np, predicted_haplotypes_np_single)
-    vector_error_rate_mv, _, _ = compute_vector_error_rate_with_missing_positions(true_haplotypes_np, predicted_haplotypes_np_mv)
+    # vector_error_rate_mv, _, _ = compute_vector_error_rate_with_missing_positions(true_haplotypes_np, predicted_haplotypes_np_mv)
     
     results_name = 'FFBS_{}.pkl'.format(frag_file.split('.')[0])
     results = {'Single Variant': {}, 'Multi Variant': {}}
     
     results['Single Variant']['length_phased'] = len(sampled_positions_single)
-    results['Multi Variant']['length_phased'] = len(sampled_positions_mv)
+    # results['Multi Variant']['length_phased'] = len(sampled_positions_mv)
 
     results['Single Variant']['vector_error_rate'] = vector_error_rate_single
-    results['Multi Variant']['vector_error_rate'] = vector_error_rate_mv
-
+    # results['Multi Variant']['vector_error_rate'] = vector_error_rate_mv
 
     results['true_haplotypes'] = pd.read_csv(genotype_path).T
     results['fragment_list'] = fragment_model.fragment_list
@@ -1413,7 +1412,7 @@ def run_pHapcompass_from_input(input_file):
     # run_FFBS_quotient_likelihood(inp)
     # run_LBP_FFBS_Single(inp)
     # run_FFBS_single_multi_samles(inp)
-
+    run_viterbi_experiment(inp)
 
 if __name__ == '__main__':
 
