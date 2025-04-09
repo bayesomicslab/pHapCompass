@@ -272,13 +272,19 @@ def map_back_proportion(reconstructed_haplotypes, list_of_reads):
   return np.sum(map_back)/len(pos_allele_pairs)
 
 '''
+def read_filtering(list_of_reads, block_start_index, block_end_index):
+    pos_allele_pairs = [(list_of_reads[i], list_of_reads[i + 1]) for i in range(0, len(list_of_reads), 2)]
+    # gets rid of the reads that end before the block starts or starts after the block ends
+    pos_allele_pairs_filtered = [elem for elem in pos_allele_pairs if (elem[0][-1]>= block_start_index and elem[0][0]<=block_end_index)]
+        
+    return pos_allele_pairs_filtered
+    
 map each read to the haplotype that it fits with best
 returns the proportion of alleles that have to be coerced to make them match
 ** since we are taking the haplotype that matches best, it should never match with a nan row 
-'''
-def mec(reconstructed_haplotypes, list_of_reads):
-  pos_allele_pairs = [(list_of_reads[i], list_of_reads[i + 1]) for i in range(0, len(list_of_reads), 2)]
 
+def mec(reconstructed_haplotypes, pos_allele_pairs):
+  # gets rid of the reads that end before the block starts or starts after the block ends
   error_coercion_count = 0
   total_reads_size = 0
   
@@ -289,6 +295,59 @@ def mec(reconstructed_haplotypes, list_of_reads):
     total_reads_size += len(allele_seq)
   
   return error_coercion_count/total_reads_size
+
+MEC function for reads in sparse matrix
+for now, assuming sparse matrix is numpy array with lots of nans
+
+def mec_sparse(reconstructed_haplotypes, reads):
+  error_coercion_count = 0
+  total_reads_size = 0
+  
+  for read in reads:
+    subarray = reconstructed_haplotypes[~np.isnan(read)]
+    observed_read = read[~np.isnan(read)]
+    best_match_haplotype = np.argmax(np.sum(subarray==observed_read, axis=1))
+    error_coercion_count += np.sum(best_match_haplotype != observed_read)
+    total_reads_size += len(observed_read)
+    
+    return error_coercion_count/total_reads_size
+
+can be used when not all haplotypes are phased
+original indices refers to where in the full reconstruction reconstructed_haplotypes sits
+
+def mec_probabalistic(reconstructed_haplotypes, pos_allele_pairs):
+  expected_error = 0
+  
+  for idx, (position_seq, allele_seq) in enumerate(pos_allele_pairs):
+    subarray = reconstructed_haplotypes[:, position_seq[0] : position_seq[-1]+1]
+    for reconst_hap in subarray:
+      likelihood = likelihood_haplotype(allele_seq, reconst_hap)
+      error = np.sum(reconst_hap != allele_seq)
+      expected_error += likelihood*error
+
+  return expected_error
+'''
+
+# positions that the read covers in the full reconstruction
+# the read itself
+# the reconstructed matrix we map the read to
+# the slices in the full reconstruction that give H_star
+def mec_singleton(pos_seq, allele_seq, H_star, H_star_start_index, H_star_end_index):
+  if H_star_end_index - H_star_start_index +1 != H_star.shape[1]:
+    raise Exception("dimensions dont match")
+  
+  start_pos = pos_seq[0]
+  end_pos = pos_seq[-1]
+  # because of preprocess slicing, haplotype array H_star_within_read should fit fully in read
+  # so, only need to cut read to fit within haplotype array
+  if end_pos > H_star_end_index:
+    sub_read = allele_seq[max(H_star_start_index-start_pos, 0):H_star_end_index+1]
+  else:
+    sub_read = allele_seq[max(H_star_start_index-start_pos, 0):]
+  best_match_haplotype = H_star[np.argmax(np.sum(H_star==sub_read, axis=1))]
+  error_correction_count = np.sum(best_match_haplotype != sub_read)
+  
+  return error_correction_count/len(sub_read)
 
 '''
 helper for probabalistic MEC
@@ -303,40 +362,164 @@ def likelihood_haplotype(read, haplotype, seq_error=0.001):
   num_not_same = np.count_nonzero(difference)
   likelihood = (seq_error ** num_not_same) * ( (1 - seq_error) ** (len(read) - num_not_same) )
   return likelihood
-  
-'''
-can be used when not all haplotypes are phased
-'''
-def mec_probabalistic(reconstructed_haplotypes, list_of_reads):
-  pos_allele_pairs = [(list_of_reads[i], list_of_reads[i + 1]) for i in range(0, len(list_of_reads), 2)]
 
+'''
+computes the "expected" mec 
+by weighing error correction with likelihood that that read is from that haplotype
+'''
+def mec_probabalistic_singleton(pos_seq, allele_seq, H_star, H_star_start_index, H_star_end_index):
+  if H_star_end_index - H_star_start_index +1 != H_star.shape[1]:
+    raise Exception("dimensions dont match")
+  
+  start_pos = pos_seq[0]
+  end_pos = pos_seq[-1]
+  
   expected_error = 0
   
-  for idx, (position_seq, allele_seq) in enumerate(pos_allele_pairs):
-    subarray = reconstructed_haplotypes[:, position_seq[0] : position_seq[-1]+1]
-    for reconst_hap in subarray:
-      likelihood = likelihood_haplotype(allele_seq, reconst_hap)
-      error = np.sum(reconst_hap != allele_seq)
-      expected_error += likelihood*error
-
+  # because of preprocess slicing, haplotype array H_star_within_read should fit fully in read
+  # so, only need to cut read to fit within haplotype array
+  if end_pos > H_star_end_index:
+    sub_read = allele_seq[max(H_star_start_index-start_pos, 0):H_star_end_index+1]
+  else:
+    sub_read = allele_seq[max(H_star_start_index-start_pos, 0):]  
+  for reconst_hap in H_star:
+    likelihood = likelihood_haplotype(sub_read, reconst_hap)
+    error = np.sum(reconst_hap != sub_read)
+    expected_error += likelihood*error
+    
   return expected_error
 
-def mec_multiple_blocks(H_star, list_of_reads):
+def mec_multi_block_over_reads(H_star, list_of_reads, genotype):
+  
+  k = H_star.shape[0]
+  
+  mec_running_sum = 0
+  
+  pos_allele_pairs = [(list_of_reads[i], list_of_reads[i + 1]) for i in range(0, len(list_of_reads), 2)]
+
+  blocks = find_blocks(np.array(H_star, dtype=np.float64), np.array(H_star, dtype=np.float64))
+  
+  # go through every read
+  for idx, (position_seq, allele_seq) in enumerate(pos_allele_pairs):
+    
+    read_start_pos = position_seq[0]
+    read_end_pos = position_seq[-1]
+    
+    blocks_within_read = [block for block in blocks if (block["start"]<= read_end_pos and block["end"]>=read_start_pos)]
+    
+    for block in blocks_within_read:
+      # penalty for error correction
+      
+      H_star_block = H_star[:, block["start"]:block["end"]+1]
+      
+      if block["type"]==1:
+        mec_running_sum += mec_singleton(position_seq, allele_seq, H_star_block, block["start"], block["end"])
+      elif block["type"]==2:
+        mec_running_sum += min(len(allele_seq), block["end"]-block["start"]+1)
+      elif block["type"]==3:
+        mec_running_sum += mec_singleton(position_seq, allele_seq, H_star_block, block["start"], block["end"])
+      elif block["type"]==4:
+        genotype_subarray = genotype[block['start']:block['end']+1]
+        remaining_genotype = np.sum(H_star_block, axis=1)-genotype_subarray
+        nan_row_idx = np.where(np.isnan(H_star_block))[0][0]
+        H_star_block[nan_row_idx] = remaining_genotype
+        mec_running_sum += mec_singleton(position_seq, allele_seq, H_star_block, block["start"], block["end"])
+      
+    # penalty for requiring len(blocks) many blocks to cover one read
+    # where (k-1)/k is the probability of a switch error if the blocks had been one
+    # for discrete uniform transition probabilities
+    mec_running_sum += (k-1)/k * (len(blocks_within_read)-1)
+    
+  return mec_running_sum
+  
+'''
+def mec_multi_block_over_reads(H_star, list_of_reads, genotype):
+  
+  k = H_star.shape[0]
+  
+  mec_running_sum = 0
+  
+  pos_allele_pairs = [(list_of_reads[i], list_of_reads[i + 1]) for i in range(0, len(list_of_reads), 2)]
+  
+  # go through every read
+  for idx, (position_seq, allele_seq) in enumerate(pos_allele_pairs):
+    
+    start_pos = position_seq[0]
+    end_pos = position_seq[-1]
+    # look at part of reconstruction that covers that read
+    H_star_within_read = H_star[:, start_pos:end_pos+1]
+    # go through each block within that portion of the reconstruction
+    blocks = find_blocks(np.array(H_star_within_read, dtype=np.float64), np.array(H_star_within_read, dtype=np.float64))
+    
+    for block in blocks:
+      # penalty for error correction
+      
+      if block["type"]==1:
+        mec_running_sum += mec_singleton(position_seq, allele_seq, H_star_within_read, block["start"], block["end"])
+      elif block["type"]==2:
+        mec_running_sum += 0
+    
+    # penalty for requiring len(blocks) many blocks to cover one read
+    # where (k-1)/k is the probability of a switch error if the blocks had been one
+    # for discrete uniform transition probabilities
+    mec_running_sum += (k-1)/k * (len(blocks)-1)
+    
+  return mec_running_sum
+'''     
+def mec_probabalistic_multi_block_over_reads(H_star, list_of_reads, genotype):
+  
+  k = H_star.shape[0]
+  
+  mec_running_sum = 0
+  
+  pos_allele_pairs = [(list_of_reads[i], list_of_reads[i + 1]) for i in range(0, len(list_of_reads), 2)]
+  
+  # go through every read
+  for idx, (position_seq, allele_seq) in enumerate(pos_allele_pairs):
+    
+    start_pos = position_seq[0]
+    end_pos = position_seq[-1]
+    # look at part of reconstruction that covers that read
+    H_star_within_read = H_star[:, start_pos:end_pos+1]
+    # go through each block within that portion of the reconstruction
+    blocks = find_blocks(np.array(H_star_within_read, dtype=np.float64), np.array(H_star_within_read, dtype=np.float64))
+    
+    for block in blocks:
+      # penalty for error correction
+      mec_running_sum += mec_probabalistic_singleton(position_seq, allele_seq, H_star_within_read, block["start"], block["end"])
+    
+    # penalty for requiring len(blocks) many blocks to cover one read
+    # where (k-1)/k is the probability of a switch error if the blocks had been one
+    # for discrete uniform transition probabilities
+    mec_running_sum += (k-1)/k * (len(blocks)-1)
+    
+  return mec_running_sum
+
+def mec_multiple_blocks(H_star, list_of_reads, genotype):
   '''
   H_star = reconstructed haplotypes, can be multiple blocks
+  genotype = numpy array of length = num snps
   '''
   blocks = find_blocks(np.array(H_star, dtype=np.float64), np.array(H_star, dtype=np.float64))
   total_mec = 0
   for block in blocks:
+    pos_allele_pairs_filtered = read_filtering(list_of_reads, block["start"], block["end"])
     # print(block)
     block_H_star = H_star[:, block['start']:block['end']+1]
     if block['type'] == 1:
-      total_mec += mec(block)
+      total_mec += mec(block_H_star, pos_allele_pairs_filtered)
     elif block["type"] == 2 or block["type"] == 3:
-      total_mec += mec_probabalistic(block, list_of_reads) 
+      total_mec += mec_probabalistic(block_H_star, pos_allele_pairs_filtered) 
     elif block["type"] ==4:
-      continue
-      # should i fill in the last row using the genotype?
+      # fill in last row using the genotype
+      genotype_subarray = genotype[block['start']:block['end']+1]
+      remaining_genotype = np.sum(block_H_star, axis=1)-genotype_subarray
+      nan_row_idx = np.where(np.isnan(block_H_star))[0][0]
+      block_H_star[nan_row_idx] = remaining_genotype
+      total_mec += mec(block_H_star, pos_allele_pairs_filtered)
+      
+  return total_mec
+      
   
 def calculate_accuracy(reconstructed_haplotypes, true_haplptypes):
   """
@@ -607,9 +790,6 @@ def find_blocks(H, H_star):
     # Iterate over columns 1..n-1
     for col in range(1, n):
         current_m = np.sum(~np.isnan(H[:, col]))
-        # If current_m changes from prev_m, we finalize the previous block
-        # not sure if this works, 
-        # what if the unphased haplotype is a different one from prev to current?
         if current_m != prev_m:
             blocks.append({
                 'start': start_col,
