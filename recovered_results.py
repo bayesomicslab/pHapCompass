@@ -604,6 +604,55 @@ def collect_single_mv_sample_results():
     print("pHapcompass results collected")
 
 
+def collect_single_viterbi_results():
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
+    output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/pHapcompass_simulated_NA12878_single_viterbi_true22.csv'
+    contig_lens = [100]
+    ploidies = [3, 4, 6, 8]
+    coverages = [10, 30, 50, 70, 100]
+    n_samples = 100
+    methods = ['Single Variant', 'Multi Variant']
+    # metrics = ['vector_error_rate', 'length_phased']
+    result_df = pd.DataFrame(columns=['Method', 'Contig', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*2*2))
+    counter = 0
+
+    for contig_len in contig_lens:
+        for ploidy in ploidies:
+            # true_haplotypes = pd.read_csv(os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')).T.to_numpy()
+            for coverage in coverages:
+                this_cov_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+                # results_path = os.path.join(this_cov_path, 'results_FFBS_Multiple')
+                results_path = os.path.join(this_cov_path, 'results_viterbi')
+                # frag_path = os.path.join(this_cov_path, 'frag')
+                for rd in range(n_samples):
+                    
+                    print(f"Collecting results for contig {contig_len}, ploidy {ploidy}, coverage {coverage}, sample {rd}")
+                    result_file = os.path.join(results_path, 'FFBS_' + str(rd).zfill(2) + '.pkl')
+                    
+                    with open(result_file, "rb") as f:
+                        evals = pickle.load(f)
+                    for method in methods:
+                        result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
+                        result_df.loc[counter, 'Metric'] = 'Vector Error Rate'
+                        result_df.loc[counter, 'Value'] = evals[method]['vector_error_rate']
+                        result_df.loc[counter, 'Contig'] = contig_len
+                        result_df.loc[counter, 'Ploidy'] = ploidy
+                        result_df.loc[counter, 'Coverage'] = coverage
+                        result_df.loc[counter, 'Method'] = 'Viterbi + ' + method.split(' ')[0]
+                        counter += 1
+                        result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
+                        result_df.loc[counter, 'Metric'] = '# Phased Variants'
+                        result_df.loc[counter, 'Value'] = evals[method]['length_phased']
+                        result_df.loc[counter, 'Contig'] = contig_len
+                        result_df.loc[counter, 'Ploidy'] = ploidy
+                        result_df.loc[counter, 'Coverage'] = coverage
+                        result_df.loc[counter, 'Method'] = 'Viterbi + ' + method.split(' ')[0]
+                        counter += 1
+
+    result_df.to_csv(output_path, index=False)
+    print("pHapcompass results collected")
+
+
 def collect_results_all():
     agg_results_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results'
     phapcompass_results346 = pd.read_csv(os.path.join(agg_results_path, 'pHapCompass_simulated_controlled.csv'))

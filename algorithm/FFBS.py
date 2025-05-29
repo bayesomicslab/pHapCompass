@@ -9,13 +9,14 @@ from collections import defaultdict, deque
 from collections import Counter, defaultdict
 import itertools
 from utils.utils import *
-
+import math
 
 def extract_positions(node_label):
     """
     Extracts positions from a node label of the form 'int-int'.
     """
     return set(map(int, node_label.split('-')))
+
 
 
 def find_most_connected_positions(nodes, edges, phased_nodes):
@@ -280,6 +281,30 @@ def emissions(ploidy, quotient_g, quotient_g_v_label_reversed, error_rate):
     return emission_dict
 
 
+def emissions_log(ploidy, quotient_g, quotient_g_v_label_reversed, error_rate, fragment_model):
+    log_emissions = {}
+
+    for node in quotient_g_v_label_reversed.keys():
+        log_emissions[node] = {}
+        
+        v = quotient_g_v_label_reversed[node]
+        phasings = quotient_g.graph.vertex_properties["v_weights"][v]['weight'].keys()
+        poss = list(map(int, node.split('-')))
+        match_reads = get_matching_reads_for_positions(poss, fragment_model.fragment_list)
+        for phasing in phasings:
+            this_phas_weight = 0
+            for indc, this_po, obs in match_reads:
+                this_phas_read_weight = compute_likelihood_generalized_plus(
+                    observed=np.array(obs),
+                    phasing=str_2_phas_1(phasing, ploidy),
+                    obs_pos=indc,
+                    phas_pos=range(len(indc)),
+                    error_rate=error_rate)
+                this_phas_weight += math.log(this_phas_read_weight)
+            log_emissions[node][phasing] = this_phas_weight
+    return log_emissions
+
+
 def assign_slices_and_interfaces(nodes, edges):
     """
     Assign nodes to slices in a directed acyclic graph (DAG).
@@ -301,7 +326,6 @@ def assign_slices_and_interfaces(nodes, edges):
         adjacency_list[s].append(t)
         reverse_adjacency_list[t].append(s)
         in_degree[t] += 1
-
 
 
     # Initial slice with zero in-degree nodes
@@ -814,6 +838,45 @@ def sample_states_ground_truth(slices, nodes, genotype_path):
     return sampled_states
 
 
+def sample_states_max_likelihood(slices, nodes, quotient_g, quotient_g_v_label_reversed):
+    t = len(slices)
+    sampled_states = {}
+    sampled_states[t] = {}
+    for node in nodes:
+        node_id = quotient_g_v_label_reversed[node]
+        node_weights = quotient_g.graph.vertex_properties["v_weights"][node_id]['weight']
+        max_weight = max(node_weights.values())
+        max_phasings = [ph for ph, w in node_weights.items() if w == max_weight]
+        if len(max_phasings) > 1:
+            max_phasing = random.choice(max_phasings)
+        else:
+            max_phasing = max_phasings[0]
+        
+        sampled_states[t][node] = max_phasing
+    return sampled_states
+
+def sample_states_max_lbp(slices, vertices_dict):
+    T = len(slices)
+    sampled_states = {}
+    sampled_states[T] = {}
+    for t in vertices_dict.keys():
+        # print(t)
+        this_slice_nodes = slices[t]
+        for node in this_slice_nodes:
+            # print(node)
+            if node not in sampled_states[T].keys():
+                node_weights = vertices_dict[t][node]
+                max_weight = max(node_weights.values())
+                max_phasings = [ph for ph, w in node_weights.items() if w == max_weight]
+                if len(max_phasings) > 1:
+                    max_phasing = random.choice(max_phasings)
+                else:
+                    max_phasing = max_phasings[0]
+                sampled_states[T][node] = max_phasing
+    return sampled_states
+
+
+
 def sample_states_book(slices, edges, forward_messages, transitions_dict):
     """
     Sample states using forward messages and transition probabilities without backward messages.
@@ -868,6 +931,70 @@ def sample_states_book(slices, edges, forward_messages, transitions_dict):
             sampled_states[t][node] = random.choices(state_space, weights=probs, k=1)[0]
 
     return sampled_states
+
+
+def select_states_viterbi_like(slices, edges, forward_messages, transitions_dict):
+    """
+    Perform a Viterbi-style backward pass using forward messages.
+    Instead of sampling, selects the most probable path deterministically.
+    
+    Parameters:
+    - slices: Dictionary of slices {t: list of nodes in slice t}.
+    - edges: List of directed edges (source, target).
+    - forward_messages: Forward messages {t: {node: {state: log probability}}}.
+    - transitions_dict: Dictionary of transition probabilities.
+    
+    Returns:
+    - selected_states: Dictionary of selected states for each node in each slice.
+    """
+    selected_states = {}
+    reverse_slices = sorted(slices.keys(), reverse=True)
+
+    # Build adjacency list for forward lookup
+    forward_adj = defaultdict(list)
+    for src, tgt in edges:
+        forward_adj[src].append(tgt)
+
+    # Step 1: initialize final slice
+    t_final = reverse_slices[0]
+    selected_states[t_final] = {}
+    for node in slices[t_final]:
+        state_space = list(forward_messages[t_final][node].keys())
+        log_probs = np.array([forward_messages[t_final][node][state] for state in state_space])
+        best_idx = np.argmax(log_probs)
+        selected_states[t_final][node] = state_space[best_idx]
+
+    # Step 2: backward selection
+    for t in reverse_slices[1:]:
+        selected_states[t] = {}
+        for node in slices[t]:
+            state_space = list(forward_messages[t][node].keys())
+            best_score = float('-inf')
+            best_state = None
+            for i, state in enumerate(state_space):
+                log_alpha = forward_messages[t][node][state]
+                total_log = log_alpha
+
+                # Add transition log probs from this node to children
+                children = [child for child in forward_adj[node] if child in slices[t + 1]]
+                for child in children:
+                    child_state = selected_states[t + 1][child]
+                    child_state_space = list(forward_messages[t + 1][child].keys())
+                    j = child_state_space.index(child_state)
+                    trans_prob = transitions_dict[f"{node}--{child}"][i, j]
+                    if trans_prob > 0:
+                        total_log += math.log(trans_prob)
+                    else:
+                        total_log += float('-inf')
+
+                if total_log > best_score:
+                    best_score = total_log
+                    best_state = state
+
+            selected_states[t][node] = best_state
+
+    return selected_states
+
 
 
 def sample_states(slices, edges, forward_messages, transitions_dict):
@@ -1336,8 +1463,6 @@ def compute_candidate_phasings_multi_variable(selected_positions, relevant_edges
     # -----------------------------
     # 1) Identify subgraph nodes & positions
     # -----------------------------
-    all_combinations = []
-
 
     # **Step 1: Identify the full set of positions involved in relevant edges**
     all_positions = sorted(set(
@@ -1355,7 +1480,10 @@ def compute_candidate_phasings_multi_variable(selected_positions, relevant_edges
         int(pos) for node in target_nodes for pos in node.split('-')
     ))
 
-    ffbs_candidates = generate_candidate_phasings_among_FFBS_samples(target_nodes, all_positions_in_target_nodes, samples_brief, ploidy)
+    ffbs_candidates_all = generate_candidate_phasings_with_all_FFBS_respect(target_nodes, all_positions_in_target_nodes, samples_brief, ploidy)
+    ffbs_candidates_partial = generate_candidate_phasings_with_partial_FFBS_respect(target_nodes, all_positions_in_target_nodes, samples_brief, ploidy, len(target_nodes) - 1)
+    
+    ffbs_candidates = get_unique_candidates(ffbs_candidates_all + ffbs_candidates_partial)
 
 
     # TODO: Implement the rest of the function which is now
@@ -1400,7 +1528,6 @@ def compute_candidate_phasings_multi_variable(selected_positions, relevant_edges
             if not np.array_equal(aligned_shared_part, candidate_shared_part):
                 valid = False
 
-
             if valid:
                 # **Apply the valid permutation to the matrix**
                 new_matrix = aligned_key_np.copy()
@@ -1411,7 +1538,7 @@ def compute_candidate_phasings_multi_variable(selected_positions, relevant_edges
                 all_combinations.append(new_matrix)
 
     all_probabilities = []
-
+    candidate_counts = []
     # Retrieve matching reads for all positions in these edges
     match_reads = get_matching_reads_for_positions(all_positions, fragment_model.fragment_list)
 
@@ -1436,17 +1563,26 @@ def compute_candidate_phasings_multi_variable(selected_positions, relevant_edges
         all_probabilities.append(this_phas_weight)
 
     #  then we compute how many times one candidate respected the FFBS phasing constraints of the edges.
-
-
-
-
-
+    # Count how many target nodes match each candidate
+    for candidate in all_combinations:
+        count = 0
+        for edge in relevant_edges:
+            target = edge[1]
+            target_positions = [int(pos) for pos in target.split('-')]
+            target_indices = [all_positions.index(pos) for pos in target_positions]
+            target_phasing = str_2_phas_1(samples_brief[target], ploidy)
+            target_phasing_permutations = np.array(list(itertools.permutations(target_phasing)))
+            if any(
+                np.array_equal(candidate[:, target_indices], perm)
+                for perm in target_phasing_permutations
+            ):
+                count += 1
+        candidate_counts.append(count)
 
     return all_combinations, all_probabilities, candidate_counts, all_positions
 
 
-
-def generate_candidate_phasings_among_FFBS_samples(target_nodes, all_positions, samples_brief, ploidy):
+def generate_candidate_phasings_with_all_FFBS_respect(target_nodes, all_positions, samples_brief, ploidy):
     """
     Generates all valid permutations of FFBS samples for target nodes, ensuring consistency.
 
@@ -1538,6 +1674,292 @@ def generate_candidate_phasings_among_FFBS_samples(target_nodes, all_positions, 
     return all_combinations
 
 
+def generate_candidate_phasings_with_partial_FFBS_respect(target_nodes, all_positions, samples_brief, ploidy, match_count, m=3):
+    """
+    Generates valid permutations of FFBS samples for target nodes, allowing systematic random mismatches.
+    Ensures that among the nodes required to match FFBS, the first one has a fixed configuration to avoid redundancy.
+
+    Parameters:
+        target_nodes (list): List of nodes that should be phased in this iteration.
+        all_positions (list): Sorted list of all variant positions in the subgraph.
+        samples_brief (dict): Mapping of node -> FFBS sampled phasing string.
+        ploidy (int): Number of haplotypes.
+        match_count (int): Number of nodes that must match their FFBS samples exactly.
+        m (int): Number of different randomized assignments for NaN values.
+
+    Returns:
+        all_combinations (list of np.ndarray): Unique list of valid haplotype matrices (ploidy, len(all_positions)).
+    """
+
+    num_nodes = len(target_nodes)
+
+    # -------------------------------
+    # 1) Generate All FFBS Sample Permutations for Each Target Node
+    # -------------------------------
+    node_permutations = {}
+    for node in target_nodes:
+        base_phasing = samples_brief[node]  # FFBS sampled phasing string
+        node_permutations[node] = list(itertools.permutations(str_2_phas_1(base_phasing, ploidy)))
+
+    # -------------------------------
+    # 2) Pre-create Solution Space (Full Space for All Positions)
+    # -------------------------------
+    candidate_solutions = [np.full((ploidy, len(all_positions)), np.nan)]  # Space remains the same
+
+    # -------------------------------
+    # 3) Generate all ways to choose `match_count` nodes
+    # -------------------------------
+    possible_match_subsets = list(itertools.combinations(target_nodes, match_count))  # Generate all valid match sets
+
+    unique_solutions = set()  # Store unique solutions as tuples
+
+    for match_subset in possible_match_subsets:
+        # Nodes in this subset must fully respect their FFBS sample, others are allowed to deviate
+        nodes_that_must_match = list(match_subset)  # Convert to ordered list
+        nodes_that_may_deviate = list(set(target_nodes) - set(nodes_that_must_match))  # The rest can deviate
+
+        # Initialize candidates for this subset
+        candidate_solutions_for_subset = [np.full((ploidy, len(all_positions)), np.nan)]
+
+        if match_count > 0:
+            # Identify the first node among nodes that must match
+            first_fixed_node = nodes_that_must_match[0]
+            remaining_nodes_to_match = nodes_that_must_match[1:]  # The rest of the matching nodes
+
+            # -------------------------------
+            # 4) Assign FFBS Samples for First Fixed Node
+            # -------------------------------
+            first_node_pos_list = list(map(int, first_fixed_node.split('-')))
+            first_node_col_indices = [all_positions.index(pos) for pos in first_node_pos_list]
+            first_node_sample = str_2_phas_1(samples_brief[first_fixed_node], ploidy)  # Get original phasing
+
+            for cand in candidate_solutions_for_subset:
+                cand[:, first_node_col_indices] = first_node_sample  # Assign fixed FFBS sample
+
+            # -------------------------------
+            # 5) Assign FFBS Samples for Remaining Nodes That Must Match
+            # -------------------------------
+            for node in remaining_nodes_to_match:
+                node_pos_list = list(map(int, node.split('-')))  # List of positions in this node
+                node_column_indices = [all_positions.index(pos) for pos in node_pos_list]
+
+                new_candidates = []
+
+                for cand in candidate_solutions_for_subset:
+                    for perm in map(np.array, node_permutations[node]):
+                        updated_cand = cand.copy()
+                        updated_cand[:, node_column_indices] = perm  # Assign FFBS sample
+                        candidate_tuple = tuple(updated_cand.flatten())
+                        if candidate_tuple not in unique_solutions:
+                            unique_solutions.add(candidate_tuple)
+                            new_candidates.append(updated_cand)
+
+                candidate_solutions_for_subset = new_candidates  # Update candidate list
+
+        # -------------------------------
+        # 6) Assign `m` Randomized Values for Nodes That May Deviate
+        # -------------------------------
+        new_candidates = []
+        for cand in candidate_solutions_for_subset:
+            for _ in range(m):  # Generate `m` different random assignments
+                updated_cand = cand.copy()
+
+                for node in nodes_that_may_deviate:
+                    node_pos_list = list(map(int, node.split('-')))  # List of positions in this node
+                    node_column_indices = [all_positions.index(pos) for pos in node_pos_list]
+
+                    # If the column is **still NaN**, determine the distribution from FFBS
+                    for col_idx in node_column_indices:
+                        if np.isnan(updated_cand[:, col_idx]).all():
+                            # Get the FFBS sample for this node
+                            ffbs_sample = str_2_phas_1(samples_brief[node], ploidy)  # Convert FFBS sample to array
+                            column_values = ffbs_sample[:, node_column_indices.index(col_idx)]  # Extract relevant column
+
+                            # Count how many `1s` and `0s` should be placed
+                            num_ones = np.sum(column_values == 1)
+                            num_zeros = np.sum(column_values == 0)
+
+                            # Generate a randomized assignment maintaining the same distribution
+                            random_assignment = np.zeros(ploidy)
+                            ones_positions = np.random.choice(ploidy, num_ones, replace=False)  # Pick random positions for `1s`
+                            random_assignment[ones_positions] = 1  # Assign `1s` in selected positions
+
+                            updated_cand[:, col_idx] = random_assignment  # Assign randomized column
+
+                candidate_tuple = tuple(updated_cand.flatten())
+                if candidate_tuple not in unique_solutions:
+                    unique_solutions.add(candidate_tuple)
+                    new_candidates.append(updated_cand)
+
+        candidate_solutions_for_subset = new_candidates  # Finalize candidates for this match subset
+
+    # Convert unique solutions back to NumPy arrays
+    all_combinations = list(unique_solutions)  
+    return [np.array(c).reshape(ploidy, len(all_positions)) for c in all_combinations]
+
+
+def generate_candidate_phasings_with_partial_FFBS_respect_old(target_nodes, all_positions, samples_brief, ploidy, match_count, m=3):
+    """
+    Generates valid permutations of FFBS samples for target nodes, allowing systematic random mismatches.
+    Ensures that among the nodes required to match FFBS, the first one has a fixed configuration to avoid redundancy.
+
+    Parameters:
+        target_nodes (list): List of nodes that should be phased in this iteration.
+        all_positions (list): Sorted list of all variant positions in the subgraph.
+        samples_brief (dict): Mapping of node -> FFBS sampled phasing string.
+        ploidy (int): Number of haplotypes.
+        match_count (int): Number of nodes that must match their FFBS samples exactly.
+        m (int): Number of different randomized assignments for NaN values.
+
+    Returns:
+        all_combinations (list of np.ndarray): Unique list of valid haplotype matrices (ploidy, len(all_positions)).
+    """
+
+    num_nodes = len(target_nodes)
+
+    # -------------------------------
+    # 1) Generate All FFBS Sample Permutations for Each Target Node
+    # -------------------------------
+    node_permutations = {}
+    for node in target_nodes:
+        base_phasing = samples_brief[node]  # FFBS sampled phasing string
+        node_permutations[node] = list(itertools.permutations(str_2_phas_1(base_phasing, ploidy)))
+
+    # -------------------------------
+    # 2) Pre-create Solution Space (Full Space for All Positions)
+    # -------------------------------
+    candidate_solutions = [np.full((ploidy, len(all_positions)), np.nan)]  # Space remains the same
+
+    # -------------------------------
+    # 3) Generate all ways to choose `match_count` nodes
+    # -------------------------------
+    possible_match_subsets = list(itertools.combinations(target_nodes, match_count))  # Generate all valid match sets
+
+    unique_solutions = set()  # Store unique solutions as tuples
+
+    for match_subset in possible_match_subsets:
+        # Nodes in this subset must fully respect their FFBS sample, others are allowed to deviate
+        nodes_that_must_match = list(match_subset)  # Convert to ordered list
+        nodes_that_may_deviate = list(set(target_nodes) - set(nodes_that_must_match))  # The rest can deviate
+
+        # # Identify the first node among nodes that must match
+        # first_fixed_node = nodes_that_must_match[0]
+        # remaining_nodes_to_match = nodes_that_must_match[1:]  # The rest of the matching nodes
+        if match_count > 0:
+            first_fixed_node = nodes_that_must_match[0]
+            remaining_nodes_to_match = nodes_that_must_match[1:]  # The rest of the matching nodes
+        else:
+            first_fixed_node = None  # No fixed node since all can deviate
+            remaining_nodes_to_match = []
+
+
+        # Start new candidate list for this subset
+        candidate_solutions_for_subset = [np.full((ploidy, len(all_positions)), np.nan)]
+
+        # -------------------------------
+        # 4) Assign FFBS Samples for First Fixed Node
+        # -------------------------------
+        if first_fixed_node is not None:
+
+            first_node_pos_list = list(map(int, first_fixed_node.split('-')))
+            first_node_col_indices = [all_positions.index(pos) for pos in first_node_pos_list]
+            first_node_sample = str_2_phas_1(samples_brief[first_fixed_node], ploidy)  # Get original phasing
+
+            for cand in candidate_solutions_for_subset:
+                cand[:, first_node_col_indices] = first_node_sample  # Assign fixed FFBS sample
+
+            # -------------------------------
+            # 5) Assign FFBS Samples for Remaining Nodes That Must Match
+            # -------------------------------
+            for node in remaining_nodes_to_match:
+                node_pos_list = list(map(int, node.split('-')))  # List of positions in this node
+                node_column_indices = [all_positions.index(pos) for pos in node_pos_list]
+
+                new_candidates = []
+
+                for cand in candidate_solutions_for_subset:
+                    for perm in map(np.array, node_permutations[node]):
+                        updated_cand = cand.copy()
+                        updated_cand[:, node_column_indices] = perm  # Assign FFBS sample
+                        candidate_tuple = tuple(updated_cand.flatten())
+                        if candidate_tuple not in unique_solutions:
+                            unique_solutions.add(candidate_tuple)
+                            new_candidates.append(updated_cand)
+
+                candidate_solutions_for_subset = new_candidates  # Update candidate list
+
+        # -------------------------------
+        # 6) Assign `m` Randomized Values for Nodes That May Deviate
+        # -------------------------------
+        new_candidates = []
+        for cand in candidate_solutions_for_subset:
+            for _ in range(m):  # Generate `m` different random assignments
+                updated_cand = cand.copy()
+
+                for node in nodes_that_may_deviate:
+                    node_pos_list = list(map(int, node.split('-')))  # List of positions in this node
+                    node_column_indices = [all_positions.index(pos) for pos in node_pos_list]
+
+                    # If the column is **still NaN**, determine the distribution from FFBS
+                    for col_idx in node_column_indices:
+                        if np.isnan(updated_cand[:, col_idx]).all():
+                            # Get the FFBS sample for this node
+                            ffbs_sample = str_2_phas_1(samples_brief[node], ploidy)  # Convert FFBS sample to array
+                            column_values = ffbs_sample[:, node_column_indices.index(col_idx)]  # Extract relevant column
+
+                            # Count how many `1s` and `0s` should be placed
+                            num_ones = np.sum(column_values == 1)
+                            num_zeros = np.sum(column_values == 0)
+
+                            # Generate a randomized assignment maintaining the same distribution
+                            random_assignment = np.zeros(ploidy)
+                            ones_positions = np.random.choice(ploidy, num_ones, replace=False)  # Pick random positions for `1s`
+                            random_assignment[ones_positions] = 1  # Assign `1s` in selected positions
+
+                            updated_cand[:, col_idx] = random_assignment  # Assign randomized column
+
+                candidate_tuple = tuple(updated_cand.flatten())
+                if candidate_tuple not in unique_solutions:
+                    unique_solutions.add(candidate_tuple)
+                    new_candidates.append(updated_cand)
+
+        candidate_solutions_for_subset = new_candidates  # Finalize candidates for this match subset
+
+    # Convert unique solutions back to NumPy arrays
+    all_combinations = list(unique_solutions)  
+    return [np.array(c).reshape(ploidy, len(all_positions)) for c in all_combinations]
+
+
+def get_unique_candidates(candidates):
+    """
+    Returns a list of unique candidate matrices while ignoring row order.
+
+    Parameters:
+        candidates (list of np.ndarray): List of candidate phasing matrices.
+
+    Returns:
+        unique_candidates (list of np.ndarray): Unique candidates without duplicate row permutations.
+    """
+    unique_candidates = []
+
+    for cand in candidates:
+        is_unique = True
+
+        # Convert to tuple format to allow for permutation checking
+        cand_tuple = tuple(map(tuple, cand))
+
+        for unique_cand in unique_candidates:
+            unique_cand_tuple = tuple(map(tuple, unique_cand))
+
+            # Check all possible row permutations of the current matrix
+            if any(tuple(map(tuple, perm)) == unique_cand_tuple for perm in itertools.permutations(cand_tuple)):
+                is_unique = False
+                break  # Stop checking if any permutation already exists
+
+        if is_unique:
+            unique_candidates.append(cand)
+
+    return unique_candidates
 
 
 def select_best_candidate(candidates, prioritize="probabilities"):
@@ -1576,6 +1998,33 @@ def select_best_candidate(candidates, prioritize="probabilities"):
     return random.choice(filtered_candidates)
 
 
+def compute_entropy_mode_confidence(sampled_values):
+    """
+    Computes the entropy and mode confidence for a list of sampled values.
+
+    Parameters:
+    - sampled_values: List of sampled values.
+
+    Returns:
+    - mode: Most common value (mode).
+    - mode_confidence: Ratio of mode frequency to total count.
+    - entropy: Shannon entropy.
+    """
+    freq = Counter(sampled_values)
+    total_count = len(sampled_values)
+
+    # Get mode and its frequency
+    mode, mode_freq = freq.most_common(1)[0]
+
+    # Compute mode confidence
+    mode_confidence = mode_freq / total_count
+
+    # Compute entropy
+    entropy = -sum((count / total_count) * math.log2(count / total_count) for count in freq.values())
+
+    return mode, mode_confidence, entropy
+
+
 def sample_states_book_multiple_times(slices, edges, forward_messages, transitions_dict, n=10):
     """
     Samples multiple times and computes the consensus (mode) for each node.
@@ -1603,10 +2052,17 @@ def sample_states_book_multiple_times(slices, edges, forward_messages, transitio
         # Iterate over nodes in the current slice
         for node in slices[t]:
             sampled_values = [all_samples[i][t][node] for i in range(n)]  # Collect samples across all runs
-            most_common_sample = Counter(sampled_values).most_common(1)[0][0]  # Get mode
-            consensus_samples[t][node] = most_common_sample  # Store consensus
+            # most_common_sample = Counter(sampled_values).most_common(1)[0][0]  # Get mode
+            mode, mode_confidence, entropy = compute_entropy_mode_confidence(sampled_values)
+            # consensus_samples[t][node] = most_common_sample  # Store consensus
+            consensus_samples[t][node] ={"mode": mode, "mode_confidence": mode_confidence,"entropy": entropy}
+    samples = {}
+    for t in consensus_samples.keys():
+        for node in consensus_samples[t].keys():
+            if node not in samples.keys():
+                samples[node] = consensus_samples[t][node]["mode"]
 
-    return consensus_samples
+    return consensus_samples, samples
 
 
 def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities"):
@@ -1615,6 +2071,7 @@ def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_mo
     """
     # Step 1: Initialization
     phasing_samples = {nn: samples[t][nn] for t in samples for nn in samples[t]}
+    # phasing_samples = samples
     sorted_nodes = sort_nodes(nodes)
     genotype_df = pd.read_csv(genotype_path).T
     predicted_haplotypes = pd.DataFrame(index=[f'haplotype_{p+1}' for p in range(ploidy)], columns=genotype_df.columns)
@@ -1675,6 +2132,257 @@ def predict_haplotypes(nodes, edges, samples, ploidy, genotype_path, fragment_mo
         # Select the position with the most connections
         selected_position = max(position_connections, key=lambda p: position_connections[p]["count"])
         relevant_edges = position_connections[selected_position]["edges"]
+        # print(f"Selected position: {selected_position}")
+        # Compute candidates
+        all_combinations, all_probabilities, candidate_counts, all_positions = compute_candidate_phasings_single_variable(
+            selected_position, relevant_edges, phased_positions, transitions_dict_extra,
+            phasing_samples, ploidy, predicted_haplotypes, config, fragment_model)
+
+        # Select and update
+        if all_combinations:
+            candidates = list(zip(all_combinations, all_probabilities, candidate_counts))
+            best_candidate = select_best_candidate(candidates, prioritize=priority)
+            best_combination, best_probability, best_count = best_candidate
+
+            selected_position_index = all_positions.index(selected_position)
+            predicted_haplotypes.loc[:, selected_position - 1] = best_combination[:, selected_position_index]
+        else:
+            # Fallback: Use target phasing
+            for edge in relevant_edges:
+                target_node = edge[1]
+                if str(selected_position) in target_node.split('-'):
+                    target_positions = [int(pos) for pos in target_node.split('-')]
+                    target_phasing = str_2_phas_1(phasing_samples[target_node], ploidy)
+                    target_position_index = target_positions.index(selected_position)
+                    predicted_haplotypes.loc[:, selected_position - 1] = target_phasing[:, target_position_index]
+                    break
+
+        # Update phased sets
+        for edge in relevant_edges:
+            node1, node2 = edge
+            if node1 in neighbor_nodes:
+                phased_nodes.add(node1)
+                unphased_nodes.discard(node1)
+            if node2 in neighbor_nodes:
+                phased_nodes.add(node2)
+                unphased_nodes.discard(node2)
+
+        phased_positions.add(selected_position)
+        unphased_positions.remove(selected_position)
+
+    return predicted_haplotypes
+
+
+def predict_haplotypes_entropy_based(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities"):
+    """
+    Predict haplotypes iteratively by phasing one variant at a time using entropy-based candidate selection.
+
+    Parameters:
+        nodes (list): All nodes in the graph (e.g., ['1-2','2-3',...]).
+        edges (list): List of edges (tuples) connecting nodes.
+        ploidy (int): Ploidy level.
+        samples (dict): A map node->string_phasing.
+        transitions_dict_extra (dict): Dictionary containing transition likelihoods between edges.
+    
+    Returns:
+        predicted_haplotypes (pd.DataFrame): Dataframe of predicted haplotypes.
+    """
+
+    phasing_samples = samples
+    sorted_nodes = sort_nodes(nodes)
+    genotype_df = pd.read_csv(genotype_path).T
+    predicted_haplotypes = pd.DataFrame(index=[f'haplotype_{p+1}' for p in range(ploidy)], columns=genotype_df.columns)
+
+    # Initialize phased and unphased sets
+    phased_nodes = set()
+    phased_positions = set()
+    unphased_nodes = set(nodes)
+    unphased_positions = {int(pos) for node in nodes for pos in node.split('-')}
+
+    # Start with the first node
+    first_node = sorted_nodes[0]
+    initial_positions = sorted({int(pos) for pos in first_node.split('-')})
+    initial_positions = [p - 1 for p in initial_positions]
+
+    predicted_haplotypes.loc[:, initial_positions] = str_2_phas_1(phasing_samples[first_node], ploidy)
+    phased_nodes.add(first_node)
+    unphased_nodes.remove(first_node)
+    phased_positions.update(map(int, first_node.split('-')))
+    unphased_positions -= set(map(int, first_node.split('-')))
+
+    # Step 2: Iterative Phasing
+    while unphased_positions:
+        # Find neighbors and relevant edges
+        neighbor_nodes = {n2 for n1, n2 in edges if n1 in phased_nodes and n2 in unphased_nodes} | \
+                         {n1 for n1, n2 in edges if n2 in phased_nodes and n1 in unphased_nodes}
+
+        # Compute entropy for each variant
+        position_entropy = {}
+
+        for n1, n2 in edges:
+            edge_label = f"{n1}--{n2}"  # Create edge label format
+            
+            if (n1 in phased_nodes and n2 in neighbor_nodes) or (n2 in phased_nodes and n1 in neighbor_nodes):
+                for pos in map(int, n1.split('-') + n2.split('-')):
+
+                    # Only process variants inside the neighborhood
+                    if pos in unphased_positions:
+                        # Extract likelihood values
+                        edge_likelihoods = []
+                        if edge_label in transitions_dict_extra["transitions"]:
+                            for _, likelihood_data in transitions_dict_extra["transitions"][edge_label].items():
+                                edge_likelihoods.extend(likelihood_data["matched_phasings"].values())
+
+                        # Append likelihoods to variant's entropy calculation
+                        if pos in position_entropy:
+                            position_entropy[pos].extend(edge_likelihoods)
+                        else:
+                            position_entropy[pos] = edge_likelihoods
+
+        # Compute entropy only for variants with valid likelihoods
+        position_entropy_values = {}
+        for pos, likelihoods in position_entropy.items():
+            if likelihoods:
+                probabilities = np.array(likelihoods) / np.sum(likelihoods)
+                position_entropy_values[pos] = entropy(probabilities)  # Compute entropy
+            else:
+                position_entropy_values[pos] = float('inf')  # Assign high entropy if no likelihoods exist
+
+        # Handle case where no valid variant is found (disconnected graph)
+        if not position_entropy_values:
+            raise ValueError("No valid variant found! This suggests the graph is disconnected.")
+
+        # Select the position with the lowest entropy
+        selected_position = min(position_entropy_values, key=position_entropy_values.get)
+
+        # Get relevant edges for the selected position
+        relevant_edges = [edge for edge in edges if str(selected_position) in edge[0].split('-') or str(selected_position) in edge[1].split('-')]
+
+        # Compute candidates
+        all_combinations, all_probabilities, candidate_counts, all_positions = compute_candidate_phasings_single_variable(
+            selected_position, relevant_edges, phased_positions, transitions_dict_extra,
+            phasing_samples, ploidy, predicted_haplotypes, config, fragment_model)
+
+        # Select and update
+        if all_combinations:
+            candidates = list(zip(all_combinations, all_probabilities, candidate_counts))
+            best_candidate = select_best_candidate(candidates, prioritize=priority)
+            best_combination, best_probability, best_count = best_candidate
+
+            selected_position_index = all_positions.index(selected_position)
+            predicted_haplotypes.loc[:, selected_position - 1] = best_combination[:, selected_position_index]
+        else:
+            # Fallback: Use target phasing
+            for edge in relevant_edges:
+                target_node = edge[1]
+                if str(selected_position) in target_node.split('-'):
+                    target_positions = [int(pos) for pos in target_node.split('-')]
+                    target_phasing = str_2_phas_1(phasing_samples[target_node], ploidy)
+                    target_position_index = target_positions.index(selected_position)
+                    predicted_haplotypes.loc[:, selected_position - 1] = target_phasing[:, target_position_index]
+                    break
+
+        # Update phased sets
+        for edge in relevant_edges:
+            node1, node2 = edge
+            if node1 in neighbor_nodes:
+                phased_nodes.add(node1)
+                unphased_nodes.discard(node1)
+            if node2 in neighbor_nodes:
+                phased_nodes.add(node2)
+                unphased_nodes.discard(node2)
+
+        phased_positions.add(selected_position)
+        unphased_positions.remove(selected_position)
+
+    return predicted_haplotypes
+
+
+def predict_haplotypes_single_evidence_count(
+    nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, assignment_dict, config, priority="probabilities"
+):
+    """
+    Predict haplotypes iteratively by phasing one variant at a time using candidate sampling and selection.
+    Instead of counting the number of edges, this version sums the number of evidence (reads) covering those edges.
+
+    Parameters:
+        nodes (list): All nodes in the graph (e.g., ['1-2','2-3',...]).
+        edges (list): List of edges (tuples) connecting nodes.
+        ploidy (int): Ploidy level.
+        samples (dict): A map node->string_phasing.
+        transitions_dict_extra (dict): Dictionary with 'states' (node-to-reads mapping) and 'transitions' (edge-to-reads mapping).
+    
+    Returns:
+        predicted_haplotypes (pd.DataFrame): Dataframe of predicted haplotypes.
+    """
+
+    # Step 1: Initialization
+    phasing_samples = samples
+    sorted_nodes = sort_nodes(nodes)
+    genotype_df = pd.read_csv(genotype_path).T
+    predicted_haplotypes = pd.DataFrame(index=[f'haplotype_{p+1}' for p in range(ploidy)], columns=genotype_df.columns)
+
+    # Initialize phased and unphased sets
+    phased_nodes = set()
+    phased_positions = set()
+    unphased_nodes = set(nodes)
+    unphased_positions = {int(pos) for node in nodes for pos in node.split('-')}
+
+    # Start with the first node
+    first_node = sorted_nodes[0]
+    initial_positions = sorted({int(pos) for pos in first_node.split('-')})
+    initial_positions = [p - 1 for p in initial_positions]
+
+    predicted_haplotypes.loc[:, initial_positions] = str_2_phas_1(phasing_samples[first_node], ploidy)
+    phased_nodes.add(first_node)
+    unphased_nodes.remove(first_node)
+    phased_positions.update(map(int, first_node.split('-')))
+    unphased_positions -= set(map(int, first_node.split('-')))
+
+    # Step 2: Iterative Phasing
+    while unphased_positions:
+        # Find neighbors and relevant edges
+        neighbor_nodes = {n2 for n1, n2 in edges if n1 in phased_nodes and n2 in unphased_nodes} | \
+                         {n1 for n1, n2 in edges if n2 in phased_nodes and n1 in unphased_nodes}
+
+        # Compute evidence count per variant
+        position_evidence = defaultdict(lambda: {"count": 0, "edges": []})
+
+        for n1, n2 in edges:
+            edge_label = f"{n1}--{n2}"  # Create the edge label format
+
+            if (n1 in phased_nodes and n2 in neighbor_nodes) or (n2 in phased_nodes and n1 in neighbor_nodes):
+                for pos in map(int, n1.split('-') + n2.split('-')):
+                    if pos in unphased_positions:
+                        # Sum the number of evidence (reads) for the edge
+                        evidence_count = len(assignment_dict["transitions"].get(edge_label, []))
+                        position_evidence[pos]["count"] += evidence_count
+                        position_evidence[pos]["edges"].append((n1, n2))
+
+        # Check if there are no connections
+        if not position_evidence:
+            # Select the first unphased node from the sorted list
+            for next_node in sorted_nodes:
+                if next_node in unphased_nodes:
+                    next_positions = sorted({int(pos) for pos in next_node.split('-')})
+                    next_positions = [p - 1 for p in next_positions]
+
+                    # Extract phasing for the new node
+                    next_node_sample = phasing_samples[next_node]
+                    next_sample_np = str_2_phas_1(next_node_sample, ploidy)
+
+                    # Update predicted haplotypes
+                    predicted_haplotypes.loc[:, next_positions] = next_sample_np
+                    phased_nodes.add(next_node)
+                    unphased_nodes.remove(next_node)
+                    phased_positions.update(map(int, next_node.split('-')))
+                    unphased_positions -= set(map(int, next_node.split('-')))
+                    break
+            continue
+
+        # Select the position with the most evidence (not just edge count)
+        selected_position = max(position_evidence, key=lambda p: position_evidence[p]["count"])
+        relevant_edges = position_evidence[selected_position]["edges"]
 
         # Compute candidates
         all_combinations, all_probabilities, candidate_counts, all_positions = compute_candidate_phasings_single_variable(
@@ -1738,6 +2446,8 @@ def predict_haplotypes_multiple_variants(nodes, edges, samples, ploidy, genotype
     """
     # Step 1: Initialization
     samples_brief = {nn: samples[t][nn] for t in samples for nn in samples[t]}
+    # samples_brief = samples
+
     sorted_nodes = sort_nodes(nodes)
     genotype_df = pd.read_csv(genotype_path).T
     predicted_haplotypes = pd.DataFrame(index=[f'haplotype_{p+1}' for p in range(ploidy)], columns=genotype_df.columns)
@@ -1755,15 +2465,9 @@ def predict_haplotypes_multiple_variants(nodes, edges, samples, ploidy, genotype
 
         predicted_haplotypes.loc[:, initial_positions] = str_2_phas_1(samples_brief[first_node], ploidy)
 
-
         phased_nodes.add(first_node)
         unphased_nodes.discard(first_node)
 
-
-    # Start with the first node
-
-
-        # Example: for a node '3-4', we turn them into integers {3,4} then mark them phased
         first_positions = {int(pos) for pos in first_node.split('-')}
         phased_positions.update(first_positions)
         unphased_positions -= first_positions
@@ -1776,8 +2480,7 @@ def predict_haplotypes_multiple_variants(nodes, edges, samples, ploidy, genotype
         # Identify neighbor_nodes: nodes that are unphased but connected to at least one phased node
         neighbor_nodes = (
             {n2 for n1, n2 in edges if n1 in phased_nodes and n2 in unphased_nodes} |
-            {n1 for n1, n2 in edges if n2 in phased_nodes and n1 in unphased_nodes}
-        )
+            {n1 for n1, n2 in edges if n2 in phased_nodes and n1 in unphased_nodes})
 
         # Build a dictionary to see which unphased positions connect to the phased set
         position_connections = defaultdict(lambda: {"count": 0, "edges": []})
@@ -1790,18 +2493,25 @@ def predict_haplotypes_multiple_variants(nodes, edges, samples, ploidy, genotype
                         position_connections[pos]["count"] += 1
                         position_connections[pos]["edges"].append((n1, n2))
 
-        # If there are no connections, pick the next unphased node from sorted list as fallback
+        # Check if there are no connections
         if not position_connections:
+            # print(f"No connections found for unphased positions: {unphased_positions}")
+            # Select the first unphased node from the sorted list
             for next_node in sorted_nodes:
                 if next_node in unphased_nodes:
-                    # Mark its positions as phased
-                    next_positions = {int(pos) for pos in next_node.split('-')}
-                    phased_positions.update(next_positions)
-                    unphased_positions -= next_positions
+                    next_positions = sorted({int(pos) for pos in next_node.split('-')})
+                    next_positions = [p - 1 for p in next_positions]
 
-                    # Mark node as phased
+                    # Extract phasing for the new node
+                    next_node_sample = samples_brief[next_node]
+                    next_sample_np = str_2_phas_1(next_node_sample, ploidy)
+
+                    # Update predicted haplotypes
+                    predicted_haplotypes.loc[:, next_positions] = next_sample_np
                     phased_nodes.add(next_node)
-                    unphased_nodes.discard(next_node)
+                    unphased_nodes.remove(next_node)
+                    phased_positions.update(map(int, next_node.split('-')))
+                    unphased_positions -= set(map(int, next_node.split('-')))
                     break
             continue
 
@@ -1826,12 +2536,37 @@ def predict_haplotypes_multiple_variants(nodes, edges, samples, ploidy, genotype
         # phased_haplotypes_for_selected = do_actual_phasing(selected_positions, relevant_edges, ...)
 
         # Compute candidates
-        candidates = compute_candidate_phasings_multi_variable(selected_positions, relevant_edges, phased_positions, transitions_dict_extra, samples_brief, ploidy, predicted_haplotypes, config, fragment_model)
+        all_combinations, all_probabilities, candidate_counts, all_positions = compute_candidate_phasings_multi_variable(selected_positions, relevant_edges, phased_positions, transitions_dict_extra, samples_brief, ploidy, predicted_haplotypes, config, fragment_model)
 
+        # Select and update
+        if all_combinations:
+            candidates = list(zip(all_combinations, all_probabilities, candidate_counts))
+            best_candidate = select_best_candidate(candidates, prioritize=priority)
+            best_combination, best_probability, best_count = best_candidate
 
+            for pos in selected_positions:
+                col_idx = all_positions.index(pos)
+                predicted_haplotypes.loc[:, pos - 1] = best_combination[:, col_idx]
+        
+        else:
+            # Fallback: Assign phasing using the most relevant edges
+            print('Fall back')
+            assigned_positions = set()
+            for edge in relevant_edges:
+                target_node = edge[1]
+                target_positions = [int(p) for p in target_node.split('-')]
+                target_phasing = str_2_phas_1(samples_brief[target_node], ploidy)
+
+                for pos in selected_positions:
+                    if pos in target_positions and pos not in assigned_positions:
+                        target_position_index = target_positions.index(pos)
+                        predicted_haplotypes.loc[:, pos - 1] = target_phasing[:, target_position_index]
+                        assigned_positions.add(pos)  # Track assigned positions
+
+                                
         # Select the best candidate        
         #
-        # For now we just skip it and keep a placeholder:
+        # For now we just skip it an keep a placeholder:
         # ---------------------------------------------------------------------
         # TODO: call the second algorithm with (selected_positions, relevant_edges, phased_positions, ...)
         #       to do the actual phasing
@@ -1852,139 +2587,7 @@ def predict_haplotypes_multiple_variants(nodes, edges, samples, ploidy, genotype
                 unphased_nodes.discard(node2)
 
     # Return updated sets so we know what ended up phased/unphased
-    return phased_nodes, unphased_nodes, phased_positions, unphased_positions
-
-
-def predict_haplotypes_multiple_variants2(nodes, edges, samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities"):
-    """
-    Algorithm 1: Iterative selection of positions to be phased.
-
-    This function finds unphased positions connected to the current phased set and
-    moves them into the phased sets. It does NOT include the actual phasing logic (Algorithm 2).
-
-    Parameters:
-        nodes (list): All nodes in the graph (e.g., ['1-2','2-3',...]).
-        edges (list): List of edges (tuples) connecting nodes.
-        samples (dict): Original structure with sample phasings. (node->string_phasing)
-        ploidy (int): Ploidy level.
-        genotype_path (str): CSV file path for genotype info.
-        fragment_model: Contains fragment information (unused here, but part of function signature).
-        transitions_dict_extra (dict): Extra data about transitions (unused here, but part of function signature).
-        config: Configuration object (e.g., error rate) (unused in selection, but part of signature).
-        priority (str): Priority mode, unused in selection but included for consistency.
-
-    Returns:
-        phased_nodes (set)       : The set of nodes that ended up phased.
-        unphased_nodes (set)     : The set of nodes still unphased (should be empty if done).
-        phased_positions (set)   : The set of positions that ended up phased.
-        unphased_positions (set) : The set of positions still unphased.
-    """
-    # -------------------------------------------------------------------------
-    # Step 1: Initialization (same as old function to keep consistency)
-    # -------------------------------------------------------------------------
-    phasing_samples = {nn: samples[t][nn] for t in samples for nn in samples[t]}
-    sorted_nodes = sort_nodes(nodes)
-
-    genotype_df = pd.read_csv(genotype_path).T
-    predicted_haplotypes = pd.DataFrame(
-        index=[f'haplotype_{p+1}' for p in range(ploidy)],
-        columns=genotype_df.columns
-    )
-
-    # Sets to track phased/unphased nodes & positions
-    phased_nodes = set()
-    unphased_nodes = set(nodes)
-    phased_positions = set()
-    unphased_positions = {int(pos) for node in nodes for pos in node.split('-')}
-
-    # Pick the first node from sorted_nodes as a starting point
-    if sorted_nodes:
-        first_node = sorted_nodes[0]
-        phased_nodes.add(first_node)
-        unphased_nodes.discard(first_node)
-
-        first_positions = {int(pos) for pos in first_node.split('-')}
-        phased_positions.update(first_positions)
-        unphased_positions -= first_positions
-
-    # -------------------------------------------------------------------------
-    # MAIN WHILE LOOP: keep going until all positions are phased
-    # -------------------------------------------------------------------------
-    while unphased_positions:
-
-        # Identify neighbor_nodes: those unphased but connected to any phased node
-        neighbor_nodes = (
-            {n2 for n1, n2 in edges if n1 in phased_nodes and n2 in unphased_nodes} |
-            {n1 for n1, n2 in edges if n2 in phased_nodes and n1 in unphased_nodes}
-        )
-
-        # Build dictionary: which unphased positions connect to the phased set via edges
-        position_connections = defaultdict(lambda: {"count": 0, "edges": []})
-        for n1, n2 in edges:
-            # If edge connects a phased node with one in neighbor_nodes, track them
-            if (n1 in phased_nodes and n2 in neighbor_nodes) or (n2 in phased_nodes and n1 in neighbor_nodes):
-                # Each position in these two nodes is "connected"
-                for pos in map(int, n1.split('-') + n2.split('-')):
-                    if pos in unphased_positions:
-                        position_connections[pos]["count"] += 1
-                        position_connections[pos]["edges"].append((n1, n2))
-
-        # If there are no connections at all, fallback: pick next unphased node from sorted_nodes
-        if not position_connections:
-            for next_node in sorted_nodes:
-                if next_node in unphased_nodes:
-                    next_positions = {int(pos) for pos in next_node.split('-')}
-                    phased_positions.update(next_positions)
-                    unphased_positions -= next_positions
-
-                    phased_nodes.add(next_node)
-                    unphased_nodes.discard(next_node)
-                    break
-            continue
-
-        # Gather *all* unphased positions that appear in position_connections
-        selected_positions = set(position_connections.keys())
-
-        # Build a set of "relevant_edges": union of edges from these positions ...
-        all_relevant_edges = set()
-        for pos in selected_positions:
-            for e in position_connections[pos]["edges"]:
-                all_relevant_edges.add(e)
-        
-
-        # ... plus also edges among neighbor_nodes themselves (if multiple neighbor_nodes exist)
-        for e in edges:
-            n1, n2 = e
-            if n1 in neighbor_nodes and n2 in neighbor_nodes:
-                # Even if this edge doesn't directly connect to a phased node, we add it
-                # because it belongs to the subgraph of neighbor_nodes.
-                all_relevant_edges.add(e)
-
-        relevant_edges = list(all_relevant_edges)
-        print(f"Selected positions: {selected_positions}", f"Relevant edges: {relevant_edges}")
-        # ---------------------------------------------------------------------
-        # TODO (Algorithm 2): Do the actual phasing of these selected positions.
-        # e.g. call your "phase_positions(selected_positions, relevant_edges, ...)"
-        # This code is left out for clarity.
-        # ---------------------------------------------------------------------
-        # compute_candidate_phasings(selected_positions, relevant_edges, phased_positions, transitions_dict_extra, phasing_samples, ploidy, predicted_haplotypes, config, fragment_model)
-
-        # Mark these positions as phased
-        phased_positions.update(selected_positions)
-        unphased_positions -= selected_positions
-
-        # Mark neighbor_nodes as phased, so we won't pick them again in future loops
-        for edge in relevant_edges:
-            node1, node2 = edge
-            if node1 in neighbor_nodes:
-                phased_nodes.add(node1)
-                unphased_nodes.discard(node1)
-            if node2 in neighbor_nodes:
-                phased_nodes.add(node2)
-                unphased_nodes.discard(node2)
-
-    # Return updated sets at the end
-    return phased_nodes, unphased_nodes, phased_positions, unphased_positions
+    return predicted_haplotypes
 
 
 def build_children_dict(edges):
