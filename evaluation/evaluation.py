@@ -518,7 +518,7 @@ full reconstruction (one big array, not split into blocks) ,
 list of reads (list of position/sequence pairs)
 whether or not you want to use the probabalistic version of error correction
 '''
-def mec_full(H_star, list_of_reads, probabalistic=False):
+def mec_full(H_star, H, list_of_reads, probabalistic=False):
   
   mec_running_total = 0
   
@@ -526,7 +526,7 @@ def mec_full(H_star, list_of_reads, probabalistic=False):
   
   pos_allele_pairs = [(list_of_reads[i], list_of_reads[i + 1]) for i in range(0, len(list_of_reads), 2)]
 
-  block_defns =  find_blocks(H_star, H_star)
+  block_defns =  find_blocks(H_star, H)
   blocks = [H_star[:,b['start']:b['end'] + 1] for b in block_defns]
   
   # Precompute block widths and start indices
@@ -569,7 +569,8 @@ def mec_full(H_star, list_of_reads, probabalistic=False):
     mec_running_total += (len(ordered_blocks)-1)*(k-1)/k
     
     return mec_running_total
-        
+
+
 def calculate_accuracy(reconstructed_haplotypes, true_haplptypes):
   """
   calculates how many SNPs line up perfectly (across all haplotypes)
@@ -592,7 +593,7 @@ def calculate_accuracy(reconstructed_haplotypes, true_haplptypes):
       best_permutation = permuted_reconstructed_haplotypes
       
   return accuracy, best_permutation
-  
+
 
 def calculate_mismatch_error(reconstructed_haplotypes, true_haplotypes):
   """
@@ -974,4 +975,3 @@ def compute_vector_error_rate_with_missing_positions(H_star, H):
         # print(block, vector_error)
     vector_error_rate = vector_error/H.shape[1]
     return vector_error_rate, vector_error, blocks
-
