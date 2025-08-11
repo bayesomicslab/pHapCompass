@@ -351,6 +351,7 @@ def plot_autocorrelation():
     DIRECTIONS = ['same', 'opposite']
     DIRECTION_NAMES = {'same': 'Forward', 'opposite': 'Reverse'}
 
+
 def quantile_plots_for_chrom(chrom):
     for i, motif in enumerate(NONB_MOTIFS):
         motif_pretty = NONB_NAMES[i]
@@ -400,8 +401,6 @@ def main():
     print("Generating quantile plots for chr3...")
     quantile_plots_for_chrom("chr3")
     print("Quantile plot generation complete.")
-
-
 
 
 

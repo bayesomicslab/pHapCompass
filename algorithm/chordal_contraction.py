@@ -4,7 +4,7 @@ from algorithm.haplotype_assembly_helper import generate_phasings_ploidy_long
 from utils.utils import *
 from scipy.stats import entropy
 import random
-import networkx as nx
+# import networkx as nx
 import time
 import graph_tool.all as gt
 

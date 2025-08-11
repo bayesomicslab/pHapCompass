@@ -1,4 +1,4 @@
-import networkx as nx
+# import networkx as nx
 import itertools
 import numpy as np
 from utils.utils import phas_2_str, get_matching_reads_for_positions, convert_to_int_list, sort_nodes

@@ -1,4 +1,4 @@
-import networkx as nx
+# import networkx as nx
 import numpy as np
 import graph_tool.all as gt
 

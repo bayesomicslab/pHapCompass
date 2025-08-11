@@ -6,8 +6,8 @@ import os
 from utils.utils import wsl_available
 import shutil
 import gzip
-import vcfpy
-from cyvcf2 import VCF
+# import vcfpy
+# from cyvcf2 import VCF
 import numpy as np
 
 

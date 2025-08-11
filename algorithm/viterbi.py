@@ -3,7 +3,6 @@ from collections import defaultdict
 import numpy as np
 
 
-
 def select_states_viterbi_like(slices, edges, forward_messages, transitions_dict, emission_dict):
     backpointer = defaultdict(lambda: defaultdict(dict))
     viterbi_scores = defaultdict(lambda: defaultdict(dict))
