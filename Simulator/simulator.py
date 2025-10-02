@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 import graph_tool.all as gt
 from FFBS.test_FFBS_quotient_graph import *
 import time
+import re
 
 
 class Simulator:
@@ -1309,13 +1310,13 @@ def simulate_NA12878():
         # "input_vcf_path": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21_NA12878/updated_NA12878_extracted.vcf',
         "input_vcf_path": "/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21_NA12878/updated_NA12878_extracted_no_duplicate.vcf",
         "contig_fasta": '/mnt/research/aguiarlab/proj/HaplOrbit/reference/chr21_NA12878/GRCh37_chr21.fna',
-        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878',
+        "main_path": '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878_2',
         "art_path": 'art_illumina',
         "extract_hairs_path": 'extractHAIRS',
         "n_samples": 100, 
         "target_spacing": 100,
         "densify_snps": False, 
-        "contig_lens": [100, 1000], 
+        "contig_lens": [100000], 
         "ploidies": [3, 4, 6, 8],
         "coverages": [10, 30, 50, 70, 100],
         "read_length": 150,
@@ -1327,6 +1328,189 @@ def simulate_NA12878():
     simulator = SimulatorNA12878(beagle_config_NA12878)
     simulator.simulate()
 
+
+def extract_chromosome(fasta_path, chrom, out_path=None):
+    """
+    Extract one chromosome/contig from a plain-text FASTA by matching the
+    first token after '>' (e.g., '>Chr8 something' -> 'Chr8').
+
+    If out_path is given, writes the FASTA block there.
+    Otherwise returns the FASTA-formatted string.
+    """
+    out_lines = []
+    found = False
+    write_block = False
+
+    with open(fasta_path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            if line.startswith(">"):
+                # End current block if we were writing and we hit a new header
+                if found and not write_block:
+                    break
+                # Decide whether this header matches the requested chrom
+                key = line[1:].split()[0] if len(line) > 1 else ""
+                write_block = (key == chrom)
+                if write_block:
+                    # out_lines.append(line)
+                    out_lines.append('>'+key+'\n')
+                    found = True
+            else:
+                if write_block:
+                    out_lines.append(line)
+
+    if not found:
+        raise ValueError(f"Contig '{chrom}' not found in {fasta_path}")
+
+    if out_path:
+        with open(out_path, "w", encoding="utf-8") as out:
+            out.writelines(out_lines)
+    else:
+        return "".join(out_lines)
+
+
+def tsv_chrom_to_vcf(tsv_path, chromosome, out_vcf_path, sample_name="SAMPLE"):
+    """
+    Convert a whitespace-delimited variants table to a VCF for one chromosome.
+    Expected leading columns:
+      var_id contig varpos ref_allele alt_allele hap_1 hap_2 [hap_3 hap_4 ...]
+    Extra columns are ignored. Lines with too few columns are skipped.
+
+    Writes a phased GT built from all hap_* columns present.
+    """
+    strip_prefix = re.compile(r'^\s*Block\s+length\s+\d+\s+')
+
+    with open(out_vcf_path, "w", encoding="utf-8") as out, \
+         open(tsv_path, "r", encoding="utf-8") as fh:
+
+        # Minimal header
+        out.write("##fileformat=VCFv4.2\n")
+        out.write(f"##contig=<ID={chromosome}>\n")
+        out.write('##FORMAT=<ID=GT,Number=1,Type=String,Description="Phased genotype from hap_* columns (0=REF,1=ALT)">\n')
+        out.write(f"#CHROM\tPOS\tID\tREF\tALT\tQUAL\tFILTER\tINFO\tFORMAT\t{sample_name}\n")
+
+        first_line = True
+        for line in fh:
+            if first_line:
+                line = strip_prefix.sub("", line, count=1)  # remove "Block length <num> "
+                first_line = False
+
+            s = line.strip()
+            if not s or s.startswith("#"):
+                continue
+            parts = s.split()  # whitespace-split
+
+            if parts[0].lower() == "var_id":
+                continue  # skip header row
+            if len(parts) < 7:           # <-- changed from 9 to 7 (supports diploid+)
+                continue
+
+            var_id, contig, pos, ref, alt = parts[0], parts[1], parts[2], parts[3], parts[4]
+            if contig != chromosome:
+                continue
+
+            haps = parts[5:]             # <-- changed: take all hap_* columns present
+            gt_fields = []
+            for x in haps:
+                if x in {"0", "1"}:
+                    gt_fields.append(x)
+                elif x == ".":
+                    gt_fields.append(".")
+                else:
+                    gt_fields.append(".")  # unknown -> missing
+            gt = "|".join(gt_fields)
+
+            out.write(f"{contig}\t{pos}\t{var_id}\t{ref}\t{alt}\t.\tPASS\t.\tGT\t{gt}\n")
+
+
+
+def print_fasta_lengths(fasta_path, header_prefix=None):
+    """
+    Print 'header<TAB>length' for each FASTA record in fasta_path.
+    If header_prefix is given (e.g., 'haplotype_1'), only print records whose
+    header (first token after '>') starts with that prefix.
+    """
+    with open(fasta_path, "r", encoding="utf-8") as fh:
+        for line in fh:
+            if line.startswith(">"):
+                print(line, end="")           # print header line itself
+            else:
+                print(len(line.rstrip("\r\n")))  # length of sequence line (no newline)
+
+
+
+
+
+def write_concat_chromosome_simple(fasta_paths, chrom, out_path):
+    """
+    Given a list of FASTA file paths, extract the block whose first header token == `chrom`
+    from each file and write a single multi-FASTA to `out_path`, with headers named by
+    hap number in the filename (e.g., '*hap1*' -> '>haplotype_1'). Sequences are one line.
+    """
+    with open(out_path, "w", encoding="utf-8") as out:
+        for raw_fp in fasta_paths:
+            fp = os.path.expanduser(raw_fp.strip())  # handle spaces, ~
+            fname = os.path.basename(fp)
+
+            # hap number from filename (e.g., hap1, hap_2, haplotype-3)
+            m = re.search(r'hap(?:lotype[_-]?)?(\d+)', fname, re.IGNORECASE)
+            if not m:
+                raise ValueError(f"Cannot determine hap number from filename: {fname}")
+            hap_no = int(m.group(1))
+
+            # extract sequence for `chrom`
+            seq_chunks, writing, found = [], False, False
+            with open(fp, "r", encoding="utf-8") as fh:
+                for line in fh:
+                    if line.startswith(">"):
+                        key = line[1:].split()[0] if len(line) > 1 else ""
+                        writing = (key == chrom)
+                        if writing:
+                            found = True
+                        continue
+                    if writing:
+                        seq_chunks.append("".join(line.split()))  # strip whitespace
+
+            if not found:
+                raise ValueError(f"Contig '{chrom}' not found in file: {fp}")
+
+            seq = "".join(seq_chunks).upper()
+            out.write(f">haplotype_{hap_no}\n{seq}\n")
+
+
+
+def simulate_long_reads():
+    pbsim_location = '/home/mah19006/pHapCompass_v2/pbsim3/src/pbsim'
+    model_path = '/home/mah19006/pHapCompass_v2/pbsim3/data/QSHMM-ONT-HQ.model' # QSHMM-ONT-HQ.model
+    # model_path = '/home/mah19006/pHapCompass_v2/pbsim3/data/QSHMM-RSII.model'
+    dataset_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_auto'
+    hap_path = '/mnt/research/aguiarlab/proj/HaplOrbit/reference/simulated_haplotypes/auto'
+    coverages = [2, 10, 30, 50, 70, 100]
+    ploidies = [2, 3, 4, 6, 8]
+    mut_rates = [0.001, 0.005, 0.01]
+    samples = range(20)
+    chrom = 'Chr1'
+    for ploidy in ploidies:
+        for mr in mut_rates:
+            for sample in samples:
+                
+                haplotype_path = os.path.join(hap_path, 'ploidy_' + str(ploidy), 'mut_' + str(mr), str(sample).zfill(2))
+                haplotype_names = [os.path.join(haplotype_path, str(sample).zfill(2) + '_' + 'hap' + str(i + 1) + '.fa.gz') for i in range(ploidy)]
+                # haplotype_names = ['test_hap1.fa', 'test_hap2.fa', 'test_hap3.fa', 'test_hap4.fa']
+                # out_path = '/mnt/research/aguiarlab/proj/HaplOrbit/reference/potato_sim_fasta'
+                variation_txt_path = os.path.join(haplotype_path, str(sample).zfill(2) + '_varianthaplos.txt')
+                out_vcf_path = os.path.join(haplotype_path, chrom + '.vcf')
+                fasta_file_name = os.path.join(haplotype_path, chrom + '_ploidy_' + str(ploidy) + '_sample_' + str(sample).zfill(2) +'.fa.gz')
+                write_concat_chromosome_simple(haplotype_names, chrom, fasta_file_name)
+                tsv_chrom_to_vcf(variation_txt_path, chrom, out_vcf_path, sample_name="SAMPLE")
+
+                for coverage in coverages:
+                    cov_path = os.path.join(dataset_path, ploidy, coverage, str(sample).zfill(2))
+                    if not os.path.exists(cov_path):
+                        os.makedirs(cov_path, exist_ok=True)
+                    # pbsim_command = 'pbsim --strategy wgs --method qshmm --qshmm data/QSHMM-ONT.model --depth 30 --genome ref.fa       --prefix ont_r10x_30x'
+                    # pbsim_command = '{} --strategy wgs --method qshmm --qshmm {} --depth {} --genome {} --pass-num 10 --prefix sim'.format(pbsim_location, model_path, coverage, fasta_file_name)
+                    pbsim_command = '{} --strategy wgs --method qshmm --qshmm {} --depth {} --genome {}  --accuracy-mean 0.999 0.0005 --prefix sim'.format(pbsim_location, model_path, coverage, fasta_file_name)
+                    # pbsim_command = 
 
 # def simulate_na12878():
 

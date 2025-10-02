@@ -1,4 +1,6 @@
 import numpy as np
+import gzip
+import csv
 import matplotlib.pyplot as plt
 import itertools
 import os
@@ -899,3 +901,123 @@ def compute_solution_likelihood(predicted_haplotypes_np, fragment_model, config)
         obs = fragment_model.fragment_list[i + 1]
         wei += compute_likelihood_generalized_plus(np.array(obs), predicted_haplotypes_np[:, pos], list(range(len(obs))), list(range(len(obs))), config.error_rate)
     return wei
+
+
+
+
+def vcf_gt_to_csv(vcf_path: str,
+                  csv_path: str,
+                  ploidy: int,
+                  sample_name: str = None,
+                  contig_filter: str | None = None) -> int:
+    """
+    Read a VCF and write a CSV with columns haplotype_0..haplotype_{ploidy-1}
+    containing the genotype digits from the sample's GT field (e.g., 0/1/1/1).
+
+    Parameters
+    ----------
+    vcf_path : str
+        Path to the VCF (.vcf or .vcf.gz).
+    csv_path : str
+        Output CSV path.
+    sample_name : str, optional
+        If provided, select this sample column; otherwise use the only sample present.
+    ploidy : int
+        Expected number of alleles in GT (default 4).
+    contig_filter : str | None
+        If provided, keep only rows with CHROM == contig_filter.
+
+    Returns
+    -------
+    int
+        Number of rows written.
+    """
+    # opener for gz/plain
+    opener = gzip.open if vcf_path.endswith(".gz") else open
+
+    # headers for CSV
+    fieldnames = [f"haplotype_{i}" for i in range(ploidy)]
+
+    n_written = 0
+    with opener(vcf_path, "rt") as fin, open(csv_path, "w", newline="") as fout:
+        writer = csv.DictWriter(fout, fieldnames=fieldnames)
+        writer.writeheader()
+
+        sample_idx = None
+        gt_index_in_format = None
+
+        for line in fin:
+            if not line or line.startswith("##"):
+                continue
+            if line.startswith("#CHROM"):
+                # Parse header to identify sample column
+                header = line.rstrip("\n").split("\t")
+                # VCF fixed columns + FORMAT + samples...
+                #   0     1   2   3   4   5     6      7      8      9..
+                # #CHROM POS ID  REF ALT QUAL FILTER INFO   FORMAT  sample(s)
+                if len(header) < 10:
+                    raise ValueError("VCF has no sample columns.")
+                samples = header[9:]
+                if sample_name is None:
+                    if len(samples) != 1:
+                        raise ValueError(
+                            f"VCF contains {len(samples)} samples; specify sample_name."
+                        )
+                    sample_idx = 9  # first and only sample
+                else:
+                    try:
+                        sample_idx = header.index(sample_name)
+                    except ValueError:
+                        raise ValueError(f"sample_name '{sample_name}' not found in VCF header.")
+                continue
+
+            # Data lines
+            parts = line.rstrip("\n").split("\t")
+            if len(parts) < sample_idx + 1:
+                continue
+
+            chrom = parts[0]
+            if contig_filter is not None and chrom != contig_filter:
+                continue
+
+            fmt = parts[8]         # FORMAT string like "GT:DP:AD:RO:QR:AO:QA"
+            sample_field = parts[sample_idx]
+
+            # Locate GT once per distinct FORMAT
+            # (FORMAT is usually stable, but we can re-scan if it changes)
+            fmt_keys = fmt.split(":")
+            try:
+                gt_index_in_format = fmt_keys.index("GT")
+            except ValueError:
+                # No GT => skip
+                continue
+
+            sample_values = sample_field.split(":")
+            if gt_index_in_format >= len(sample_values):
+                continue
+
+            gt = sample_values[gt_index_in_format]
+            # Accept phased or unphased separators
+            if "|" in gt:
+                alleles = gt.split("|")
+            else:
+                alleles = gt.split("/")
+
+            if len(alleles) != ploidy:
+                # Skip if ploidy mismatch (e.g., missing or wrong model)
+                continue
+            if any(a == "." or a == "" for a in alleles):
+                continue
+            # Keep only 0/1; if multi-allelic snuck in, map non-'0' to '1' (optional)
+            try:
+                nums = [int(a) for a in alleles]
+            except ValueError:
+                # Non-integer allele codes; skip
+                continue
+            # For biallelic VCF this is already 0/1; if a>1 appears, treat as 1
+            nums = [0 if x == 0 else 1 for x in nums]
+
+            row = {f"haplotype_{i}": nums[i] for i in range(ploidy)}
+            writer.writerow(row)
+            n_written += 1
+
