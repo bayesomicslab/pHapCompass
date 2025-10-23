@@ -62,6 +62,7 @@ def prepare_results_ismb():
     #     .apply(lambda group: group.drop_duplicates(subset="Sample").sort_values(by="Sample"))
     #     .reset_index(drop=True)
     # )
+    
     group_sizes = beagle_results.groupby(["Contig", "Ploidy", "Coverage"]).size()
     small_groups = group_sizes[group_sizes < 100]
 
@@ -457,7 +458,6 @@ def prepare_results_partial_haplotypes_pHapcompass_MV():
     print("pHapcompass results collected")
 
 
-
 def FFBS_entropy_confidence():
     main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
     output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/ffbs_simulated_NA12878.csv'
@@ -492,7 +492,6 @@ def FFBS_entropy_confidence():
                         counter += 1
     result_df.to_csv(output_path, index=False)
     print("pHapcompass results collected")
-
 
 def collect_single_mv_results():
     main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_NA12878'
@@ -537,7 +536,6 @@ def collect_single_mv_results():
                         counter += 1
     result_df.to_csv(output_path, index=False)
     print("pHapcompass results collected")
-
 
 
 def collect_single_mv_sample_results():
@@ -1580,6 +1578,66 @@ def eval_one_input_pHapcompass_missing(inp):
     with open(pkl_name, "wb") as f:
         pickle.dump(evals, f)
     print(f"Done with {pkl_name}")
+
+
+def prepare_results_recomb_auto_short():
+    main_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results_short'
+    output_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results/recomb/pHapCompass_auto_short_2346.csv'
+    ploidies = [2, 3, 4, 6] #, 8]
+    mut_rates = [0.001, 0.005, 0.01]
+    coverages = [3, 5, 10, 20, 40, 70]
+    n_samples = 20
+    # metrics = ['vector_error_rate', 'vector_error', 'accuracy', 'mismatch_error', 'mec']
+    result_df = pd.DataFrame(columns=['Method', 'Data', 'Ploidy', 'Coverage', 'Sample', 'Metric', 'Value'], index=range(len(contig_lens)*len(ploidies)*len(coverages)*n_samples*2))
+    counter = 0
+    for contig_len in contig_lens:
+        for ploidy in ploidies:
+            # true_haplotypes = pd.read_csv(os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'haplotypes.csv')).T.to_numpy()
+            for coverage in coverages:
+                this_cov_path = os.path.join(main_path, 'contig_{}'.format(contig_len), 'ploidy_{}'.format(ploidy), 'cov_{}'.format(coverage))
+                # results_path = os.path.join(this_cov_path, 'results_FFBS_Multiple')
+                results_path = os.path.join(this_cov_path, 'results_FFBS_single')
+                # frag_path = os.path.join(this_cov_path, 'frag')
+                for rd in range(n_samples):
+                    print(f"Collecting results for contig {contig_len}, ploidy {ploidy}, coverage {coverage}, sample {rd}")
+                    result_file = os.path.join(results_path, 'FFBS_' + str(rd).zfill(2) + '.pkl')
+                    with open(result_file, "rb") as f:
+                        evals = pickle.load(f)
+                
+                    result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
+                    result_df.loc[counter, 'Metric'] = 'Vector Error Rate'
+                    result_df.loc[counter, 'Value'] = evals['evaluation']['vector_error_rate']
+                    result_df.loc[counter, 'Contig'] = contig_len
+                    result_df.loc[counter, 'Ploidy'] = ploidy
+                    result_df.loc[counter, 'Coverage'] = coverage
+                    counter += 1
+                    result_df.loc[counter, 'Contig'] = contig_len
+                    result_df.loc[counter, 'Ploidy'] = ploidy
+                    result_df.loc[counter, 'Coverage'] = coverage
+                    result_df.loc[counter, 'Sample'] = str(rd).zfill(2)
+                    result_df.loc[counter, 'Metric'] = '# Phased Variants'
+                    result_df.loc[counter, 'Value'] = evals['length_phased']
+                    counter += 1
+
+    result_df['Method'] = 'pHapCompass'
+    result_df.to_csv(output_path, index=False)
+    print("pHapcompass results collected")
+
+
+    with open(result_file, 'rb') as f:
+        this_results = pickle.load(f)
+    
+    # sample_name = result_file.split('.pkl')[0].split('_')[-1]
+    H = this_results['predicted_haplotypes'].to_numpy()
+    H_star = this_results['true_haplotypes'].to_numpy()
+    vector_error_rate, _, _ = compute_vector_error_rate_with_missing_positions(H_star, H)
+    length_phased = np.sum(~np.isnan(np.array(H, dtype=np.float64)).any(axis=0))
+
+
+
+
+
+
 
 
 def eval_one_input_from_input_pHapcompass(input_file):

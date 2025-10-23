@@ -2136,7 +2136,6 @@ def make_inputs_for_run_paper_recomb():
 
 
 
-
 def run_paper_recomb(inp):
     this_frag_path, this_vcf_path, ploidy, genotype_path, results_path = inp
     # file_name = frag_file.split('.')[0]
@@ -2243,11 +2242,14 @@ def run_paper_recomb(inp):
 
     assignment_dict = assign_evidence_to_states_and_transitions(nodes, edges, input_handler.data_path)
 
+    # for i in range(10):
+
     forward_messages = compute_forward_messages(slices, edges, assignment_dict, emission_dict, transitions_dict, input_handler.data_path)
 
     ffbs_samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
 
     ffbs_acc_FFBS = evaulate_ffbs_acc_sample(genotype_path, ffbs_samples, ploidy)
+    # print(f'iteraton {i}:', ffbs_acc_FFBS)
 
     predicted_haplotypes_sv_FFBS = predict_haplotypes(nodes, edges, ffbs_samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities")
     predicted_haplotypes_mv_FFBS = predict_haplotypes_multiple_variants(nodes, edges, ffbs_samples, ploidy, genotype_path, fragment_model, transitions_dict_extra, config, priority="probabilities")
@@ -2352,14 +2354,11 @@ def run_pHapcompass_from_input(input_file):
     with open(input_file, "rb") as f:
         inp = pickle.load(f)
 
-    # inp = ['/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_auto_short/ploidy_3/mut_0.001/cov_5',
-    #      '/mnt/research/aguiarlab/proj/HaplOrbit/results_short/ploidy_3/mut_0.001/cov_5',
-    #     '/mnt/research/aguiarlab/proj/HaplOrbit/results_short/ploidy_3/mut_0.001/cov_5',
-    #     '/mnt/research/aguiarlab/proj/HaplOrbit/results_short/ploidy_3/mut_0.001/cov_5',
-    #     '00.frag',
-    #     3,
-    #     '/mnt/research/aguiarlab/proj/HaplOrbit/results_short/ploidy_3/mut_0.001/cov_5/genotype.csv',
-    #     '/mnt/research/aguiarlab/proj/HaplOrbit/results_short/ploidy_3/mut_0.001/cov_5/']
+    inp = ['/mnt/research/aguiarlab/proj/HaplOrbit/simulated_data_auto_short/ploidy_3/mut_0.001/cov_5/00.frag', 
+    '/mnt/research/aguiarlab/proj/HaplOrbit/reference/simulated_haplotypes/auto/ploidy_3/mut_0.001/00/Chr1.vcf',
+    3,
+    '/mnt/research/aguiarlab/proj/HaplOrbit/results_short/ploidy_3/mut_0.001/cov_5/genotype.csv', 
+    '/mnt/research/aguiarlab/proj/HaplOrbit/results_short/ploidy_3/mut_0.001/cov_5/']
 
 
     # run_FFBS_quotient_likelihood(inp)

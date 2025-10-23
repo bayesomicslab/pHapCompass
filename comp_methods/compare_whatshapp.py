@@ -630,6 +630,12 @@ def eval_one_input_from_input(input_file):
     eval_one_input_whatshapp_ismb(inp)
 
 
+def eval_recomb_vcf_2_pkl():
+    whatshapp_path = '/mnt/research/aguiarlab/proj/HaplOrbit/results_whatshap'
+    files = [f for f in os.listdir(whatshapp_path) if '.vcf.gz' in f]
+    
+
+
 if __name__ == '__main__':
     # collect_results_whatshap_missing()
 
