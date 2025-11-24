@@ -1,0 +1,5 @@
+pandas
+opt_einsum
+pysam
+scipy
+

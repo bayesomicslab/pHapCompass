@@ -1,0 +1,11 @@
+name: hap
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python=3.10.15
+  - pandas
+  - opt_einsum
+  - scipy
+  - pysam
