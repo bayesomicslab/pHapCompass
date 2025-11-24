@@ -1,10 +1,8 @@
-import os, sys, time
 from evaluations import *
 from utils import *
 from read_input import *
 import pandas as pd
 import numpy as np
-import pickle
 from pHapCompass_long.crf_gibbs_log_space_vectorized import *
 
 
@@ -47,6 +45,6 @@ def run_pHapCompass_long(args):
 
 
     write_phased_vcf(input_vcf_path=vcf, output_vcf_path=args.result_path, predicted_haplotypes=predicted_haplotypes if args.uncertainty else predicted_haplotype,
-        block_ids=block_ids if args.uncertainty else block_ids, likelihoods=likelihoods if args.uncertainty else likelihood, ploidy=ploidy)
+        block_ids=block_ids if args.uncertainty else block_id, likelihoods=likelihoods if args.uncertainty else likelihood, ploidy=ploidy)
 
 
