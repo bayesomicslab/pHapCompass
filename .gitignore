@@ -6,3 +6,7 @@ __pycache__/
 .vscode/
 results/
 data/
+*.pyo
+dist/
+build/
+*.egg-info/

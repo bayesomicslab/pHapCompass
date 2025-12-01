@@ -20,7 +20,7 @@ def predict_haplotypes_mec_based(
     edges: List[Tuple[str, str]],
     samples: Dict[int, Dict[str, str]],
     ploidy: int,
-    genotype_path: str,
+    gen_df: pd.DataFrame,
     M: csr_matrix,
     snp_to_col: Dict[int, int],
     transitions_dict_extra: Dict[str, dict],
@@ -36,7 +36,7 @@ def predict_haplotypes_mec_based(
     phasing_samples = {nn: samples[t][nn] for t in samples for nn in samples[t]}
     sorted_nodes = sort_nodes(nodes)
     
-    genotype_df = pd.read_csv(genotype_path).T
+    genotype_df = gen_df.T
     n_positions = len(genotype_df.columns)
     all_positions = {int(pos) for node in nodes for pos in node.split('-')}
     

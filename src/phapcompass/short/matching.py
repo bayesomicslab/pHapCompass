@@ -4,7 +4,7 @@ from collections import defaultdict
 from typing import Dict, List, Tuple, Set
 from scipy.sparse import csr_matrix
 import pandas as pd
-from utils import *
+from  phapcompass.utils import *
 import random
 
 

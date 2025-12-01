@@ -10,13 +10,14 @@ import csv
 import gzip
 import io
 import os
+import pysam
 
 
 
 @dataclass
 class InputConfigSparse:
     data_path: str                 # .frag file (plain text)
-    genotype_path: Optional[str]   # CSV of haplotypes (optional for this step)
+    genotype_path: pd.DataFrame   # genotype dataframe
     ploidy: int                    # K
     alleles: Tuple[int, int] = (0, 1)
 
@@ -295,44 +296,152 @@ class SparseFragment:
         )
 
 
-def vcf_gt_to_csv(vcf_path: str,
-                  csv_path: str,
-                  ploidy: int,
-                  sample_name: str = None,
-                  contig_filter: str | None = None) -> int:
+# def vcf_gt_to_csv(vcf_path: str,
+#                   csv_path: str,
+#                   ploidy: int,
+#                   sample_name: str = None,
+#                   contig_filter: str | None = None) -> int:
+#     """
+#     Read a VCF and write a CSV with columns haplotype_0..haplotype_{ploidy-1}
+#     containing the genotype digits from the sample's GT field (e.g., 0/1/1/1).
+
+#     Parameters
+#     ----------
+#     vcf_path : str
+#         Path to the VCF (.vcf or .vcf.gz).
+#     csv_path : str
+#         Output CSV path.
+#     sample_name : str, optional
+#         If provided, select this sample column; otherwise use the only sample present.
+#     ploidy : int
+#         Expected number of alleles in GT (default 4).
+#     contig_filter : str | None
+#         If provided, keep only rows with CHROM == contig_filter.
+
+#     Returns
+#     -------
+#     int
+#         Number of rows written.
+#     """
+#     # opener for gz/plain
+#     opener = gzip.open if vcf_path.endswith(".gz") else open
+
+#     # headers for CSV
+#     fieldnames = [f"haplotype_{i}" for i in range(ploidy)]
+
+#     n_written = 0
+#     with opener(vcf_path, "rt") as fin, open(csv_path, "w", newline="") as fout:
+#         writer = csv.DictWriter(fout, fieldnames=fieldnames)
+#         writer.writeheader()
+
+#         sample_idx = None
+#         gt_index_in_format = None
+
+#         for line in fin:
+#             if not line or line.startswith("##"):
+#                 continue
+#             if line.startswith("#CHROM"):
+#                 # Parse header to identify sample column
+#                 header = line.rstrip("\n").split("\t")
+#                 # VCF fixed columns + FORMAT + samples...
+#                 #   0     1   2   3   4   5     6      7      8      9..
+#                 # #CHROM POS ID  REF ALT QUAL FILTER INFO   FORMAT  sample(s)
+#                 if len(header) < 10:
+#                     raise ValueError("VCF has no sample columns.")
+#                 samples = header[9:]
+#                 if sample_name is None:
+#                     if len(samples) != 1:
+#                         raise ValueError(
+#                             f"VCF contains {len(samples)} samples; specify sample_name."
+#                         )
+#                     sample_idx = 9  # first and only sample
+#                 else:
+#                     try:
+#                         sample_idx = header.index(sample_name)
+#                     except ValueError:
+#                         raise ValueError(f"sample_name '{sample_name}' not found in VCF header.")
+#                 continue
+
+#             # Data lines
+#             parts = line.rstrip("\n").split("\t")
+#             if len(parts) < sample_idx + 1:
+#                 continue
+
+#             chrom = parts[0]
+#             if contig_filter is not None and chrom != contig_filter:
+#                 continue
+
+#             fmt = parts[8]         # FORMAT string like "GT:DP:AD:RO:QR:AO:QA"
+#             sample_field = parts[sample_idx]
+
+#             # Locate GT once per distinct FORMAT
+#             # (FORMAT is usually stable, but we can re-scan if it changes)
+#             fmt_keys = fmt.split(":")
+#             try:
+#                 gt_index_in_format = fmt_keys.index("GT")
+#             except ValueError:
+#                 # No GT => skip
+#                 continue
+
+#             sample_values = sample_field.split(":")
+#             if gt_index_in_format >= len(sample_values):
+#                 continue
+
+#             gt = sample_values[gt_index_in_format]
+#             # Accept phased or unphased separators
+#             if "|" in gt:
+#                 alleles = gt.split("|")
+#             else:
+#                 alleles = gt.split("/")
+
+#             if len(alleles) != ploidy:
+#                 # Skip if ploidy mismatch (e.g., missing or wrong model)
+#                 continue
+#             if any(a == "." or a == "" for a in alleles):
+#                 continue
+#             # Keep only 0/1; if multi-allelic snuck in, map non-'0' to '1' (optional)
+#             try:
+#                 nums = [int(a) for a in alleles]
+#             except ValueError:
+#                 # Non-integer allele codes; skip
+#                 continue
+#             # For biallelic VCF this is already 0/1; if a>1 appears, treat as 1
+#             nums = [0 if x == 0 else 1 for x in nums]
+
+#             row = {f"haplotype_{i}": nums[i] for i in range(ploidy)}
+#             writer.writerow(row)
+#             n_written += 1
+
+
+def vcf_gt_to_csv(vcf_path: str, ploidy: int, sample_name: str = None, contig_filter: str | None = None) -> pd.DataFrame:
     """
-    Read a VCF and write a CSV with columns haplotype_0..haplotype_{ploidy-1}
+    Read a VCF and return a DataFrame with columns haplotype_0..haplotype_{ploidy-1}
     containing the genotype digits from the sample's GT field (e.g., 0/1/1/1).
 
     Parameters
     ----------
     vcf_path : str
         Path to the VCF (.vcf or .vcf.gz).
-    csv_path : str
-        Output CSV path.
     sample_name : str, optional
         If provided, select this sample column; otherwise use the only sample present.
     ploidy : int
-        Expected number of alleles in GT (default 4).
+        Expected number of alleles in GT.
     contig_filter : str | None
         If provided, keep only rows with CHROM == contig_filter.
 
     Returns
     -------
-    int
-        Number of rows written.
+    pd.DataFrame
+        DataFrame with columns [haplotype_0, haplotype_1, ..., haplotype_{ploidy-1}]
+        Each row represents one SNP position from the VCF.
     """
     # opener for gz/plain
     opener = gzip.open if vcf_path.endswith(".gz") else open
 
-    # headers for CSV
-    fieldnames = [f"haplotype_{i}" for i in range(ploidy)]
+    # Collect rows
+    rows = []
 
-    n_written = 0
-    with opener(vcf_path, "rt") as fin, open(csv_path, "w", newline="") as fout:
-        writer = csv.DictWriter(fout, fieldnames=fieldnames)
-        writer.writeheader()
-
+    with opener(vcf_path, "rt") as fin:
         sample_idx = None
         gt_index_in_format = None
 
@@ -373,8 +482,7 @@ def vcf_gt_to_csv(vcf_path: str,
             fmt = parts[8]         # FORMAT string like "GT:DP:AD:RO:QR:AO:QA"
             sample_field = parts[sample_idx]
 
-            # Locate GT once per distinct FORMAT
-            # (FORMAT is usually stable, but we can re-scan if it changes)
+            # Locate GT in FORMAT
             fmt_keys = fmt.split(":")
             try:
                 gt_index_in_format = fmt_keys.index("GT")
@@ -394,22 +502,29 @@ def vcf_gt_to_csv(vcf_path: str,
                 alleles = gt.split("/")
 
             if len(alleles) != ploidy:
-                # Skip if ploidy mismatch (e.g., missing or wrong model)
+                # Skip if ploidy mismatch
                 continue
             if any(a == "." or a == "" for a in alleles):
                 continue
-            # Keep only 0/1; if multi-allelic snuck in, map non-'0' to '1' (optional)
+            
+            # Parse alleles
             try:
                 nums = [int(a) for a in alleles]
             except ValueError:
                 # Non-integer allele codes; skip
                 continue
+            
             # For biallelic VCF this is already 0/1; if a>1 appears, treat as 1
             nums = [0 if x == 0 else 1 for x in nums]
 
-            row = {f"haplotype_{i}": nums[i] for i in range(ploidy)}
-            writer.writerow(row)
-            n_written += 1
+            rows.append(nums)
+
+    # Create DataFrame
+    columns = [f"haplotype_{i}" for i in range(ploidy)]
+    df = pd.DataFrame(rows, columns=columns)
+    
+    return df
+
 
 
 def infer_ploidy_from_vcf(vcf_path: str, sample_index: int = 0) -> int:
@@ -450,11 +565,9 @@ def run_extract_hairs(bam_path: str, vcf_path: str, frag_path: str, ploidy: Opti
         extracthairs_bin,
         "--bam", bam_path,
         "--vcf", vcf_path,
-        "--out", frag_path,
-        "--error", str(epsilon),
+        "--out", frag_path
     ]
-    if ploidy is not None:
-        cmd.extend(["--ploidy", str(ploidy)])
+
     if mbq != 13:
         cmd.extend(["--mbq", str(mbq)])
 
@@ -484,194 +597,214 @@ def bam_root_name(bam_path: str) -> str:
     return os.path.splitext(base)[0]
 
 
+
 def write_phased_vcf(
     input_vcf_path: str,
     output_vcf_path: str,
-    predicted_haplotypes: Union[pd.DataFrame, List[pd.DataFrame]],
-    block_ids: Union[pd.Series, List[pd.Series]],
-    likelihoods: Optional[Union[float, List[float]]] = None,
-    ploidy: int = None,
-    sample_name: str = "SAMPLE"
+    predicted_haplotypes,
+    block_ids,
+    likelihoods,
+    ploidy: int,
+    write_lk: bool = False,
 ):
     """
-    Write phased haplotypes to VCF format.
-    
-    Parameters
-    ----------
-    input_vcf_path : str
-        Path to input VCF file (can be .vcf or .vcf.gz)
-    output_vcf_path : str
-        Path to output VCF file (.vcf.gz)
-    predicted_haplotypes : pd.DataFrame or List[pd.DataFrame]
-        Single DataFrame or list of DataFrames with columns [hap_0, hap_1, ..., hap_k]
-        where k = ploidy-1. Values are 0 (REF) or 1 (ALT).
-    block_ids : pd.Series or List[pd.Series]
-        Single Series or list of Series with phase set IDs (or NaN for unphased)
-    likelihoods : float or List[float], optional
-        Single likelihood or list of likelihoods for each sample
-    ploidy : int, optional
-        Ploidy level (inferred from haplotype columns if not provided)
-    sample_name : str
-        Sample name for VCF column (default: "SAMPLE")
+    Write a phased VCF with GT/PS[/LK] FORMAT fields.
     """
-    
-    # Normalize inputs to lists
-    if isinstance(predicted_haplotypes, pd.DataFrame):
-        predicted_haplotypes = [predicted_haplotypes]
-    if isinstance(block_ids, pd.Series):
-        block_ids = [block_ids]
-    if likelihoods is not None and not isinstance(likelihoods, list):
-        likelihoods = [likelihoods]
-    
+
+    # ---- basic validation ----
+    if not isinstance(predicted_haplotypes, list) or len(predicted_haplotypes) == 0:
+        raise ValueError("predicted_haplotypes must be a non-empty list of DataFrames.")
+    if not all(isinstance(df, pd.DataFrame) for df in predicted_haplotypes):
+        raise TypeError("All elements of predicted_haplotypes must be pandas DataFrames.")
+
     n_samples = len(predicted_haplotypes)
-    
-    # Infer ploidy if not provided
-    if ploidy is None:
-        ploidy = len([col for col in predicted_haplotypes[0].columns if col.startswith('hap_')])
-    
-    # Validate inputs
-    assert len(block_ids) == n_samples, "Number of block_ids must match predicted_haplotypes"
-    if likelihoods is not None:
-        assert len(likelihoods) == n_samples, "Number of likelihoods must match predicted_haplotypes"
-    
-    # Open input VCF
-    open_func = gzip.open if input_vcf_path.endswith('.gz') else open
-    
-    # Read input VCF header and data
-    header_lines = []
-    data_lines = []
-    
-    with open_func(input_vcf_path, 'rt') as f:
-        for line in f:
-            if line.startswith('#'):
-                header_lines.append(line.rstrip('\n'))
-            else:
-                data_lines.append(line.rstrip('\n'))
-    
-    # Prepare output
+
+    if not isinstance(block_ids, list) or len(block_ids) != n_samples:
+        raise ValueError(
+            f"block_ids must be a list with same length as predicted_haplotypes "
+            f"(got {len(block_ids)} vs {n_samples})."
+        )
+
+    if write_lk and likelihoods is not None:
+        if len(likelihoods) != n_samples:
+            raise ValueError(
+                f"Number of likelihoods ({len(likelihoods)}) must match number of predicted_haplotypes ({n_samples})"
+            )
+        likelihoods = list(likelihoods)
+    else:
+        likelihoods = None
+        write_lk = False
+
+    num_snps = predicted_haplotypes[0].shape[1]
+    for i, df in enumerate(predicted_haplotypes):
+        if df.shape[1] != num_snps:
+            raise ValueError(
+                f"predicted_haplotypes[{i}] has {df.shape[1]} SNPs, expected {num_snps}"
+            )
+    for i, blocks in enumerate(block_ids):
+        if len(blocks) != num_snps:
+            raise ValueError(
+                f"block_ids[{i}] has length {len(blocks)}, expected {num_snps}"
+            )
+
+    # ---- Read input VCF ----
+    vcf_in = pysam.VariantFile(input_vcf_path)
+    header = vcf_in.header
+
+    # Add FORMAT fields if not present
+    if "GT" not in header.formats:
+        header.formats.add("GT", 1, "String", "Phased genotype")
+    if "PS" not in header.formats:
+        header.formats.add("PS", 1, "Integer", "Phase set identifier")
+    if write_lk and "LK" not in header.formats:
+        header.formats.add("LK", 1, "Float", "Phasing likelihood/confidence")
+
+    sample_names = list(header.samples)
+    if len(sample_names) == 0:
+        raise ValueError("Input VCF has no samples; at least one sample is required.")
+    sample_name = sample_names[0]
+
+    # DataFrame metadata
+    df0 = predicted_haplotypes[0]
+    cols = list(df0.columns)
+
+    # ---- Write VCF line by line ----
     output_lines = []
     
-    # Process header
-    for line in header_lines:
-        if line.startswith('##FORMAT=<ID=GT'):
-            # Keep GT definition but update description
-            output_lines.append('##FORMAT=<ID=GT,Number=1,Type=String,Description="Phased genotype">')
-        elif line.startswith('##FORMAT=<ID=PS'):
-            # Keep PS definition
-            output_lines.append(line)
-        elif line.startswith('#CHROM'):
-            # Add our custom FORMAT fields before the #CHROM line
-            if likelihoods is not None:
-                output_lines.append('##FORMAT=<ID=LK,Number=1,Type=Float,Description="Phasing likelihood/confidence">')
-            
-            # Add PS if not already present
-            has_ps = any('##FORMAT=<ID=PS' in l for l in header_lines)
-            if not has_ps:
-                output_lines.append('##FORMAT=<ID=PS,Number=1,Type=Integer,Description="Phase set identifier">')
-            
-            # Modify column header to use our sample name
-            cols = line.split('\t')
-            if len(cols) > 9:
-                cols[9] = sample_name
-            output_lines.append('\t'.join(cols))
-        else:
-            output_lines.append(line)
-    
-    # Process data lines
-    for idx, data_line in enumerate(data_lines):
-        fields = data_line.split('\t')
-        
-        # Parse existing fields
-        chrom = fields[0]
-        pos = fields[1]
-        snp_id = fields[2]
-        ref = fields[3]
-        alt = fields[4]
-        qual = fields[5]
-        filt = fields[6]
-        info = fields[7]
-        format_field = fields[8] if len(fields) > 8 else 'GT'
-        
-        # Build GT and PS for all samples
-        gt_values = []
-        ps_values = []
-        lk_values = []
-        
-        for sample_idx in range(n_samples):
-            hap_df = predicted_haplotypes[sample_idx]
-            block_series = block_ids[sample_idx]
-            
-            # Check if this position is phased
-            if idx >= len(block_series) or pd.isna(block_series.iloc[idx]):
-                # Unphased - use unphased genotype
-                # Get genotype from haplotype columns
-                hap_cols = [col for col in hap_df.columns if col.startswith('hap_')]
-                if idx < len(hap_df):
-                    alleles = [str(int(hap_df[col].iloc[idx])) if pd.notna(hap_df[col].iloc[idx]) else '.' 
-                              for col in hap_cols]
-                    gt_values.append('/'.join(alleles))
+    # Write header
+    for line in str(header).rstrip('\n').split('\n'):
+        output_lines.append(line)
+
+    idx = 0
+    for record in vcf_in:
+        chrom = record.chrom
+        pos = record.pos
+        snp_id = record.id if record.id else '.'
+        ref = record.ref
+        alt = ','.join(record.alts) if record.alts else '.'
+        qual = str(record.qual) if record.qual is not None else '.'
+        filt = ';'.join(record.filter) if record.filter else 'PASS'
+        info = ';'.join([f"{k}={','.join(map(str, v)) if isinstance(v, tuple) else v}" 
+                        for k, v in record.info.items()]) if len(record.info) > 0 else '.'
+
+        if idx >= num_snps:
+            # No prediction - write original VCF line
+            output_lines.append(str(record).rstrip('\n'))
+            idx += 1
+            continue
+
+        col = cols[idx]
+
+        # ---- Extract haplotypes for this SNP ----
+        gt_per_solution = []
+        ps_per_solution = []
+        lk_per_solution = []
+
+        for s in range(n_samples):
+            df = predicted_haplotypes[s]
+            blocks = block_ids[s]
+
+            # Extract all ploidy alleles
+            alleles = []
+            for h in range(ploidy):
+                row_name = f"haplotype_{h+1}"
+                
+                if row_name in df.index:
+                    val = df.loc[row_name, col]
                 else:
-                    gt_values.append('/'.join(['.'] * ploidy))
-                ps_values.append('.')
+                    val = np.nan
+
+                if pd.isna(val):
+                    alleles.append('.')
+                else:
+                    try:
+                        alleles.append(str(int(val)))
+                    except Exception:
+                        alleles.append('.')
+
+            # Get block ID
+            ps_val = blocks[idx] if idx < len(blocks) else np.nan
+
+            if np.isnan(ps_val):
+                # Unphased - use original VCF genotype
+                original_gt = record.samples[sample_name]['GT']
+                if original_gt is not None:
+                    # Convert pysam GT tuple to string and SORT alleles
+                    if isinstance(original_gt, tuple):
+                        gt_alleles = [str(a) if a is not None else '.' for a in original_gt]
+                        # Sort alleles (non-missing alleles first, then missing)
+                        non_missing = sorted([a for a in gt_alleles if a != '.'])
+                        missing = [a for a in gt_alleles if a == '.']
+                        sorted_alleles = non_missing + missing
+                        gt_str = '/'.join(sorted_alleles)
+                    else:
+                        gt_str = str(original_gt)
+                else:
+                    gt_str = '/'.join(['.'] * ploidy)
+                ps_val_int = None
             else:
-                # Phased
-                hap_cols = [col for col in hap_df.columns if col.startswith('hap_')]
-                if idx < len(hap_df):
-                    alleles = [str(int(hap_df[col].iloc[idx])) if pd.notna(hap_df[col].iloc[idx]) else '.' 
-                              for col in hap_cols]
-                    gt_values.append('|'.join(alleles))
-                    ps_values.append(str(int(block_series.iloc[idx])))
-                else:
-                    gt_values.append('|'.join(['.'] * ploidy))
-                    ps_values.append('.')
-            
-            # Add likelihood if available
-            if likelihoods is not None:
-                lk_values.append(f"{likelihoods[sample_idx]:.6f}")
-        
-        # Combine multiple samples with ':'
-        combined_gt = ':'.join(gt_values)
-        combined_ps = ':'.join(ps_values)
-        
-        # Build FORMAT string
+                # Phased - DO NOT SORT (preserve haplotype order)
+                gt_str = '|'.join(alleles)
+                ps_val_int = int(ps_val)
+
+            gt_per_solution.append(gt_str)
+            ps_per_solution.append(ps_val_int)
+            if write_lk and likelihoods is not None:
+                lk_per_solution.append(float(likelihoods[s]))
+
+        # ---- Determine if phased ----
+        is_phased = any(ps is not None for ps in ps_per_solution)
+
+        # ---- Build FORMAT and sample fields ----
         if n_samples == 1:
-            # Single sample
-            if ps_values[0] == '.':
-                # Unphased
-                format_str = 'GT'
-                if likelihoods is not None:
-                    format_str += ':LK'
-                    sample_str = f"{gt_values[0]}:{lk_values[0]}"
+            gt_field = gt_per_solution[0]
+            ps_field = ps_per_solution[0]
+            lk_field = lk_per_solution[0] if (write_lk and lk_per_solution) else None
+
+            if is_phased:
+                if write_lk and lk_field is not None:
+                    format_str = 'GT:PS:LK'
+                    sample_str = f"{gt_field}:{ps_field}:{lk_field:.6f}"
                 else:
-                    sample_str = gt_values[0]
+                    format_str = 'GT:PS'
+                    sample_str = f"{gt_field}:{ps_field}"
             else:
-                # Phased
-                format_str = 'GT:PS'
-                if likelihoods is not None:
-                    format_str += ':LK'
-                    sample_str = f"{gt_values[0]}:{ps_values[0]}:{lk_values[0]}"
+                if write_lk and lk_field is not None:
+                    format_str = 'GT:LK'
+                    sample_str = f"{gt_field}:{lk_field:.6f}"
                 else:
-                    sample_str = f"{gt_values[0]}:{ps_values[0]}"
+                    format_str = 'GT'
+                    sample_str = gt_field
         else:
-            # Multiple samples (uncertainty mode)
-            format_str = 'GT:PS'
-            if likelihoods is not None:
-                format_str += ':LK'
-                sample_str = f"{combined_gt}:{combined_ps}:{':'.join(lk_values)}"
+            # Multiple solutions
+            gt_field = ':'.join(gt_per_solution)
+            ps_field = ':'.join(['.' if v is None else str(v) for v in ps_per_solution])
+            lk_field = ':'.join([f"{v:.6f}" for v in lk_per_solution]) if (write_lk and lk_per_solution) else None
+
+            if write_lk and lk_field is not None:
+                format_str = 'GT:PS:LK'
+                sample_str = f"{gt_field}:{ps_field}:{lk_field}"
             else:
-                sample_str = f"{combined_gt}:{combined_ps}"
-        
-        # Reconstruct line
-        output_line = '\t'.join([chrom, pos, snp_id, ref, alt, qual, filt, info, format_str, sample_str])
+                format_str = 'GT:PS'
+                sample_str = f"{gt_field}:{ps_field}"
+
+        # Build output line
+        output_line = '\t'.join([chrom, str(pos), snp_id, ref, alt, qual, filt, info, format_str, sample_str])
         output_lines.append(output_line)
+        
+        idx += 1
+
+    vcf_in.close()
+
+    # ---- Write output ----
+    open_func = gzip.open if output_vcf_path.endswith('.gz') else open
+    mode = 'wt' if output_vcf_path.endswith('.gz') else open
     
-    # Write output
-    with gzip.open(output_vcf_path, 'wt') as f:
+    with open_func(output_vcf_path, mode) as f:
         for line in output_lines:
             f.write(line + '\n')
-    
-    print(f"Phased VCF written to: {output_vcf_path}")
 
+    print(f"Phased VCF written to: {output_vcf_path}")
 
 
 

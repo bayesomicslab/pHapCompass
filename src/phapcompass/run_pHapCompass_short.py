@@ -1,11 +1,11 @@
-from pHapCompass_short.combinatorials import *
-from pHapCompass_short.FFBS import *
-from pHapCompass_short.viterbi import *
-from pHapCompass_short.predict_hap import *
-from pHapCompass_short.matching import *
-from evaluations import *
-from utils import *
-from read_input import *
+from .short.combinatorials import *
+from .short.FFBS import *
+from .short.viterbi import *
+from .short.predict_hap import *
+from .short.matching import *
+from .evaluations import *
+from .utils import *
+from .read_input import *
 import pandas as pd
 import numpy as np
 
@@ -19,25 +19,28 @@ def run_pHapCompass_short(args):
     Uses vectorized emissions/transitions, forward pass, and FFBS sampler.
     """
 
-    frag = args.fragment_file_path
+    frag = args.frag_path
     vcf  = args.vcf_path
     ploidy   = args.ploidy
+    gen_df = args.genotype
+
     # args.error_rate  = args.epsilon
     args.error_rate = 0.001
     result_path  = args.result_path
 
-    print(f'Working on {frag} ...')
+    # print(f'Working on {frag} ...')
 
-    gen_df = pd.read_csv(args.genotype_path)
+    # gen_df = pd.read_csv(args.genotype_path)
+    
     n_snps = len(gen_df)
 
     # ------------------- 2) Read fragments (.frag) into sparse CSR ------------------------
-    cfg  = InputConfigSparse(data_path=args.data_path, genotype_path=args.genotype_path, ploidy=args.ploidy)
-    frag = SparseFragment(cfg, positions_from_genotype=list(range(n_snps)))         # NOTE: _ingest_block must use START_IS_ONE_BASED=True
-    data_matrix = frag.csr                    # (reads × SNPs) with {0,1(REF),2(ALT)}
+    cfg  = InputConfigSparse(data_path=frag, genotype_path=gen_df, ploidy=args.ploidy)
+    frag_graph = SparseFragment(cfg, positions_from_genotype=list(range(n_snps)))         # NOTE: _ingest_block must use START_IS_ONE_BASED=True
+    data_matrix = frag_graph.csr                    # (reads × SNPs) with {0,1(REF),2(ALT)}
 
     # SNP-index mappings:
-    col_to_snp = np.array(frag.col_to_snp, dtype=np.int64)
+    col_to_snp = np.array(frag_graph.col_to_snp, dtype=np.int64)
 
 
     g = gen_df.sum(axis=1).to_numpy(dtype=np.int16)   # length = #SNP positions
@@ -54,9 +57,9 @@ def run_pHapCompass_short(args):
 
     # ------------------- 5) Bank + node emissions (vectorized) ---------------------------
     bank = build_node_phasing_bank(args.ploidy, args.error_rate, genotype_pairs)
-    state_names = build_state_names_from_bank(pair_layer, gi, gj, bank, args.ploidy, True, frag.col_to_snp)
+    state_names = build_state_names_from_bank(pair_layer, gi, gj, bank, args.ploidy, True, frag_graph.col_to_snp)
 
-    transitions_dict, transitions_extra = compute_transitions_optimized(data_matrix, pair_layer, state_names, args.ploidy, args.error_rate, col_to_snp, frag.snp_to_col, return_extra=True)
+    transitions_dict, transitions_extra = compute_transitions_optimized(data_matrix, pair_layer, state_names, args.ploidy, args.error_rate, col_to_snp, frag_graph.snp_to_col, return_extra=True)
     emissions = build_pair_emissions_from_state_names(state_names=state_names, ploidy=args.ploidy, error_rate=args.error_rate)
 
     # Build nodes/edges lists from canonical dictionaries
@@ -67,19 +70,20 @@ def run_pHapCompass_short(args):
     slices, _ = assign_slices_and_interfaces(nodes, edges)
 
     # evidence indices per node/edge from M using position→column map
-    assignment_dict = assign_evidence_to_states_and_transitions_from_M(nodes, edges, data_matrix, frag.snp_to_col)
+    assignment_dict = assign_evidence_to_states_and_transitions_from_M(nodes, edges, data_matrix, frag_graph.snp_to_col)
 
     if args.uncertainty is not None:
         predicted_haplotypes = []
         block_ids = []
         likelihoods = []
-        forward_messages = compute_forward_messages_from_M(slices,edges, assignment_dict, emissions, transitions_dict, data_matrix, frag.snp_to_col)
+        forward_messages = compute_forward_messages_from_M(slices,edges, assignment_dict, emissions, transitions_dict, data_matrix, frag_graph.snp_to_col)
         for _ in range(args.uncertainty):
             samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
-            predicted_haplotype, block_id = predict_haplotypes_mec_based(nodes, edges, samples, ploidy, args.genotype_path, data_matrix, frag.snp_to_col, transitions_extra, args, 
+            predicted_haplotype, block_id = predict_haplotypes_mec_based(nodes, edges, samples, ploidy, gen_df, data_matrix, frag_graph.snp_to_col, transitions_extra, args, 
             priority="combined", likelihood_weight= args.lw, mec_weight=args.mw, ffbs_weight=args.sw, allow_ffbs_override=True, verbose=False)
             predicted_haplotype = predicted_haplotype.apply(pd.to_numeric, errors='coerce') 
-            likelihood = compute_likelihood()  # ... > I should complete
+            # likelihood = compute_likelihood()  # ... > I should complete
+            likelihood = 1  
 
             predicted_haplotypes.append(predicted_haplotype)
             block_ids.append(block_id)
@@ -87,15 +91,24 @@ def run_pHapCompass_short(args):
 
     else:
 
-        best_states = viterbi_decode(slices, edges, assignment_dict, emissions, transitions_dict, data_matrix, frag.snp_to_col)
-        predicted_haplotype, block_ids = predict_haplotypes_mec_based(nodes, edges, best_states, ploidy, args.genotype_path, data_matrix, frag.snp_to_col, transitions_extra, args, 
+        best_states = viterbi_decode(slices, edges, assignment_dict, emissions, transitions_dict, data_matrix, frag_graph.snp_to_col)
+        predicted_haplotype, block_ids = predict_haplotypes_mec_based(nodes, edges, best_states, ploidy, gen_df, data_matrix, frag_graph.snp_to_col, transitions_extra, args, 
         priority="combined", likelihood_weight= args.lw, mec_weight=args.mw, ffbs_weight=args.sw, allow_ffbs_override=True, verbose=False)
         predicted_haplotype = predicted_haplotype.apply(pd.to_numeric, errors='coerce') 
-        likelihood = compute_likelihood() #... > I should complete
-    write_phased_vcf(input_vcf_path=vcf, output_vcf_path=result_path, predicted_haplotypes=predicted_haplotypes if args.uncertainty else predicted_haplotype,
-        block_ids=block_ids if args.uncertainty else block_ids, likelihoods=likelihoods if args.uncertainty else likelihood, ploidy=ploidy)
+        # likelihood = compute_likelihood() #... > I should complete
+        likelihoods = 1
+
+        predicted_haplotypes = [predicted_haplotype]
+        block_ids = [block_ids]
+        likelihoods = [likelihoods]  # or [likelihood] if you later want LK even without uncertainty
 
 
+    # write_phased_vcf(input_vcf_path=vcf, output_vcf_path=result_path, predicted_haplotypes=predicted_haplotypes if args.uncertainty else predicted_haplotypes,
+    #     block_ids=block_ids if args.uncertainty else block_ids, likelihoods=likelihoods if args.uncertainty else likelihoods, ploidy=ploidy)
+    # print(predicted_haplotypes)
+    # print('======================')
+    # print(block_ids)
+    write_phased_vcf(vcf, result_path, predicted_haplotypes, block_ids, likelihoods, ploidy, True if len(predicted_haplotypes) > 1 else False)
 
 
 

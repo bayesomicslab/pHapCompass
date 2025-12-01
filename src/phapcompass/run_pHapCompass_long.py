@@ -1,34 +1,33 @@
-from evaluations import *
-from utils import *
-from read_input import *
+from .evaluations import *
+from .utils import *
+from .read_input import *
 import pandas as pd
 import numpy as np
-from pHapCompass_long.crf_gibbs_log_space_vectorized import *
+from .long.crf_gibbs_log_space_vectorized import *
 
 
 
 def run_pHapCompass_long(args):
 
-    frag = args.fragment_file_path
+    frag = args.frag_path
     vcf  = args.vcf_path
     ploidy   = args.ploidy
     delta, epsilon, learning_rate = args.delta, args.epsilon, args.learning_rate
+    gen_df = args.genotype
 
-
-    gen_df = pd.read_csv(args.genotype_path)
+    # gen_df = pd.read_csv(args.genotype_path)
     g = gen_df.sum(axis=1).to_numpy(dtype=np.int16)   # length = #SNP positions
 
     n_snps = len(gen_df)
 
     # ------------------- 2) Read fragments (.frag) into sparse CSR ------------------------
-    cfg  = InputConfigSparse(data_path=frag, genotype_path=args.genotype_path, ploidy=ploidy)
+    cfg  = InputConfigSparse(data_path=frag, genotype_path=gen_df, ploidy=ploidy)
     frag = SparseFragment(cfg, positions_from_genotype=list(range(n_snps)))
     data_matrix = frag.csr  
     reads = data_matrix.toarray().astype(float)
     reads[reads==0] = np.nan
     reads[reads==1] = 0
     reads[reads==2] = 1
-
 
     sampler = HaplotypeGibbsSampler(reads=reads, genotype=g, K=ploidy, epsilon=epsilon, delta=delta, learning_rate=learning_rate)
     if args.uncertainty is not None: 
@@ -41,10 +40,13 @@ def run_pHapCompass_long(args):
         sampler.fit(n_iterations=500, burn_in=0, verbose=False)
         predicted_haplotype = sampler.history["phase"][-1]
         block_id = np.zeros(n_snps)
-        likelihood = '' # fix it
+        likelihood = 1
+
+        predicted_haplotypes = [predicted_haplotype]
+        block_ids = [block_id]
+        likelihoods = [likelihood]  # or [likelihood] if you later want LK even without uncertainty
 
 
-    write_phased_vcf(input_vcf_path=vcf, output_vcf_path=args.result_path, predicted_haplotypes=predicted_haplotypes if args.uncertainty else predicted_haplotype,
-        block_ids=block_ids if args.uncertainty else block_id, likelihoods=likelihoods if args.uncertainty else likelihood, ploidy=ploidy)
+    write_phased_vcf(vcf, args.result_path, predicted_haplotypes, block_ids, likelihoods, ploidy, True if len(predicted_haplotypes) > 1 else False)
 
 

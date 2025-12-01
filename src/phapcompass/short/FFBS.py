@@ -5,7 +5,7 @@ from scipy.sparse import csr_matrix
 import math
 import random
 from itertools import permutations, product
-from utils import *
+from phapcompass.utils import *
 
 
 

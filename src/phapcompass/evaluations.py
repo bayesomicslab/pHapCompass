@@ -7,7 +7,7 @@ import itertools
 from itertools import combinations, permutations
 from scipy.optimize import linear_sum_assignment
 from collections import defaultdict
-from utils import *
+from .utils import *
 
 
 ########################################################################################################

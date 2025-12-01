@@ -1,12 +1,10 @@
-from evaluations import sort_matrix_rows, optimal_hamming_distance_across_samples, pair_uncertainty_quantification
+from .evaluations import pair_uncertainty_quantification
 import gzip
 import pickle
-from mixture_model.crf_gibbs_log_space_vectorized import *
+from .long.crf_gibbs_log_space_vectorized import *
 import os
-import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-import sys
 
 
 def make_inputs_for_create_pair_phase_df():

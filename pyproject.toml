@@ -1,0 +1,27 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phapcompass"
+version = "0.1.0"
+description = "Probabilistic haplotype assembly for polyploid genomes."
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }  # change if needed
+authors = [
+  { name = "Marjan Hosseini" }
+]
+
+dependencies = [
+  "pandas",
+  "scipy",
+  "opt_einsum",
+  "pysam",
+]
+
+[project.scripts]
+phapcompass = "phapcompass.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

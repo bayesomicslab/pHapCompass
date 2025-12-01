@@ -3,9 +3,9 @@ import argparse
 import os
 import sys
 import logging
-from run_pHapCompass_short import run_pHapCompass_short
-from run_pHapCompass_long import run_pHapCompass_long
-from read_input import *
+from .run_pHapCompass_short import run_pHapCompass_short
+from .run_pHapCompass_long import run_pHapCompass_long
+from .read_input import *
 
 
 def parse_args() -> argparse.Namespace:
@@ -13,7 +13,7 @@ def parse_args() -> argparse.Namespace:
 
     # Inputs
     parser.add_argument("--bam-path", type=str,  default=None, help="Path to BAM file. If provided with --vcf-path and no --fragment-file-path, extractHAIRS will be run.")
-    parser.add_argument("--fragment-file-path", type=str, default=None, help="Path to fragment file (.frag). If provided, BAM is optional.")
+    parser.add_argument("--frag-path", type=str, default=None, help="Path to fragment file (.frag). If provided, BAM is optional.")
     parser.add_argument("--vcf-path", type=str, required=True, help="Path to VCF file (required: used for genotypes and/or ploidy inference).")
     parser.add_argument("--ploidy", type=int,  default=None, help="Ploidy (e.g., 2, 3, 4). If not provided, inferred from VCF.")
     parser.add_argument("--result-path", type=str, required=True, help="Output path (file path or prefix) for saving final haplotypes/results.")
@@ -54,8 +54,8 @@ def main() -> None:
         logging.error("VCF file not found: %s", args.vcf_path)
         sys.exit(1)
 
-    if args.fragment_file_path is None and args.bam_path is None:
-        logging.error("You must provide either --fragment-file-path or --bam-path (with --vcf-path).")
+    if args.frag_path is None and args.bam_path is None:
+        logging.error("You must provide either --frag-path or --bam-path (with --vcf-path).")
         sys.exit(1)
 
     # Ensure output directory exists (if any)
@@ -71,15 +71,15 @@ def main() -> None:
         args.ploidy = inferred_ploidy
 
     # Generate genotype file (same folder as result-path, or current dir if none)
-    geno_dir = out_dir if out_dir else "."
-    args.genotype_path = os.path.join(geno_dir, "genotype.csv")
-    logging.info("Writing genotype file to: %s", args.genotype_path)
+    # geno_dir = out_dir if out_dir else "."
+    # args.genotype_path = os.path.join(geno_dir, "genotype.csv")
+    # logging.info("Writing genotype file to: %s", args.genotype_path)
 
-    vcf_gt_to_csv(args.vcf_path, args.genotype_path, ploidy=args.ploidy)
+    args.genotype = vcf_gt_to_csv(args.vcf_path, ploidy=args.ploidy)
 
 
     # Prepare fragment file
-    if args.fragment_file_path is None:
+    if args.frag_path is None:
         if args.bam_path is None:
             logging.error("Need --bam-path to generate fragment file with extractHAIRS.")
             sys.exit(1)
@@ -93,10 +93,7 @@ def main() -> None:
             frag_filename = f"{bam_root}_mbq{args.mbq}.frag"
         frag_path = os.path.join(frag_dir, frag_filename)
 
-        logging.info(
-            "No fragment file provided. Will generate using extractHAIRS at: %s",
-            frag_path,
-        )
+        logging.info("No fragment file provided. Will generate using extractHAIRS at: %s", frag_path)
 
         run_extract_hairs(
             bam_path=args.bam_path,
@@ -107,12 +104,12 @@ def main() -> None:
             mbq=args.mbq,
             extracthairs_bin=args.extracthairs_bin,
         )
-        args.fragment_file_path = frag_path
+        args.frag_path = frag_path
     else:
-        if not os.path.exists(args.fragment_file_path):
-            logging.error("Fragment file not found: %s", args.fragment_file_path)
+        if not os.path.exists(args.frag_path):
+            logging.error("Fragment file not found: %s", args.frag_path)
             sys.exit(1)
-        logging.info("Using existing fragment file: %s", args.fragment_file_path)
+        logging.info("Using existing fragment file: %s", args.frag_path)
 
     logging.info("Data type: %s", args.data_type)
     logging.info("Result path: %s", args.result_path)
@@ -129,7 +126,6 @@ def main() -> None:
         logging.info("Uncertainty quantification enabled with %d samples.", args.uncertainty)
     else:
         logging.info("Uncertainty quantification disabled.")
-
 
 
     logging.info("Finished pHapCompass run.")
