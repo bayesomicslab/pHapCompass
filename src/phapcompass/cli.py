@@ -40,7 +40,6 @@ def parse_args() -> argparse.Namespace:
 
     # extractHAIRS options
     parser.add_argument("--mbq", type=int, default=13, help="Minimum base quality for extractHAIRS (default: 13).")
-    parser.add_argument("--extracthairs-bin", type=str, default="extractHAIRS", help="Path to extractHAIRS binary (default: 'extractHAIRS' on PATH).")
 
 
     parser.add_argument("--verbose", action="store_true", help="Enable verbose mode (equivalent to --log-level DEBUG).")
