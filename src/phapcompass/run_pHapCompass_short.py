@@ -75,19 +75,19 @@ def run_pHapCompass_short(args):
     if args.uncertainty is not None:
         predicted_haplotypes = []
         block_ids = []
-        likelihoods = []
+        probabilities = []
         forward_messages = compute_forward_messages_from_M(slices,edges, assignment_dict, emissions, transitions_dict, data_matrix, frag_graph.snp_to_col)
         for _ in range(args.uncertainty):
             samples = sample_states_book(slices, edges, forward_messages, transitions_dict)
             predicted_haplotype, block_id = predict_haplotypes_mec_based(nodes, edges, samples, ploidy, gen_df, data_matrix, frag_graph.snp_to_col, transitions_extra, args, 
             priority="combined", likelihood_weight= args.lw, mec_weight=args.mw, ffbs_weight=args.sw, allow_ffbs_override=True, verbose=False)
             predicted_haplotype = predicted_haplotype.apply(pd.to_numeric, errors='coerce') 
-            # likelihood = compute_likelihood()  # ... > I should complete
-            likelihood = 1  
+            probability = compute_sampled_path_probability(sampled_states=samples, slices=slices, edges=edges, forward_messages=forward_messages, transitions_dict=transitions_dict)
 
             predicted_haplotypes.append(predicted_haplotype)
             block_ids.append(block_id)
-            likelihoods.append(likelihood)
+            probabilities.append(probability)
+
 
     else:
 
@@ -95,20 +95,21 @@ def run_pHapCompass_short(args):
         predicted_haplotype, block_ids = predict_haplotypes_mec_based(nodes, edges, best_states, ploidy, gen_df, data_matrix, frag_graph.snp_to_col, transitions_extra, args, 
         priority="combined", likelihood_weight= args.lw, mec_weight=args.mw, ffbs_weight=args.sw, allow_ffbs_override=True, verbose=False)
         predicted_haplotype = predicted_haplotype.apply(pd.to_numeric, errors='coerce') 
-        # likelihood = compute_likelihood() #... > I should complete
-        likelihoods = 1
+        probability = 1
+
 
         predicted_haplotypes = [predicted_haplotype]
         block_ids = [block_ids]
-        likelihoods = [likelihoods]  # or [likelihood] if you later want LK even without uncertainty
-
+        probabilities = [probability]
+        
 
     # write_phased_vcf(input_vcf_path=vcf, output_vcf_path=result_path, predicted_haplotypes=predicted_haplotypes if args.uncertainty else predicted_haplotypes,
     #     block_ids=block_ids if args.uncertainty else block_ids, likelihoods=likelihoods if args.uncertainty else likelihoods, ploidy=ploidy)
     # print(predicted_haplotypes)
     # print('======================')
     # print(block_ids)
-    write_phased_vcf(vcf, result_path, predicted_haplotypes, block_ids, likelihoods, ploidy, True if len(predicted_haplotypes) > 1 else False)
-
+    # write_phased_vcf(vcf, result_path, predicted_haplotypes, block_ids, likelihoods, ploidy, True if len(predicted_haplotypes) > 1 else False)
+    norm_scores = list(probabilities/np.sum(probabilities))
+    write_phased_vcf(vcf, result_path, predicted_haplotypes, block_ids, norm_scores, ploidy)
 
 

@@ -597,18 +597,17 @@ def bam_root_name(bam_path: str) -> str:
     return os.path.splitext(base)[0]
 
 
-
 def write_phased_vcf(
     input_vcf_path: str,
     output_vcf_path: str,
     predicted_haplotypes,
     block_ids,
-    likelihoods,
-    ploidy: int,
-    write_lk: bool = False,
-):
+    probabilities,
+    ploidy: int):
     """
-    Write a phased VCF with GT/PS[/LK] FORMAT fields.
+    Write a phased VCF with GT/PS FORMAT fields.
+    Multiple solutions are separated by ':' in a single SAMPLE column (only for phased SNPs).
+    Solution probabilities are written in the header.
     """
 
     # ---- basic validation ----
@@ -625,15 +624,12 @@ def write_phased_vcf(
             f"(got {len(block_ids)} vs {n_samples})."
         )
 
-    if write_lk and likelihoods is not None:
-        if len(likelihoods) != n_samples:
+    if probabilities is not None:
+        if not isinstance(probabilities, list) or len(probabilities) != n_samples:
             raise ValueError(
-                f"Number of likelihoods ({len(likelihoods)}) must match number of predicted_haplotypes ({n_samples})"
+                f"probabilities must be a list with same length as predicted_haplotypes "
+                f"(got {len(probabilities) if isinstance(probabilities, list) else 'not a list'} vs {n_samples})."
             )
-        likelihoods = list(likelihoods)
-    else:
-        likelihoods = None
-        write_lk = False
 
     num_snps = predicted_haplotypes[0].shape[1]
     for i, df in enumerate(predicted_haplotypes):
@@ -656,13 +652,10 @@ def write_phased_vcf(
         header.formats.add("GT", 1, "String", "Phased genotype")
     if "PS" not in header.formats:
         header.formats.add("PS", 1, "Integer", "Phase set identifier")
-    if write_lk and "LK" not in header.formats:
-        header.formats.add("LK", 1, "Float", "Phasing likelihood/confidence")
 
     sample_names = list(header.samples)
     if len(sample_names) == 0:
         raise ValueError("Input VCF has no samples; at least one sample is required.")
-    sample_name = sample_names[0]
 
     # DataFrame metadata
     df0 = predicted_haplotypes[0]
@@ -671,9 +664,23 @@ def write_phased_vcf(
     # ---- Write VCF line by line ----
     output_lines = []
     
-    # Write header
+    # Write header lines
     for line in str(header).rstrip('\n').split('\n'):
+        # Skip the #CHROM line, we'll add it after probability headers
+        if line.startswith('#CHROM'):
+            continue
         output_lines.append(line)
+    
+    # Add probability scores in header (if provided and multiple solutions)
+    if probabilities is not None and n_samples > 1:
+        for i, prob in enumerate(probabilities, start=1):
+            output_lines.append(f"##phapcompass_solution=<ID={i},Probability={prob:.6f}>")
+    
+    # Now add the #CHROM line with SAMPLE name
+    header_line = str(header).rstrip('\n').split('\n')[-1]  # Get #CHROM line
+    cols_list = header_line.split('\t')
+    cols_list[9] = "SAMPLE"  # Replace first sample name with "SAMPLE"
+    output_lines.append('\t'.join(cols_list))
 
     idx = 0
     for record in vcf_in:
@@ -688,8 +695,11 @@ def write_phased_vcf(
                         for k, v in record.info.items()]) if len(record.info) > 0 else '.'
 
         if idx >= num_snps:
-            # No prediction - write original VCF line
-            output_lines.append(str(record).rstrip('\n'))
+            # No prediction - write original VCF line with SAMPLE name
+            parts = str(record).rstrip('\n').split('\t')
+            if len(parts) > 9:
+                parts[9] = "SAMPLE"
+            output_lines.append('\t'.join(parts))
             idx += 1
             continue
 
@@ -698,7 +708,6 @@ def write_phased_vcf(
         # ---- Extract haplotypes for this SNP ----
         gt_per_solution = []
         ps_per_solution = []
-        lk_per_solution = []
 
         for s in range(n_samples):
             df = predicted_haplotypes[s]
@@ -726,13 +735,12 @@ def write_phased_vcf(
             ps_val = blocks[idx] if idx < len(blocks) else np.nan
 
             if np.isnan(ps_val):
-                # Unphased - use original VCF genotype
-                original_gt = record.samples[sample_name]['GT']
+                # Unphased - use original VCF genotype and sort
+                original_gt = record.samples[sample_names[0]]['GT']
                 if original_gt is not None:
-                    # Convert pysam GT tuple to string and SORT alleles
                     if isinstance(original_gt, tuple):
                         gt_alleles = [str(a) if a is not None else '.' for a in original_gt]
-                        # Sort alleles (non-missing alleles first, then missing)
+                        # Sort alleles (non-missing first)
                         non_missing = sorted([a for a in gt_alleles if a != '.'])
                         missing = [a for a in gt_alleles if a == '.']
                         sorted_alleles = non_missing + missing
@@ -743,50 +751,35 @@ def write_phased_vcf(
                     gt_str = '/'.join(['.'] * ploidy)
                 ps_val_int = None
             else:
-                # Phased - DO NOT SORT (preserve haplotype order)
+                # Phased - DO NOT SORT
                 gt_str = '|'.join(alleles)
                 ps_val_int = int(ps_val)
 
             gt_per_solution.append(gt_str)
             ps_per_solution.append(ps_val_int)
-            if write_lk and likelihoods is not None:
-                lk_per_solution.append(float(likelihoods[s]))
 
-        # ---- Determine if phased ----
+        # ---- Determine if phased (any solution has valid PS) ----
         is_phased = any(ps is not None for ps in ps_per_solution)
 
         # ---- Build FORMAT and sample fields ----
-        if n_samples == 1:
+        if not is_phased:
+            # UNPHASED: Write only once (no duplication across solutions)
+            format_str = 'GT'
+            sample_str = gt_per_solution[0]  # All solutions have same unphased GT
+            
+        elif n_samples == 1:
+            # PHASED: Single solution
             gt_field = gt_per_solution[0]
             ps_field = ps_per_solution[0]
-            lk_field = lk_per_solution[0] if (write_lk and lk_per_solution) else None
-
-            if is_phased:
-                if write_lk and lk_field is not None:
-                    format_str = 'GT:PS:LK'
-                    sample_str = f"{gt_field}:{ps_field}:{lk_field:.6f}"
-                else:
-                    format_str = 'GT:PS'
-                    sample_str = f"{gt_field}:{ps_field}"
-            else:
-                if write_lk and lk_field is not None:
-                    format_str = 'GT:LK'
-                    sample_str = f"{gt_field}:{lk_field:.6f}"
-                else:
-                    format_str = 'GT'
-                    sample_str = gt_field
+            format_str = 'GT:PS'
+            sample_str = f"{gt_field}:{ps_field}"
+            
         else:
-            # Multiple solutions
+            # PHASED: Multiple solutions - separate with ':'
             gt_field = ':'.join(gt_per_solution)
             ps_field = ':'.join(['.' if v is None else str(v) for v in ps_per_solution])
-            lk_field = ':'.join([f"{v:.6f}" for v in lk_per_solution]) if (write_lk and lk_per_solution) else None
-
-            if write_lk and lk_field is not None:
-                format_str = 'GT:PS:LK'
-                sample_str = f"{gt_field}:{ps_field}:{lk_field}"
-            else:
-                format_str = 'GT:PS'
-                sample_str = f"{gt_field}:{ps_field}"
+            format_str = 'GT:PS'
+            sample_str = f"{gt_field}:{ps_field}"
 
         # Build output line
         output_line = '\t'.join([chrom, str(pos), snp_id, ref, alt, qual, filt, info, format_str, sample_str])
@@ -798,13 +791,15 @@ def write_phased_vcf(
 
     # ---- Write output ----
     open_func = gzip.open if output_vcf_path.endswith('.gz') else open
-    mode = 'wt' if output_vcf_path.endswith('.gz') else open
+    mode = 'wt' if output_vcf_path.endswith('.gz') else 'w'
     
     with open_func(output_vcf_path, mode) as f:
         for line in output_lines:
             f.write(line + '\n')
 
     print(f"Phased VCF written to: {output_vcf_path}")
+
+
 
 
 

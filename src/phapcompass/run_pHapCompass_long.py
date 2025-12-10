@@ -15,7 +15,6 @@ def run_pHapCompass_long(args):
     delta, epsilon, learning_rate = args.delta, args.epsilon, args.learning_rate
     gen_df = args.genotype
 
-    # gen_df = pd.read_csv(args.genotype_path)
     g = gen_df.sum(axis=1).to_numpy(dtype=np.int16)   # length = #SNP positions
 
     n_snps = len(gen_df)
@@ -33,6 +32,7 @@ def run_pHapCompass_long(args):
     if args.uncertainty is not None: 
         block_ids = [np.zeros(n_snps) for _ in range(args.uncertainty)]
         likelihoods = [] # fix it
+        sampler.fit(n_iterations=500, burn_in=0, verbose=False)
         predicted_haplotypes = sampler._ffbs_decode_joint_phase_multiple(args.uncertainty)
 
     else:

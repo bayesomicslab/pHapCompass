@@ -8,6 +8,131 @@ from itertools import permutations, product
 from phapcompass.utils import *
 
 
+def compute_sampled_path_probability(
+    sampled_states: Dict[int, Dict[str, str]],  # Output from sample_states_book
+    slices: Dict[int, List[str]],
+    edges: List[Tuple[str, str]],
+    forward_messages: Dict[int, Dict[str, Dict[str, float]]],
+    transitions_dict: Dict[str, np.ndarray]) -> float:
+    """
+    Compute the probability of a sampled path from FFBS.
+    
+    The probability is:
+    P(path) = P(states at last slice) × ∏ P(parent_state | child_state, forward messages)
+    
+    Since FFBS samples backward, we compute:
+    - At last slice: P(state) ∝ forward[state]
+    - At earlier slices: P(state) ∝ forward[state] × ∏ transition[state→child_state]
+    """
+    
+    slice_keys = sorted(slices.keys())
+    
+    # Build children adjacency
+    children = defaultdict(list)
+    for u, v in edges:
+        children[u].append(v)
+    
+    log_prob = 0.0
+    
+    # 1. Probability at last slice (normalize forward messages)
+    t_last = slice_keys[-1]
+    for node in slices[t_last]:
+        sampled_state = sampled_states[t_last][node]
+        state_labels = list(forward_messages[t_last][node].keys())
+        
+        # Get forward messages for all states
+        log_alphas = np.array([forward_messages[t_last][node][s] for s in state_labels])
+        
+        # Normalize (softmax)
+        max_log = np.max(log_alphas)
+        if np.isfinite(max_log):
+            alphas = np.exp(log_alphas - max_log)
+            total = alphas.sum()
+            if total > 0:
+                probs = alphas / total
+                sampled_idx = state_labels.index(sampled_state)
+                log_prob += np.log(probs[sampled_idx])
+    
+    # 2. For earlier slices, add backward sampling probabilities
+    for t in reversed(slice_keys[:-1]):
+        # Find next slice
+        t_next = None
+        for tt in slice_keys:
+            if tt > t:
+                t_next = tt
+                break
+        
+        if t_next is None:
+            continue
+        
+        for node in slices[t]:
+            sampled_state = sampled_states[t][node]
+            state_labels = list(forward_messages[t][node].keys())
+            S = len(state_labels)
+            
+            if S == 0:
+                continue
+            
+            # Get forward messages
+            log_alpha = np.array([forward_messages[t][node][s] for s in state_labels])
+            
+            # Get children in next slice
+            child_nodes = [ch for ch in children[node] if ch in slices[t_next]]
+            
+            # Compute backward probability: forward × ∏ transitions
+            add_log = np.zeros(S)
+            
+            for ch in child_nodes:
+                ch_states = list(forward_messages[t_next][ch].keys())
+                if len(ch_states) == 0:
+                    continue
+                
+                ch_sampled = sampled_states[t_next][ch]
+                try:
+                    cj = ch_states.index(ch_sampled)
+                except ValueError:
+                    continue
+                
+                # Get transition probabilities for each parent state
+                sampled_idx = state_labels.index(sampled_state)
+                
+                # Get transition matrix
+                key = f"{node}--{ch}"
+                T = transitions_dict.get(key, None)
+                
+                if T is not None and T.shape == (len(state_labels), len(ch_states)):
+                    # T[sampled_idx, cj] is P(child=cj | parent=sampled_idx)
+                    trans_prob = T[sampled_idx, cj]
+                    if trans_prob > 0 and np.isfinite(trans_prob):
+                        add_log[sampled_idx] += np.log(trans_prob)
+                else:
+                    # Try reversed key
+                    key_rev = f"{ch}--{node}"
+                    T_rev = transitions_dict.get(key_rev, None)
+                    if T_rev is not None and T_rev.shape == (len(ch_states), len(state_labels)):
+                        # Convert P(parent|child) to P(child|parent)
+                        col_sum = T_rev.sum(axis=0, keepdims=True).clip(min=1e-12)
+                        T_conv = (T_rev / col_sum).T
+                        trans_prob = T_conv[sampled_idx, cj]
+                        if trans_prob > 0 and np.isfinite(trans_prob):
+                            add_log[sampled_idx] += np.log(trans_prob)
+            
+            # Compute posterior probability (forward × backward)
+            log_post = log_alpha + add_log
+            
+            # Normalize
+            max_log = np.max(log_post)
+            if np.isfinite(max_log):
+                post = np.exp(log_post - max_log)
+                total = post.sum()
+                if total > 0:
+                    probs = post / total
+                    sampled_idx = state_labels.index(sampled_state)
+                    if probs[sampled_idx] > 0:
+                        log_prob += np.log(probs[sampled_idx])
+    
+    return np.exp(log_prob)
+
 
 def _rows_covering_all(M, snp_to_col, pos_1based_list):
     """Return (rows, cols) for reads covering ALL 1-based positions."""
