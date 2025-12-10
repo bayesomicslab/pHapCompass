@@ -1,11 +1,8 @@
 # pHapCompass: Probabilistic Polyploid Haplotype Assembly
 
 pHapCompass is a unified probabilistic framework for **polyploid haplotype assembly** supporting both  
-**short-read** and **long-read** sequencing data. It integrates a Bayesian/graph‑based formulation with  
-alternative decoding strategies and optional solution sampling.  
+**short-read** and **long-read** sequencing data. 
 
-**pHapCompass bundles a fully polyploid-compatible extractHAIRS implementation**,  
-so users **do not need to install extractHAIRS separately**. All fragment extraction happens internally.
 
 ---
 
@@ -46,7 +43,7 @@ To run pHapCompass, you need:
 - **VCF file**: containing heterozygous SNPs (biallelic or multiallelic)
 
 ### **Optional**
-- A pre‑computed `.frag` fragment file (if you prefer not to use internal extractHAIRS)
+- A pre‑computed `.frag` fragment file. 
 
 The tool infers ploidy automatically from the VCF unless specified.
 
@@ -65,6 +62,21 @@ polyploid extractHAIRS generate fragments.
 phapcompass   --data-type short   --bam-path sample.bam   --vcf-path sample.vcf.gz   --result-path output_short.vcf.gz 
 ```
 
+Optionally, you may adjust the hyperparameters of the short-read model:
+
+- `--mw` : MEC weight (default: 10.0)
+- `--lw` : likelihood weight (default: 1.0)
+- `--sw` : FFBS sample weight (default: 1.0)
+- `--epsilon` : sequencing error rate (default: 1e-5)
+- `--uncertainty [N]` : enable N-sample FFBS solution sampling (default N=3 when no value is provided)
+
+Example with custom parameters:
+
+```bash
+phapcompass  --data-type short --bam-path sample.bam  --vcf-path sample.vcf.gz  --result-path output_short.vcf.gz   --mw 8 --lw 2 --sw 0.5 
+```
+Note: The weights do not have to be between 0 and 1 as inputs.
+
 ### **Using a precomputed fragment file**
 
 ```bash
@@ -80,6 +92,20 @@ phapcompass   --data-type short   --frag-path sample.frag   --vcf-path sample.vc
 ```bash
 phapcompass   --data-type long   --bam-path sample.bam   --vcf-path sample.vcf.gz   --result-path output_long.vcf.gz 
 ```
+
+Optionally, you may adjust the hyperparameters of the long-read model:
+
+- `--delta` : transition penalty parameter (default: 5)
+- `--learning-rate` : optimization learning rate (default: 0.02)
+- `--epsilon` : sequencing error rate (default: 1e-5)
+- `--uncertainty [N]` : enable N-sample solution sampling (default N=3 when no value is provided)
+
+Example with custom parameters:
+
+```bash
+phapcompass --data-type long --bam-path sample.bam  --vcf-path sample.vcf.gz  --result-path output_long.vcf.gz  --delta 4 --learning-rate 0.01 --epsilon 0.00002 
+```
+
 
 ### **Using a precomputed fragment file**
 
