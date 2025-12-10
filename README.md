@@ -1,263 +1,225 @@
-# pHapCompass
+# pHapCompass: Probabilistic Polyploid Haplotype Assembly
 
-pHapCompass is a probabilistic haplotype assembly framework for polyploid genomes.  
-It supports both **short-read** and **long-read** data and optionally performs **uncertainty quantification** across haplotype solutions.
+pHapCompass is a unified probabilistic framework for **polyploid haplotype assembly** supporting both  
+**short-read** and **long-read** sequencing data. It integrates a Bayesian/graph‑based formulation with  
+alternative decoding strategies and optional solution sampling.  
+
+**pHapCompass bundles a fully polyploid-compatible extractHAIRS implementation**,  
+so users **do not need to install extractHAIRS separately**. All fragment extraction happens internally.
 
 ---
 
-## Installation
+# 1. Installation
 
-pHapCompass is a Python package targeting **Python 3.10**.
+pHapCompass requires **Python 3.10**.
 
-### Option 1 — Using Conda + Pip (recommended)
-
-Create and activate a dedicated environment:
-
-```bash
-conda create -n phapcompass python=3.10 -y
-conda activate phapcompass
-```
-
-Then install pHapCompass:
+### **Install from GitHub (recommended)**
 
 ```bash
 pip install "git+https://github.com/bayesomicslab/pHapCompass.git"
 ```
 
-### Option 2 — From a local clone
+### **Install from local clone**
 
 ```bash
 git clone https://github.com/bayesomicslab/pHapCompass.git
 cd pHapCompass
-
-conda create -n phapcompass python=3.10 -y
-conda activate phapcompass
-
 pip install .
 ```
 
-### Option 3 — Using the provided environment / requirements files
+This automatically builds and uses the bundled C binary:
 
-If you prefer using the provided files:
-
-```bash
-conda env create -f environment.yml
-conda activate hap
-pip install .
+```
+third_party/extract_poly/build/extractHAIRS
 ```
 
-or, if you already have a suitable Python 3.10 environment:
-
-```bash
-pip install -r requirements.txt
-pip install .
-```
-
-> **Note:** If starting from BAM + VCF, you must install **extractHAIRS** and ensure it is available on your `$PATH` (or provide `--extracthairs-bin`).
-
-> **Conda package:** A pure `conda install phapcompass` (e.g., via bioconda) is not yet available. Once a bioconda recipe is merged, installation will be possible via:
-> ```bash
-> conda install -c bioconda phapcompass
-> ```
+No external tools are required.
 
 ---
 
-## Quick Start
+# 2. Input Requirements
 
-Below are examples for **both models**, with **both input modes** (fragment file OR BAM+VCF).  
-Replace paths with your own data.
+To run pHapCompass, you need:
 
-> In all examples below, `phapcompass` refers to the installed CLI.  
+### **Required**
+- **BAM file**: aligned reads from a single individual  
+- **VCF file**: containing heterozygous SNPs (biallelic or multiallelic)
 
-### 🔹 Short-read model (data-type = short)
+### **Optional**
+- A pre‑computed `.frag` fragment file (if you prefer not to use internal extractHAIRS)
 
-#### **Option A — Start from BAM + VCF**
+The tool infers ploidy automatically from the VCF unless specified.
+
+---
+
+# 3. Basic Usage
+
+The standard and most common usage is to run pHapCompass **directly from BAM + VCF**, letting the internal  
+polyploid extractHAIRS generate fragments.
+
+## **Short‑read model**
+
+### **From BAM + VCF (recommended)**
 
 ```bash
-phapcompass --data-type short  --bam-path sample.bam --vcf-path sample.vcf.gz --result-path outputs/sample_short.vcf.gz --extracthairs-bin extractHAIRS
+phapcompass   --data-type short   --bam-path sample.bam   --vcf-path sample.vcf.gz   --result-path output_short.vcf.gz 
 ```
 
-#### **Option B — Start from a precomputed fragment file**
+### **Using a precomputed fragment file**
 
 ```bash
-phapcompass --data-type short --frag-path sample.frag --vcf-path sample.vcf.gz --result-path outputs/sample_short.vcf.gz
+phapcompass   --data-type short   --frag-path sample.frag   --vcf-path sample.vcf.gz   --result-path output_short.vcf.gz
 ```
 
 ---
 
-### 🔹 Long-read model (data-type = long)
+## **Long‑read model**
 
-
-#### **Option A — Start from BAM + VCF**
-
-```bash
-phapcompass   --data-type long   --bam-path sample.bam   --vcf-path sample.vcf.gz   --result-path outputs/sample_long.vcf.gz   --delta 0.1   --learning-rate 0.001   --epsilon 0.01   --mbq 13   --uncertainty 4
-```
-
-#### **Option B — Start from a precomputed fragment file**
+### **From BAM + VCF**
 
 ```bash
-phapcompass   --data-type long   --frag-path sample.frag   --vcf-path sample.vcf.gz   --result-path outputs/sample_long.vcf.gz   --delta 0.1   --learning-rate 0.001   --uncertainty
+phapcompass   --data-type long   --bam-path sample.bam   --vcf-path sample.vcf.gz   --result-path output_long.vcf.gz 
+```
+
+### **Using a precomputed fragment file**
+
+```bash
+phapcompass   --data-type long   --frag-path sample.frag   --vcf-path sample.vcf.gz   --result-path output_long.vcf.gz
 ```
 
 ---
 
-## Command-line Arguments
+# 4. Command‑line Arguments
 
-### Core I/O
+## **Core I/O**
+| Argument | Description |
+|---------|-------------|
+| `--bam-path PATH` | BAM file; triggers internal extractHAIRS. |
+| `--frag-path PATH` | Optional: use an existing fragment file. |
+| `--vcf-path PATH` | Required. Input VCF containing heterozygous SNPs. |
+| `--result-path PATH` | Required. Output VCF path. |
+| `--ploidy INT` | Optional. If omitted, inferred from VCF. |
 
-- `--bam-path PATH`  
-- `--frag-path PATH`  
-- `--vcf-path PATH` **(required)**
-- `--result-path PATH` **(required)**
-- `--ploidy INT` (optional; inferred from VCF if not given)
-- `--epsilon FLOAT`
+## **Model selection**
+- `--data-type short`
+- `--data-type long`
 
-### Model type
+## **Short‑read model hyperparameters**
+- `--mw` MEC weight  
+- `--lw` likelihood weight  
+- `--sw` FFBS sample weight  
 
-- `--data-type {short,long}` **(required)**
+## **Long‑read model hyperparameters**
+- `--delta`  
+- `--learning-rate`  
 
-### Short-read hyperparameters
-
-- `--mw FLOAT`
-- `--lw FLOAT`
-- `--sw FLOAT`
-
-### Long-read hyperparameters
-
-- `--delta FLOAT`
-- `--learning-rate FLOAT`
-
-### Fragment extraction (extractHAIRS)
-
-- `--mbq INT` (default = 13)
-- `--extracthairs-bin PATH`
-
-### Uncertainty quantification
-
-- `--uncertainty [N]`  
-  - no flag → disabled  
-  - `--uncertainty` → enabled, **3 samples**  
-  - `--uncertainty N` → enabled, N samples  
-
-### Logging
-
-- `--log-level LEVEL`
-- `--verbose`
+## **Other**
+- `--epsilon` sequencing error rate  
+- `--uncertainty [N]` enable sampling mode (N samples; default = 3)  
+- `--verbose`  
 
 ---
 
-# Output Format (VCF)
+# 5. Output Format (Updated VCF Specification)
 
-pHapCompass outputs a **single VCF file** (typically ending in `.vcf.gz`) that contains the **phased haplotypes**.
+pHapCompass outputs a single **phased polyploid VCF** with:
 
-It preserves all header lines from the input VCF and adds:
-
-```text
-##FORMAT=<ID=GT,Number=1,Type=String,Description="Phased genotype">
-##FORMAT=<ID=PS,Number=1,Type=Integer,Description="Phase set identifier">
-##FORMAT=<ID=LK,Number=1,Type=Float,Description="Phasing likelihood/confidence">
+### FORMAT fields:
+```
+GT   Genotype (phased or unphased)
+PS   Phase‑set identifier
 ```
 
----
+If uncertainty mode is enabled, we also add **probability headers** (one per solution):
 
-## GT — Genotype (Phased or Unphased)
+```
+##phapcompass_solution=<ID=i,Probability=p_i>
+```
 
-- **Phased** uses `|`  
-  Example: `0|0|1`
-- **Unphased** uses `/`  
-  Example: `0/0/1`
-- Values:  
-  - `0` = reference allele  
-  - `1` = alternate allele  
-  - `.` = missing
+### **GT formatting**
+- Phased alleles use **pipes**: `0|1|0`
+- Unphased alleles use **slashes**: `0/1/0`
+- Values correspond to REF/ALT encodings in the VCF.
 
----
+### **PS formatting**
+- Integer block ID for phased SNPs  
+- `.` for unphased positions  
 
-## PS — Phase Set
+### **Multisolution output (uncertainty mode)**
 
-- Shared integer ID for SNPs belonging to the same phase block
-- Typically the coordinate or an index corresponding to the first SNP in the block
-- Omitted (set to `.`) for unphased positions
+If `--uncertainty N` is used:
+
+- GT fields for different solutions appear **separated by ':'**  
+- PS fields also appear **separated by ':'**  
+- Probabilities appear in VCF **header only**, not per‑SNP
 
 Example:
 
-```text
-FORMAT  GT:PS
-SAMPLE  0|0|1:3529
+```
+GT:PS
+0|0|1:3529 : 0|1|0:3529 : 1|0|0:3529
 ```
 
-All sites with `PS=3529` are phased relative to each other.
-
 ---
 
-## LK — Phasing Likelihood (Optional)
+# 6. Example Output (Truncated)
 
-- Added only when `--uncertainty` is enabled and likelihoods are provided.
-- Higher values indicate greater confidence for that phasing solution.
-- For multiple solutions, LK can be written as colon-separated values (`LK=0.87:0.82:0.90`).
-
----
-
-# Uncertainty Quantification Mode
-
-When enabled (`--uncertainty N`), the VCF FORMAT fields can contain *multiple phasing solutions* for each variant.
-
-Conceptually:
-
-```text
-GT:PS:LK
-0|0|1:3529:0.876543
-0|1|0:3529:0.823456
-1|0|0:3529:0.901234
 ```
-
-Interpretation:
-
-- Multiple GT strings represent different sampled phasing configurations.
-- PS values indicate the phase block IDs per solution.
-- LK values (if present) represent relative model confidence per configuration.
-
-This allows users to:
-
-- inspect phasing uncertainty,
-- distinguish stable vs. ambiguous regions,
-- perform downstream consensus or Bayesian aggregation.
-
----
-
-# Example Output (Truncated)
-
-```text
 ##fileformat=VCFv4.2
 ##FORMAT=<ID=GT,Number=1,Type=String,Description="Phased genotype">
 ##FORMAT=<ID=PS,Number=1,Type=Integer,Description="Phase set identifier">
-##FORMAT=<ID=LK,Number=1,Type=Float,Description="Phasing confidence">
-#CHROM  POS     ID   REF  ALT  QUAL  FILTER  INFO  FORMAT  SAMPLE
-Chr1    2       .    C    G    .     PASS    .     GT      0/0/1
-Chr1    3529    .    A    T    .     PASS    .     GT:PS   0|0|1:0
-Chr1    3533    .    A    T    .     PASS    .     GT:PS   0|0|1:0
-Chr1    3780    .    A    T    .     PASS    .     GT:PS   0|0|1:1
-Chr1    3781    .    G    C    .     PASS    .     GT:PS   1|0|0:1
-Chr1    5934    .    A    T    .     PASS    .     GT:PS   1|0|0:1
-```
-
-The output is compatible with:
-
-- `bcftools`
-- `vcftools`
-- polyploid haplotype analysis pipelines
-- visualization tools
-
-The VCF can be compressed and indexed with:
-
-```bash
-bgzip output.vcf
-tabix -p vcf output.vcf.gz
+##phapcompass_solution=<ID=1,Probability=0.812345>
+##phapcompass_solution=<ID=2,Probability=0.187655>
+#CHROM POS ID REF ALT QUAL FILTER INFO FORMAT SAMPLE
+Chr1   3529 .  A   T   .    PASS   .    GT:PS   0|0|1:0
+Chr1   3781 .  G   C   .    PASS   .    GT:PS   1|0|0:0
+Chr1   5934 .  A   T   .    PASS   .    GT:PS   1|0|0:0
 ```
 
 ---
 
-# Citation
+# 7. Availability of Simulated Datasets
 
-(Add citation once available.)
+A subset of our simulated polyploid benchmarking data is publicly available:
+
+**Zenodo dataset:**  
+https://zenodo.org/records/17667753
+
+The remaining datasets will be released upon acceptance of the manuscript.
+
+---
+
+# 8. Citation
+
+If you use pHapCompass, please cite our preprint:
+
+**Hosseini et al.**  
+*pHapCompass: Probabilistic Polyploid Haplotype Assembly*  
+arXiv:2512.04393  
+https://doi.org/10.48550/arXiv.2512.04393
+
+BibTeX:
+
+```
+@article{hosseini2025phapcompass,
+  title={pHapCompass: Probabilistic Polyploid Haplotype Assembly},
+  author={Hosseini, Marjan and McConnell, Devin and Aguiar, Derek},
+  journal={arXiv preprint arXiv:2512.04393},
+  year={2025},
+  doi={10.48550/arXiv.2512.04393}
+}
+```
+
+---
+
+# 9. License
+
+pHapCompass is released under the BSD‑2 license.  
+The bundled extract_poly code is licensed under the BSD‑2 license of the Bansal Lab.
+
+---
+
+# 10. Contact
+
+For questions or issues, please open a GitHub issue on the project repository.
+

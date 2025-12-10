@@ -4,7 +4,7 @@ pHapCompass is a unified probabilistic framework for **polyploid haplotype assem
 **short-read** and **long-read** sequencing data. It integrates a Bayesian/graph‑based formulation with  
 alternative decoding strategies and optional solution sampling.  
 
-Unlike earlier tools, **pHapCompass bundles a fully polyploid-compatible extractHAIRS implementation**,  
+**pHapCompass bundles a fully polyploid-compatible extractHAIRS implementation**,  
 so users **do not need to install extractHAIRS separately**. All fragment extraction happens internally.
 
 ---
