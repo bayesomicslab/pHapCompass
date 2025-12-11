@@ -1,6 +1,7 @@
 import numpy as np
 from typing import List, Dict, Tuple
 from scipy.special import logsumexp
+from scipy.stats import entropy
 
 class HaplotypeGibbsSampler:
     """
@@ -72,7 +73,8 @@ class HaplotypeGibbsSampler:
             'n_switches': [],
             "marginals": [],
             "transitions": [],
-            "phase": []
+            "phase": [],
+            "entropies": [] # entropies of marginal distributions at each position and haplotype
         }
     
     
@@ -169,6 +171,7 @@ class HaplotypeGibbsSampler:
             self.history["marginals"].append(np.exp(self.log_psi_marginal.copy()))
             self.history["transitions"].append(np.exp(self.log_psi_transition.copy()))
             self.history["phase"].append(viterbi_haplotypes.copy())
+            self.history["entropies"].append(entropy(np.exp(self.log_psi_marginal), axis=2))
             
             # ----- Store sample -----
             
@@ -1021,7 +1024,7 @@ class HaplotypeGibbsSampler:
         n_states = self.n_joint_states
         
         # Initialize log Viterbi arrays
-        log_V = _np.full((self.L, n_states), -np.inf)
+        log_V = np.full((self.L, n_states), -np.inf)
         backpointer = np.zeros((self.L, n_states), dtype=int)
         
         # Base case: ℓ = 0
@@ -1063,7 +1066,7 @@ class HaplotypeGibbsSampler:
             haplotypes[:, ell] = config
         
         return haplotypes
-    
+
     def _get_config(self, idx):
         """
         Get configuration for a given state index (fast array lookup)
