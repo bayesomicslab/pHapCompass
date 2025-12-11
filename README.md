@@ -238,14 +238,8 @@ BibTeX:
 
 ---
 
-# 9. License
 
-pHapCompass is released under the BSD‑2 license.  
-The bundled extract_poly code is licensed under the BSD‑2 license of the Bansal Lab.
-
----
-
-# 10. Contact
+# 9. Contact
 
 For questions or issues, please open a GitHub issue on the project repository.
 

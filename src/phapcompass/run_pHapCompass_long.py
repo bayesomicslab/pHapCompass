@@ -31,7 +31,7 @@ def run_pHapCompass_long(args):
     sampler = HaplotypeGibbsSampler(reads=reads, genotype=g, K=ploidy, epsilon=epsilon, delta=delta, learning_rate=learning_rate)
     if args.uncertainty is not None: 
         block_ids = [np.zeros(n_snps) for _ in range(args.uncertainty)]
-        likelihoods = [] # fix it
+        probabilities = [] # fix it
         sampler.fit(n_iterations=500, burn_in=0, verbose=False)
         predicted_haplotypes = sampler._ffbs_decode_joint_phase_multiple(args.uncertainty)
 
@@ -40,13 +40,13 @@ def run_pHapCompass_long(args):
         sampler.fit(n_iterations=500, burn_in=0, verbose=False)
         predicted_haplotype = sampler.history["phase"][-1]
         block_id = np.zeros(n_snps)
-        likelihood = 1
+        probability = 1
 
         predicted_haplotypes = [predicted_haplotype]
         block_ids = [block_id]
-        likelihoods = [likelihood]  # or [likelihood] if you later want LK even without uncertainty
+        probabilities = [probability]  # or [likelihood] if you later want LK even without uncertainty
 
+    norm_scores = list(probabilities/np.sum(probabilities))
 
-    write_phased_vcf(vcf, args.result_path, predicted_haplotypes, block_ids, likelihoods, ploidy, True if len(predicted_haplotypes) > 1 else False)
-
+    write_phased_vcf(vcf, args.result_path, predicted_haplotypes, block_ids, norm_scores, ploidy)
 
