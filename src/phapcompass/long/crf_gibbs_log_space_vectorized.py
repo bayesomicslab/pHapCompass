@@ -886,12 +886,19 @@ class HaplotypeGibbsSampler:
         
         1. Forward pass: compute forward messages (done once)
         2. Backward sampling: sample m independent state sequences from end to start
+        3. For each path, compute log likelihood as sum of marginal and transition potentials
+        4. NORMALIZE log likelihoods 
+            first, normalized in log space to be a valid log density
+            then, rescaled so that the log densities sum to 1 for interpretability
         
         Args:
             m: Number of independent samples to generate
             
         Returns:
-            haplotypes_samples: List of m arrays, each of shape (K, L) with sampled haplotypes
+            haplotypes_samples: List of m tuples (haplotypes, normalized_log_likelihood) where:
+                - haplotypes: Array of shape (K, L) with sampled haplotypes
+                - normalized_log_likelihood: Normalized log probability such that 
+                sum over m samples of exp(normalized_log_likelihood) = 1
         """
         n_states = self.n_joint_states
         
@@ -916,10 +923,12 @@ class HaplotypeGibbsSampler:
                 log_alpha[ell, next_state_idx] = log_marginals_ell[next_state_idx] + logsumexp(log_terms)
         
         # ===== BACKWARD SAMPLING (repeated m times) =====
-        haplotypes_samples = []
+        haplotypes_list = []
+        path_log_likelihoods = []  # Collect all path scores for normalization
         
         for sample_idx in range(m):
             path = np.zeros(self.L, dtype=int)
+            path_log_likelihood = 0.0  # Initialize path score accumulator
             
             # Sample final state from forward messages
             log_probs_final = log_alpha[-1, :]
@@ -933,6 +942,10 @@ class HaplotypeGibbsSampler:
                 probs_final = probs_final / np.sum(probs_final)
             
             path[-1] = np.random.choice(n_states, p=probs_final)
+            
+            # Add marginal potential for final position to path score
+            log_marginals_final = self._compute_joint_marginal_potentials(self.L - 1)
+            path_log_likelihood += log_marginals_final[path[-1]]
             
             # Sample backwards through the sequence
             for ell in range(self.L - 2, -1, -1):
@@ -959,6 +972,14 @@ class HaplotypeGibbsSampler:
                     probs = probs / np.sum(probs)
                 
                 path[ell] = np.random.choice(n_states, p=probs)
+                
+                # Add marginal potential for current position to path score
+                log_marginals_ell = self._compute_joint_marginal_potentials(ell)
+                path_log_likelihood += log_marginals_ell[path[ell]]
+                
+                # Add transition potential from ell to ell+1 to path score
+                log_transitions_ell = self._compute_joint_transition_potentials(ell, path[ell])
+                path_log_likelihood += log_transitions_ell[next_state_idx]
             
             # Convert path to haplotype matrix
             haplotypes = np.zeros((self.K, self.L), dtype=int)
@@ -966,10 +987,30 @@ class HaplotypeGibbsSampler:
                 config = self._get_config(path[ell])
                 haplotypes[:, ell] = config
             
-            haplotypes_samples.append(haplotypes)
+            # Store haplotypes and unnormalized log likelihood
+            haplotypes_list.append(haplotypes)
+            path_log_likelihoods.append(path_log_likelihood)
+            
+        # ===== NORMALIZE PATH LOG LIKELIHOODS =====
+        # Convert to numpy array for vectorized operations
+        path_log_likelihoods = np.array(path_log_likelihoods)
         
+        # Step 1: Normalize into valid log density (probabilities sum to 1 in linear space)
+        log_Z = logsumexp(path_log_likelihoods)
+        log_density = path_log_likelihoods - log_Z
+        
+        # Step 2: Make log densities sum to 1 (rescale in log space)
+        log_density_sum = np.sum(log_density)
+        normalized_log_likelihoods = log_density / log_density_sum
+            
+        # Create final list of tuples with normalized scores
+        haplotypes_samples = [
+            (haplotypes_list[i], normalized_log_likelihoods[i]) 
+            for i in range(m)
+        ]
+
         return haplotypes_samples
-    
+
     def _viterbi_decode_joint_phase(self):
         """
         Run Viterbi algorithm over joint phase CRF
@@ -980,7 +1021,7 @@ class HaplotypeGibbsSampler:
         n_states = self.n_joint_states
         
         # Initialize log Viterbi arrays
-        log_V = np.full((self.L, n_states), -np.inf)
+        log_V = _np.full((self.L, n_states), -np.inf)
         backpointer = np.zeros((self.L, n_states), dtype=int)
         
         # Base case: ℓ = 0
