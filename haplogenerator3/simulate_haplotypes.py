@@ -43,7 +43,7 @@ def autopolyploidy_simulator(args):
         mutation_rate = item[1]
         sample_index = str(item[2])
         output_dir = os.path.join(args.output_dir, f"auto/ploidy_{ploidy}/mutation_{mutation_rate}/{sample_index}/{sample_index}")
-        simulate_one(args.reference_path, output_dir, 'poisson', mutation_rate, '{"A":"C","G":"A","C":"T","T":"G"}', ploidy, args.haplogenerator_path, shifted=True)
+        simulate_one(args.reference_path, output_dir, 'poisson', mutation_rate, '{"A":"C","G":"A","C":"T","T":"G"}', ploidy, args.haplogenerator_path, shifted=args.shifted)
     return
 
 def allopolyploidy_simulator(args):
@@ -57,7 +57,7 @@ def allopolyploidy_simulator(args):
     for mut in args.sg_rates:
         for sg in ['A', 'B', 'C']:
             output_dir = os.path.join(args.output_dir, f"allo/subgenome/mutation_{mut}/{sg}/{sg}")
-            simulate_one(args.reference_path, output_dir, 'poisson', mut, '{"A":"C","G":"A","C":"T","T":"G"}', 1, args.haplogenerator_path, shifted=True)
+            simulate_one(args.reference_path, output_dir, 'poisson', mut, '{"A":"C","G":"A","C":"T","T":"G"}', 1, args.haplogenerator_path, shifted=args.shifted)
 
     # ploidy 3
     for item in itertools.product(args.sg_rates, args.mutation_rates, range(args.num_samples)):
@@ -109,6 +109,7 @@ def main():
     parser.add_argument('--structure', type=str, required=True, help='Structure of the haplotypes (autopolyploidy or allopolyploidy)')
     parser.add_argument('--num_samples', type=int, required=True, help='Number of samples to simulate for each configuration')
     parser.add_argument('--mutation_rates', type=float, nargs='+', default=None, required=False, help='List of mutation rates to simulate')
+    parser.add_argument('--shifted', type=bool, default=False, required=False, help='When true, simulate mutations in a shifted region of the genome (true for data in RECOMB 2026 paper)')
     parser.add_argument('--sg_rates', type=float, nargs='+', default=None, required=False, help='List of subgenome mutation rates to simulate in allopolyploidy')
     parser.add_argument('--ploidies', type=int, nargs='+', default=None, required=False, help='List of ploidy levels to simulate')
 
