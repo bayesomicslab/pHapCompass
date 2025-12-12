@@ -11,6 +11,8 @@ import gzip
 import io
 import os
 import pysam
+from pathlib import Path
+import shutil
 
 
 
@@ -556,27 +558,84 @@ def infer_ploidy_from_vcf(vcf_path: str, sample_index: int = 0) -> int:
     raise ValueError(f"Could not infer ploidy from VCF {vcf_path}: no variant lines found.")
 
 
-def run_extract_hairs(bam_path: str, vcf_path: str, frag_path: str, ploidy: Optional[int] = None, epsilon: float = 0.01, mbq: int = 13,  extracthairs_bin: str = "extractHAIRS") -> None:
+# def run_extract_hairs(bam_path: str, vcf_path: str, frag_path: str, ploidy: Optional[int] = None, epsilon: float = 0.01, mbq: int = 13,  extracthairs_bin: str = "extractHAIRS") -> None:
+#     """
+#     Call extractHAIRS to generate a fragment file from BAM + VCF.
+#     Adjust options if needed to match your setup.
+#     """
+#     cmd = [
+#         extracthairs_bin,
+#         "--bam", bam_path,
+#         "--vcf", vcf_path,
+#         "--out", frag_path
+#     ]
+
+#     if mbq != 13:
+#         cmd.extend(["--mbq", str(mbq)])
+
+#     logging.info("Running extractHAIRS: %s", " ".join(cmd))
+#     try:
+#         subprocess.run(cmd, check=True)
+#     except subprocess.CalledProcessError as e:
+#         logging.error("extractHAIRS failed with return code %s", e.returncode)
+#         raise
+
+
+
+def run_extract_hairs(bam_path: str, vcf_path: str, frag_path: str, mbq: int = 13, extracthairs_bin: Optional[str] = None) -> None:
     """
     Call extractHAIRS to generate a fragment file from BAM + VCF.
-    Adjust options if needed to match your setup.
+
+    Resolution order for the binary:
+    1) If extracthairs_bin is provided, use that path (or resolve via PATH).
+    2) Else, try bundled extract_poly under the repo (when running from clone).
+    3) Else, fall back to 'extractHAIRS' on PATH.
     """
+
+    # 1) If user explicitly passed something (we'll remove this arg later but keep for now)
+    if extracthairs_bin:
+        bin_path = shutil.which(extracthairs_bin) if not Path(extracthairs_bin).is_file() else extracthairs_bin
+        if bin_path is None:
+            raise FileNotFoundError(
+                f"extractHAIRS binary not found at '{extracthairs_bin}' or in PATH."
+            )
+        bin_path = Path(bin_path)
+    else:
+        # 2) Try bundled path relative to this file (works in dev / editable install)
+        this_dir = Path(__file__).resolve().parent            # .../src/phapcompass
+        repo_root_candidate = this_dir.parent.parent          # .../pHapCompass (if editable)
+        bundled = repo_root_candidate / "third_party" / "extract_poly" / "build" / "extractHAIRS"
+
+        if bundled.is_file():
+            bin_path = bundled
+        else:
+            # 3) Fallback: try 'extractHAIRS' on PATH
+            resolved = shutil.which("extractHAIRS")
+            if resolved is None:
+                raise FileNotFoundError(
+                    "extractHAIRS binary not found.\n\n"
+                    "Tried:\n"
+                    f"  - Bundled path: {bundled}\n"
+                    f"  - System PATH: 'extractHAIRS'\n\n"
+                    "If you are running from a clone, ensure third_party/extract_poly is built.\n"
+                    "If you are running from an installed package, either:\n"
+                    "  - install extractHAIRS separately and ensure it's on PATH, or\n"
+                    "  - use a precomputed fragment file via --frag-path."
+                )
+            bin_path = Path(resolved)
+
     cmd = [
-        extracthairs_bin,
+        str(bin_path),
         "--bam", bam_path,
         "--vcf", vcf_path,
-        "--out", frag_path
+        "--out", frag_path,
     ]
-
     if mbq != 13:
         cmd.extend(["--mbq", str(mbq)])
 
     logging.info("Running extractHAIRS: %s", " ".join(cmd))
-    try:
-        subprocess.run(cmd, check=True)
-    except subprocess.CalledProcessError as e:
-        logging.error("extractHAIRS failed with return code %s", e.returncode)
-        raise
+    subprocess.run(cmd, check=True)
+
 
 
 def bam_root_name(bam_path: str) -> str:

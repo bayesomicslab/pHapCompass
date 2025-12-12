@@ -6,12 +6,12 @@ import logging
 from .run_pHapCompass_short import run_pHapCompass_short
 from .run_pHapCompass_long import run_pHapCompass_long
 from .read_input import *
-from pathlib import Path
-THIS_DIR = Path(__file__).resolve().parent          
-PACKAGE_ROOT = THIS_DIR.parent                      
-REPO_ROOT = PACKAGE_ROOT.parent   
+# from pathlib import Path
+# THIS_DIR = Path(__file__).resolve().parent          
+# PACKAGE_ROOT = THIS_DIR.parent                      
+# REPO_ROOT = PACKAGE_ROOT.parent   
 
-EXTRACT_HAIRS_BIN = (REPO_ROOT / "third_party" / "extract_poly" / "build" / "extractHAIRS").resolve()
+# EXTRACT_HAIRS_BIN = (REPO_ROOT / "third_party" / "extract_poly" / "build" / "extractHAIRS").resolve()
 
 
 def parse_args() -> argparse.Namespace:
@@ -99,16 +99,18 @@ def main() -> None:
         frag_path = os.path.join(frag_dir, frag_filename)
 
         logging.info("No fragment file provided. Will generate using extractHAIRS at: %s", frag_path)
-        args.extracthairs_bin = str(EXTRACT_HAIRS_BIN)
-        run_extract_hairs(
-            bam_path=args.bam_path,
-            vcf_path=args.vcf_path,
-            frag_path=frag_path,
-            ploidy=args.ploidy,
-            epsilon=args.epsilon,
-            mbq=args.mbq,
-            extracthairs_bin=args.extracthairs_bin,
-        )
+        # args.extracthairs_bin = str(EXTRACT_HAIRS_BIN)
+        # run_extract_hairs(
+        #     bam_path=args.bam_path,
+        #     vcf_path=args.vcf_path,
+        #     frag_path=frag_path,
+        #     ploidy=args.ploidy,
+        #     epsilon=args.epsilon,
+        #     mbq=args.mbq,
+        #     extracthairs_bin=args.extracthairs_bin,
+        # )
+        run_extract_hairs(bam_path=args.bam_path, vcf_path=args.vcf_path, frag_path=frag_path, mbq=args.mbq)
+
         args.frag_path = frag_path
     else:
         if not os.path.exists(args.frag_path):
@@ -138,3 +140,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+

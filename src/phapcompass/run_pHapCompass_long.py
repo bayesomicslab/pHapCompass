@@ -1,3 +1,4 @@
+from operator import index
 from .evaluations import *
 from .utils import *
 from .read_input import *
@@ -33,7 +34,11 @@ def run_pHapCompass_long(args):
         block_ids = [np.zeros(n_snps) for _ in range(args.uncertainty)]
         probabilities = [] # fix it
         sampler.fit(n_iterations=500, burn_in=0, verbose=False)
-        predicted_haplotypes = sampler._ffbs_decode_joint_phase_multiple(args.uncertainty)
+        solutions = sampler._ffbs_decode_joint_phase_multiple(args.uncertainty)
+        predicted_haplotypes, probabilities = map(list, zip(*solutions))
+
+        predicted_haplotypes = [pd.DataFrame(data=sol, index=['haplotype_' + str(i + 1) for i in range(ploidy)]) for sol in predicted_haplotypes]
+
 
     else:
 
@@ -42,7 +47,8 @@ def run_pHapCompass_long(args):
         block_id = np.zeros(n_snps)
         probability = 1
 
-        predicted_haplotypes = [predicted_haplotype]
+        predicted_haplotypes = [pd.DataFrame(data=predicted_haplotype, index=['haplotype_' + str(i + 1) for i in range(ploidy)])]
+        # print(predicted_haplotypes)
         block_ids = [block_id]
         probabilities = [probability]  # or [likelihood] if you later want LK even without uncertainty
 
