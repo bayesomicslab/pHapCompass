@@ -295,6 +295,7 @@ def find_matches(h_col, h_star_col):
 
   return matches
 
+
 def find_partial_matches(h_col, h_star_col):
     """
     returns all of the ways to match the alleles
@@ -434,6 +435,7 @@ def vector_error_type_1(H_block, H_star_block):
 
     return int(vector_error + genotype_disagreement_count)
 
+
 def vector_error_type_2(H_block, H_star_block):
     '''
     H star fully empty, all nan
@@ -458,6 +460,7 @@ def vector_error_type_2(H_block, H_star_block):
     
     # Sum across all columns
     return int(np.sum(vector_errors))
+
 
 def vector_error_type_3(H_block, H_star_block):
     '''
@@ -680,30 +683,32 @@ def vector_error_wrapper(H, H_star, block_ids):
 # MEC
 ########################################################################################################
 
-'''
-helper for probabalistic MEC
-likelihood that a read is truly from a given haplotype
-works for unphased (nan)
-potential edit - instead of having a penalty of 1 for unphased,
-define penalty based on allele frequency
-(penalty = prob that it is not the correct one)
-'''
+
 def likelihood_haplotype(read, haplotype, seq_error=0.001):
+  """
+  helper for probabalistic MEC
+  likelihood that a read is truly from a given haplotype
+  works for unphased (nan)
+  potential edit - instead of having a penalty of 1 for unphased,
+  define penalty based on allele frequency
+  (penalty = prob that it is not the correct one)
+  """
   difference = np.abs(read-haplotype)
   num_not_same = np.count_nonzero(difference)
   likelihood = (seq_error ** num_not_same) * ( (1 - seq_error) ** (len(read) - num_not_same) )
   return likelihood
 
-'''
-helpers for mec, to be used
-when the read and the reconstructed array fit together perfectly 
-(same num of cols)
-'''
 
 def mec_helper(read, reconstruction):
+  """
+  helpers for mec, to be used
+  when the read and the reconstructed array fit together perfectly 
+  (same num of cols)
+  """
   best_match_haplotype = reconstruction[np.argmax(np.sum(reconstruction==read, axis=1))]
   error_correction_count = np.sum(best_match_haplotype != read)
   return error_correction_count/len(read)
+  
   
 def mec_probabalistic_helper(read, reconstruction):
   expected_error = 0
@@ -1131,8 +1136,6 @@ def one_fmpr(f_ij, j_idx, f_ik, k_idx, haplotype):
       (f_ij != haplotype[j_idx] or f_ik != haplotype[k_idx])):
     return 1
   return 0
-
-
 
 
 def calculate_pair_counts(fragment_list):

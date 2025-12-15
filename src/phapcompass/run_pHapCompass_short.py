@@ -103,12 +103,6 @@ def run_pHapCompass_short(args):
         probabilities = [probability]
         
 
-    # write_phased_vcf(input_vcf_path=vcf, output_vcf_path=result_path, predicted_haplotypes=predicted_haplotypes if args.uncertainty else predicted_haplotypes,
-    #     block_ids=block_ids if args.uncertainty else block_ids, likelihoods=likelihoods if args.uncertainty else likelihoods, ploidy=ploidy)
-    # print(predicted_haplotypes)
-    # print('======================')
-    # print(block_ids)
-    # write_phased_vcf(vcf, result_path, predicted_haplotypes, block_ids, likelihoods, ploidy, True if len(predicted_haplotypes) > 1 else False)
     norm_scores = list(probabilities/np.sum(probabilities))
     write_phased_vcf(vcf, result_path, predicted_haplotypes, block_ids, norm_scores, ploidy)
 
