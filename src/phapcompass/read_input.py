@@ -582,59 +582,168 @@ def infer_ploidy_from_vcf(vcf_path: str, sample_index: int = 0) -> int:
 
 
 
-def run_extract_hairs(bam_path: str, vcf_path: str, frag_path: str, mbq: int = 13, extracthairs_bin: Optional[str] = None) -> None:
+# def run_extract_hairs(bam_path: str, vcf_path: str, frag_path: str, mbq: int = 13, extracthairs_bin: Optional[str] = None) -> None:
+#     """
+#     Call extractHAIRS to generate a fragment file from BAM + VCF.
+
+#     Resolution order for the binary:
+#     1) If extracthairs_bin is provided, use that path (or resolve via PATH).
+#     2) Else, try bundled extract_poly under the repo (when running from clone).
+#     3) Else, fall back to 'extractHAIRS' on PATH.
+#     """
+
+#     # 1) If user explicitly passed something (we'll remove this arg later but keep for now)
+#     if extracthairs_bin:
+#         bin_path = shutil.which(extracthairs_bin) if not Path(extracthairs_bin).is_file() else extracthairs_bin
+#         if bin_path is None:
+#             raise FileNotFoundError(
+#                 f"extractHAIRS binary not found at '{extracthairs_bin}' or in PATH."
+#             )
+#         bin_path = Path(bin_path)
+#     else:
+#         # 2) Try bundled path relative to this file (works in dev / editable install)
+#         this_dir = Path(__file__).resolve().parent            # .../src/phapcompass
+#         repo_root_candidate = this_dir.parent.parent          # .../pHapCompass (if editable)
+#         bundled = repo_root_candidate / "third_party" / "extract_poly" / "build" / "extractHAIRS"
+
+#         if bundled.is_file():
+#             bin_path = bundled
+#         else:
+#             # 3) Fallback: try 'extractHAIRS' on PATH
+#             resolved = shutil.which("extractHAIRS")
+#             if resolved is None:
+#                 raise FileNotFoundError(
+#                     "extractHAIRS binary not found.\n\n"
+#                     "Tried:\n"
+#                     f"  - Bundled path: {bundled}\n"
+#                     f"  - System PATH: 'extractHAIRS'\n\n"
+#                     "If you are running from a clone, ensure third_party/extract_poly is built.\n"
+#                     "If you are running from an installed package, either:\n"
+#                     "  - install extractHAIRS separately and ensure it's on PATH, or\n"
+#                     "  - use a precomputed fragment file via --frag-path."
+#                 )
+#             bin_path = Path(resolved)
+
+#     cmd = [
+#         str(bin_path),
+#         "--bam", bam_path,
+#         "--vcf", vcf_path,
+#         "--out", frag_path,
+#     ]
+#     if mbq != 13:
+#         cmd.extend(["--mbq", str(mbq)])
+
+#     logging.info("Running extractHAIRS: %s", " ".join(cmd))
+#     subprocess.run(cmd, check=True)
+
+
+
+def find_extracthairs_binary():
     """
-    Call extractHAIRS to generate a fragment file from BAM + VCF.
-
-    Resolution order for the binary:
-    1) If extracthairs_bin is provided, use that path (or resolve via PATH).
-    2) Else, try bundled extract_poly under the repo (when running from clone).
-    3) Else, fall back to 'extractHAIRS' on PATH.
+    Find extractHAIRS binary bundled with the package.
+    
+    Returns:
+        Path to extractHAIRS binary
+    
+    Raises:
+        FileNotFoundError if binary not found
     """
+    try:
+        import phapcompass
+        
+        # Binary should be at: site-packages/phapcompass/bin/extractHAIRS
+        package_dir = Path(phapcompass.__file__).parent
+        binary_path = package_dir / "bin" / "extractHAIRS"
+        
+        if binary_path.exists() and os.access(binary_path, os.X_OK):
+            return binary_path
+    except (ImportError, AttributeError):
+        pass
+    
+    # Fallback: check system PATH
+    system_binary = shutil.which("extractHAIRS")
+    if system_binary:
+        return Path(system_binary)
+    
+    # Not found - raise helpful error
+    raise FileNotFoundError(
+        "extractHAIRS binary not found!\n\n"
+        "Tried:\n"
+        f"  - Bundled path: {package_dir / 'bin' / 'extractHAIRS' if 'package_dir' in locals() else 'N/A'}\n"
+        "  - System PATH: 'extractHAIRS'\n\n"
+        "Solutions:\n"
+        "  1. Reinstall pHapCompass: pip uninstall phapcompass && pip install git+https://github.com/bayesomicslab/pHapCompass.git\n"
+        "  2. Install extractHAIRS separately and add to PATH\n"
+        "  3. Use --frag-path with a precomputed fragment file\n"
+    )
 
-    # 1) If user explicitly passed something (we'll remove this arg later but keep for now)
-    if extracthairs_bin:
-        bin_path = shutil.which(extracthairs_bin) if not Path(extracthairs_bin).is_file() else extracthairs_bin
-        if bin_path is None:
-            raise FileNotFoundError(
-                f"extractHAIRS binary not found at '{extracthairs_bin}' or in PATH."
-            )
-        bin_path = Path(bin_path)
-    else:
-        # 2) Try bundled path relative to this file (works in dev / editable install)
-        this_dir = Path(__file__).resolve().parent            # .../src/phapcompass
-        repo_root_candidate = this_dir.parent.parent          # .../pHapCompass (if editable)
-        bundled = repo_root_candidate / "third_party" / "extract_poly" / "build" / "extractHAIRS"
 
-        if bundled.is_file():
-            bin_path = bundled
-        else:
-            # 3) Fallback: try 'extractHAIRS' on PATH
-            resolved = shutil.which("extractHAIRS")
-            if resolved is None:
-                raise FileNotFoundError(
-                    "extractHAIRS binary not found.\n\n"
-                    "Tried:\n"
-                    f"  - Bundled path: {bundled}\n"
-                    f"  - System PATH: 'extractHAIRS'\n\n"
-                    "If you are running from a clone, ensure third_party/extract_poly is built.\n"
-                    "If you are running from an installed package, either:\n"
-                    "  - install extractHAIRS separately and ensure it's on PATH, or\n"
-                    "  - use a precomputed fragment file via --frag-path."
-                )
-            bin_path = Path(resolved)
-
+def run_extract_hairs(bam_path, vcf_path, frag_path, mbq=13):
+    """
+    Run extractHAIRS to generate fragment file from BAM and VCF.
+    
+    Args:
+        bam_path: Path to BAM file
+        vcf_path: Path to VCF file  
+        frag_path: Output fragment file path
+        mbq: Minimum base quality (default: 13)
+    
+    Raises:
+        FileNotFoundError: If extractHAIRS binary not found
+        RuntimeError: If extractHAIRS fails or doesn't produce output
+    """
+    # Find the binary
+    extracthairs_binary = find_extracthairs_binary()
+    
+    print(f"Using extractHAIRS binary: {extracthairs_binary}")
+    
+    # Build command
     cmd = [
-        str(bin_path),
-        "--bam", bam_path,
-        "--vcf", vcf_path,
-        "--out", frag_path,
+        str(extracthairs_binary),
+        "--bam", str(bam_path),
+        "--VCF", str(vcf_path),
+        "--out", str(frag_path),
+        "--mbq", str(mbq),
     ]
-    if mbq != 13:
-        cmd.extend(["--mbq", str(mbq)])
+    
+    print(f"Running: {' '.join(cmd)}")
+    
+    try:
+        result = subprocess.run(
+            cmd,
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr, file=sys.stderr)
+        
+        # Verify output was created
+        if not Path(frag_path).exists():
+            raise RuntimeError(
+                f"extractHAIRS completed but did not create output file: {frag_path}\n"
+                "This might indicate an issue with the input files."
+            )
+            
+        print(f"✓ Fragment file created successfully: {frag_path}")
+        
+    except subprocess.CalledProcessError as e:
+        error_msg = f"ERROR: extractHAIRS failed with return code {e.returncode}\n"
+        error_msg += f"Command: {' '.join(cmd)}\n"
+        if e.stdout:
+            error_msg += f"stdout: {e.stdout}\n"
+        if e.stderr:
+            error_msg += f"stderr: {e.stderr}\n"
+        raise RuntimeError(error_msg)
+    except FileNotFoundError as e:
+        # Re-raise our custom error message
+        raise
+    except Exception as e:
+        raise RuntimeError(f"Unexpected error running extractHAIRS: {e}")
 
-    logging.info("Running extractHAIRS: %s", " ".join(cmd))
-    subprocess.run(cmd, check=True)
 
 
 

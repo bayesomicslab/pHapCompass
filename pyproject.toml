@@ -25,3 +25,7 @@ phapcompass = "phapcompass.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+
+[tool.setuptools.package-data]
+phapcompass = ["bin/extractHAIRS"]
