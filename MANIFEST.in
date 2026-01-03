@@ -1,0 +1,16 @@
+# Include third_party source for compilation
+recursive-include third_party *.c *.h Makefile
+
+# Include documentation
+include README.md
+include LICENSE
+include setup.py
+
+# Include test data
+recursive-include test_data *
+
+# Exclude build artifacts
+global-exclude *.pyc
+global-exclude __pycache__
+global-exclude *.o
+global-exclude *.so

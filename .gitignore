@@ -10,3 +10,10 @@ data/
 dist/
 build/
 *.egg-info/
+src/phapcompass/bin/extractHAIRS
+third_party/extract_poly/build/
+third_party/extract_poly/*.o
+
+
+
+
