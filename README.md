@@ -8,29 +8,56 @@ pHapCompass is a unified probabilistic framework for **polyploid haplotype assem
 
 # 1. Installation
 
-pHapCompass requires **Python 3.10**.
+pHapCompass requires **Python 3.10+** and standard build tools (gcc, make).
 
-### **Install from GitHub (recommended)**
 
-```bash
-pip install "git+https://github.com/bayesomicslab/pHapCompass.git"
-```
-
-### **Install from local clone**
+### Option 1: Install from GitHub (Recommended)
 
 ```bash
+# Clone the repository
 git clone https://github.com/bayesomicslab/pHapCompass.git
 cd pHapCompass
-pip install .
+
+# Compile extractHAIRS (required for BAM input)
+cd third_party/extract_poly
+make
+cd ../..
+
+# Install pHapCompass
+pip install -e .
 ```
 
-This automatically builds and uses the bundled C binary:
+### Option 2: Install with pre-computed fragment files
 
-```
-third_party/extract_poly/build/extractHAIRS
+If you already have fragment files (`.frag`) or plan to use extractHAIRS separately:
+
+```bash
+pip install git+https://github.com/bayesomicslab/pHapCompass.git
 ```
 
-No external tools are required.
+Then either:
+- Install extractHAIRS separately and add to PATH, OR
+- Use `--frag-path` to provide pre-computed fragment files
+
+### Requirements
+
+- Python 3.10 or higher
+- gcc and make (for compiling extractHAIRS)
+- Python packages: pandas, scipy, opt_einsum, pysam (installed automatically)
+
+### Verifying Installation
+
+```bash
+# Check that pHapCompass is installed
+phapcompass --help
+
+# Test with example data
+phapcompass --data-type short \
+  --bam-path test_data/short_data_example/0.bam \
+  --vcf-path test_data/ref_example/Chr1_unphased.vcf \
+  --result-path output.vcf.gz
+```
+
 
 ---
 
