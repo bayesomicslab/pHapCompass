@@ -7,7 +7,7 @@ import itertools
 from itertools import combinations, permutations
 from scipy.optimize import linear_sum_assignment
 from collections import defaultdict
-from .utils import *
+from utils import *
 
 
 ########################################################################################################
@@ -771,6 +771,51 @@ def mec_full(H_star, block_ids, list_of_reads, probabalistic=False):
     mec_running_total += (len(ordered_blocks)-1)*(k-1)/k
     return mec_running_total
 
+def mec_standard(H_star, block_ids, list_of_reads):
+  '''
+  the "normal" MEC -
+  no penalty at all when a read crosses a block boundary
+  optimally align each read by splitting it up over the blocks it covers
+  '''
+  mec_running_total = 0
+  k, n = H_star.shape
+  pos_allele_pairs = [(list_of_reads[i], list_of_reads[i + 1]) for i in range(0, len(list_of_reads), 2)]
+  
+  # Get block definitions using new function
+  block_defns = find_blocks_from_ids(H_star, block_ids)
+  
+  # Extract block slices from H_star
+  blocks = [H_star[:, b['start']:b['end'] + 1] for b in block_defns]
+  
+  # Precompute block widths and start indices
+  widths = [b['end'] - b['start'] + 1 for b in block_defns]
+  starts = [b['start'] for b in block_defns]
+
+  # make sure that sum(widths)==n
+  # col2block maps cols to blocks
+  # col2offset maps cols to index within the respective block
+  col2block = np.zeros(n, dtype=int)
+  col2offset = np.zeros(n, dtype=int)
+  for i, (start, w) in enumerate(zip(starts, widths)):
+      col2block[start:start + w] = i
+      col2offset[start:start + w] = np.arange(w)
+  # one read at a time, calculate mec
+  for idx, (position_seq, allele_seq) in enumerate(pos_allele_pairs):
+    blocks_covering_read = col2block[position_seq]
+    indices_within_covering_blocks = col2offset[position_seq]
+    uniq, first = np.unique(blocks_covering_read, return_index=True)
+    ordered_blocks = uniq[np.argsort(first)]
+    # directly gather exact columns within each block (no contiguity assumption)
+    parts = [
+        blocks[b][:, indices_within_covering_blocks[blocks_covering_read == b]]
+        for b in ordered_blocks
+    ]
+    for (idx2,b) in enumerate(ordered_blocks):
+        mask = blocks_covering_read == b
+        idxs = np.where(mask)[0]
+        read_slice = allele_seq[idxs[0] : idxs[-1] + 1]
+        mec_running_total += mec_helper(read_slice, parts[idx2])
+    return mec_running_total
 
 def mec_full_geometric_penalty(H_star, block_ids, list_of_reads, probabalistic=False):
   '''
