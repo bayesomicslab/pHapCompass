@@ -34,7 +34,7 @@ def simulate_one(reference_path, output_dir, model, mutation_rate, mut_map, ploi
         "-f", reference_path,
         "-o", output_dir,
         "--model", model,
-        "--s", f"[{mutation_rate}, 0, 0]",
+        "-s", f"[{mutation_rate}, 0, 0]",
         "-m", str(mut_map),
         "-p", str(ploidy),
     ]
