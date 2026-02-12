@@ -341,7 +341,7 @@ The remaining datasets will be released upon acceptance of the manuscript.
 If you use pHapCompass, please cite our preprint:
 
 **Hosseini et al.**  
-*pHapCompass: Probabilistic Polyploid Haplotype Assembly*  
+*pHapCompass: Probabilistic Assembly and Uncertainty Quantification of Polyploid Haplotype Phase*  
 arXiv:2512.04393  
 https://doi.org/10.48550/arXiv.2512.04393
 
@@ -349,11 +349,10 @@ BibTeX:
 
 ```
 @article{hosseini2025phapcompass,
-  title={pHapCompass: Probabilistic Polyploid Haplotype Assembly},
-  author={Marjan Hosseini, Ella Veiner, Thomas Bergendahl, Tala Yasenpoor, Zane Smith, Margaret Staton, Derek Aguiar},
+  title={pHapCompass: Probabilistic Assembly and Uncertainty Quantification of Polyploid Haplotype Phase},
+  author={Hosseini, Marjan and Veiner, Ella and Bergendahl, Thomas and Yasenpoor, Tala and Smith, Zane and Staton, Margaret and Aguiar, Derek},
   journal={arXiv preprint arXiv:2512.04393},
-  year={2025},
-  doi={10.48550/arXiv.2512.04393}
+  year={2025}
 }
 ```
 
