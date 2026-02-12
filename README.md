@@ -350,7 +350,7 @@ BibTeX:
 ```
 @article{hosseini2025phapcompass,
   title={pHapCompass: Probabilistic Polyploid Haplotype Assembly},
-  author={Hosseini, Marjan and McConnell, Devin and Aguiar, Derek},
+  author={Marjan Hosseini, Ella Veiner, Thomas Bergendahl, Tala Yasenpoor, Zane Smith, Margaret Staton, Derek Aguiar},
   journal={arXiv preprint arXiv:2512.04393},
   year={2025},
   doi={10.48550/arXiv.2512.04393}
