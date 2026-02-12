@@ -331,11 +331,17 @@ def _setup_logging(verbose: bool, log_level: str) -> None:
         format="%(asctime)s | %(levelname)s | %(message)s",
     )
 
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser( prog="phapcompass-eval", description="Evaluation utilities for pHapCompass: VER, MEC, and geometric MEC.")
+def parse_args(argv=None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        prog="phapcompass eval",
+        description="Evaluation utilities for pHapCompass: VER, MEC, and geometric MEC."
+    )
     parser.add_argument("--verbose", action="store_true", help="Enable verbose logging.")
-    parser.add_argument("--log-level", type=str, default="INFO", choices=["DEBUG", "INFO", "WARNING", "ERROR"], help="Logging level.")
+    parser.add_argument(
+        "--log-level", type=str, default="INFO",
+        choices=["DEBUG", "INFO", "WARNING", "ERROR"],
+        help="Logging level."
+    )
 
     sub = parser.add_subparsers(dest="cmd", required=True)
 
@@ -357,7 +363,6 @@ def parse_args() -> argparse.Namespace:
     g_mec.add_argument("--frag", type=str, default=None, help="Fragment file (.frag).")
     g_mec.add_argument("--bam", type=str, default=None, help="BAM file (if frag not provided).")
 
-    # If BAM is used, we need the VCF used for extraction (unphased input VCF)
     p_mec.add_argument("--vcf", type=str, default=None, help="Input VCF used for extractHAIRS when --bam is provided (required with --bam).")
     p_mec.add_argument("--mbq", type=int, default=13, help="Min base quality for extractHAIRS (default: 13).")
 
@@ -374,11 +379,10 @@ def parse_args() -> argparse.Namespace:
     p_gm.add_argument("--vcf", type=str, default=None, help="Input VCF used for extractHAIRS when --bam is provided (required with --bam).")
     p_gm.add_argument("--mbq", type=int, default=13, help="Min base quality for extractHAIRS (default: 13).")
 
-    return parser.parse_args()
+    return parser.parse_args(argv)
 
-
-def main() -> None:
-    args = parse_args()
+def main(argv=None) -> None:
+    args = parse_args(argv)
     _setup_logging(args.verbose, args.log_level)
 
     if args.cmd == "ver":
@@ -387,7 +391,6 @@ def main() -> None:
 
         ploidy = args.ploidy
         if ploidy is None:
-            # Prefer predicted VCF for inference (matches output)
             ploidy = infer_ploidy_from_vcf_safe(pred_vcf) or infer_ploidy_from_vcf_safe(truth_vcf)
             if ploidy is None:
                 raise RuntimeError("Could not infer ploidy from VCF(s). Please provide --ploidy.")
@@ -411,14 +414,12 @@ def main() -> None:
             if ploidy is None:
                 raise RuntimeError("Could not infer ploidy from predicted VCF. Please provide --ploidy.")
 
-        # Determine frag path
         frag_path = None
         tmpdir = None
 
         if args.frag is not None:
             frag_path = args.frag
         else:
-            # BAM mode => must have --vcf for extractHAIRS
             if args.vcf is None:
                 raise ValueError("When using --bam, you must also provide --vcf (the VCF used for extractHAIRS).")
 

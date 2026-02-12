@@ -5,7 +5,7 @@ from phapcompass.simulator import simulate_haplotypes
 
 def build_parser():
     p = argparse.ArgumentParser(
-        prog="phapcompass-sim",
+        prog="phapcompass simulation",
         description="Simulation utilities for phapcompass"
     )
     sub = p.add_subparsers(dest="cmd", required=True)

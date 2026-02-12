@@ -173,7 +173,101 @@ phapcompass   --data-type long   --frag-path sample.frag   --vcf-path sample.vcf
 
 ---
 
-# 5. Output Format (Updated VCF Specification)
+# 5. Simulation Pipeline (Haplotype References and Optional Reads)
+
+pHapCompass includes a simulator for generating polyploid haplotype references (and optionally reads) for benchmarking.
+Read simulation depends on simulated haplotypes, so the pipeline is organized as:
+
+1. **Haplotype simulation** (required)
+2. **Read simulation** (optional; uses output of step 1)
+
+### 5.1 Simulate haplotype references
+
+Help:
+```bash
+phapcompass simulation haplotypes -h
+```
+
+Autopolyploidy example:
+```bash
+phapcompass simulation haplotypes \
+  --reference_path reference/potato_tetra/He1_Chr1_only.fasta \
+  --output_dir sim_out \
+  --structure autopolyploidy \
+  --num_samples 1 \
+  --ploidies 4 \
+  --mutation_rates 0.001
+```
+
+Allopolyploidy example:
+```bash
+phapcompass simulation haplotypes \
+  --reference_path reference/potato_tetra/He1_Chr1_only.fasta \
+  --output_dir sim_out \
+  --structure allopolyploidy \
+  --num_samples 1 \
+  --sg_rates 0.0005 0.0001 \
+  --mutation_rates 0.00005 0.0001
+```
+
+**Reference length note:** the haplotype simulator uses a fixed region window (`500000–1000000`) when `shifted=True`.
+Ensure your reference contig is long enough, or adjust the window in `src/phapcompass/simulator/simulate_haplotypes.py`.
+
+### 5.2 Simulate reads (planned)
+
+Read simulation is under development and will be exposed through the same pipeline entry. It will always run **after** haplotype simulation.
+
+---
+
+# 6. Evaluation (VER, MEC, Geometric MEC)
+
+pHapCompass includes utilities to evaluate predicted polyploid haplotypes against truth.
+
+Help:
+```bash
+phapcompass eval -h
+```
+
+### 6.1 VER (Vector Error Rate)
+
+```bash
+phapcompass eval ver \
+  --truth-vcf path/to/truth.vcf.gz \
+  --pred-vcf path/to/pred.vcf.gz \
+  --ploidy 4
+```
+
+### 6.2 MEC (Minimum Error Correction)
+
+Using a fragment file:
+```bash
+phapcompass eval mec \
+  --pred-vcf path/to/pred.vcf.gz \
+  --ploidy 4 \
+  --frag path/to/reads.frag
+```
+
+Using a BAM file (runs extractHAIRS; requires the VCF used for extraction):
+```bash
+phapcompass eval mec \
+  --pred-vcf path/to/pred.vcf.gz \
+  --ploidy 4 \
+  --bam path/to/reads.bam \
+  --vcf path/to/input_unphased.vcf.gz
+```
+
+### 6.3 Geometric MEC
+
+```bash
+phapcompass eval geom-mec \
+  --pred-vcf path/to/pred.vcf.gz \
+  --ploidy 4 \
+  --frag path/to/reads.frag
+```
+
+---
+
+# 7. Output Format (Updated VCF Specification)
 
 pHapCompass outputs a single **phased polyploid VCF** with:
 
@@ -215,7 +309,7 @@ GT:PS
 
 ---
 
-# 6. Example Output (Truncated)
+# 8. Example Output (Truncated)
 
 ```
 ##fileformat=VCFv4.2
@@ -231,7 +325,7 @@ Chr1   5934 .  A   T   .    PASS   .    GT:PS   1|0|0:0
 
 ---
 
-# 7. Availability of Simulated Datasets
+# 9. Availability of Simulated Datasets
 
 A subset of our simulated polyploid benchmarking data is publicly available:
 
@@ -242,7 +336,7 @@ The remaining datasets will be released upon acceptance of the manuscript.
 
 ---
 
-# 8. Citation
+# 10. Citation
 
 If you use pHapCompass, please cite our preprint:
 
@@ -265,8 +359,6 @@ BibTeX:
 
 ---
 
-
-# 9. Contact
+# 11. Contact
 
 For questions or issues, please open a GitHub issue on the project repository.
-
