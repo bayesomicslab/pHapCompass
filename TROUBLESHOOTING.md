@@ -154,46 +154,52 @@ chmod -R u+w third_party/extract_poly
 pip install --user -e .
 ```
 
-### Issue 6: Platform-specific compilation issues
+### Issue 6: "zlib.h: No such file or directory" during compilation
 
-**macOS: "ld: library not found for -lz"**
+**Cause:** zlib development headers are missing. This is commonly seen on Fedora and RHEL/Rocky Linux.
+
+**Solution:**
+
+**On Ubuntu/Debian:**
+```bash
+sudo apt-get install zlib1g-dev libbz2-dev liblzma-dev
+```
+
+**On Fedora/RHEL/Rocky Linux:**
+```bash
+sudo dnf install zlib-devel bzip2-devel xz-devel
+```
+
+Then retry the installation:
+```bash
+pip install -e .
+```
+
+### Issue 7: "Package requires a different Python: 3.9.x not in >=3.10" on RHEL/Rocky Linux
+
+**Cause:** RHEL and Rocky Linux ship with Python 3.9 by default, but pHapCompass requires Python 3.10+.
 
 **Solution:**
 ```bash
-# Install zlib via Homebrew
-brew install zlib
+# Install epel-release first to get access to more packages
+sudo dnf install -y epel-release
 
-# Export library path
-export LDFLAGS="-L/usr/local/opt/zlib/lib"
-export CPPFLAGS="-I/usr/local/opt/zlib/include"
+# Install Python 3.11
+sudo dnf install -y python3.11 python3.11-pip
 
-# Retry compilation
-cd third_party/extract_poly
-make clean
-make
+# Verify version
+python3.11 --version
+
+# Install pHapCompass using Python 3.11 explicitly
+python3.11 -m pip install -e .
 ```
 
-**macOS: "clang: error: unsupported option '-fcommon'"**
-
-**Solution:**
-This is an older flag. Edit `third_party/extract_poly/Makefile` and change line 5:
-```makefile
-# FROM:
-CC=gcc -g -O3 -Wall -D_GNU_SOURCE -fcommon
-
-# TO:
-CC=gcc -g -O3 -Wall -D_GNU_SOURCE
-```
-
-**Linux: Missing development libraries**
-
-**Solution:**
+Alternatively, use conda to manage the Python version:
 ```bash
-# Ubuntu/Debian
-sudo apt-get install zlib1g-dev libbz2-dev liblzma-dev libcurl4-openssl-dev
-
-# Fedora/RHEL
-sudo dnf install zlib-devel bzip2-devel xz-devel libcurl-devel
+# Create a conda environment with Python 3.10
+conda create -n phapcompass python=3.10 -y
+conda activate phapcompass
+pip install -e .
 ```
 
 ## Alternative: Using Pre-computed Fragment Files

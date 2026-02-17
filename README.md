@@ -13,31 +13,33 @@ pHapCompass is a unified probabilistic framework for **polyploid haplotype assem
 Before installing pHapCompass, ensure you have:
 
 - **Python 3.10+**
-- **C compiler** (gcc, clang, or cc)
+- **C compiler** (gcc or cc)
 - **make** build tool
 - **git** (for downloading submodules)
+- **zlib development headers** (required for compiling extractHAIRS)
 
-### Installing Prerequisites
+### Installing Prerequisites by OS
+
+> **Note:** pHapCompass has been tested on Ubuntu, Debian, Fedora, and RHEL/Rocky Linux. Windows and macOS are not officially supported.
 
 **Ubuntu/Debian:**
 ```bash
 sudo apt-get update
-sudo apt-get install build-essential git python3-pip
+sudo apt-get install build-essential git python3-pip zlib1g-dev libbz2-dev liblzma-dev
 ```
 
-**macOS:**
+**Fedora:**
 ```bash
-# Install Xcode Command Line Tools
-xcode-select --install
-
-# Verify installation
-gcc --version
-make --version
+sudo dnf install -y git gcc make zlib-devel bzip2-devel xz-devel python3-pip
 ```
 
-**Fedora/RHEL/CentOS:**
+**RHEL/Rocky Linux/CentOS:**
 ```bash
-sudo dnf install gcc gcc-c++ make git python3-pip
+sudo dnf install -y git gcc make zlib-devel bzip2-devel xz-devel epel-release
+# RHEL default Python may be 3.9 - install Python 3.11 explicitly:
+sudo dnf install -y python3.11 python3.11-pip
+# Then use python3.11 instead of pip when installing pHapCompass:
+python3.11 -m pip install -e .
 ```
 
 ## Installation Options
