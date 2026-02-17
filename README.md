@@ -1,6 +1,6 @@
 # pHapCompass: Probabilistic Polyploid Haplotype Assembly
 
-pHapCompass is a unified probabilistic framework for **polyploid haplotype assembly** supporting both  
+pHapCompass is a probabilistic framework for **polyploid haplotype assembly** supporting both  
 **short-read** and **long-read** sequencing data. 
 
 ---
