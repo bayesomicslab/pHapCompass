@@ -8,17 +8,65 @@ pHapCompass is a unified probabilistic framework for **polyploid haplotype assem
 
 # 1. Installation
 
-pHapCompass requires **Python 3.10+** and standard build tools (gcc, make).
+## Prerequisites
 
+Before installing pHapCompass, ensure you have:
+
+- **Python 3.10+**
+- **C compiler** (gcc, clang, or cc)
+- **make** build tool
+- **git** (for downloading submodules)
+
+### Installing Prerequisites
+
+**Ubuntu/Debian:**
+```bash
+sudo apt-get update
+sudo apt-get install build-essential git python3-pip
+```
+
+**macOS:**
+```bash
+# Install Xcode Command Line Tools
+xcode-select --install
+
+# Verify installation
+gcc --version
+make --version
+```
+
+**Fedora/RHEL/CentOS:**
+```bash
+sudo dnf install gcc gcc-c++ make git python3-pip
+```
+
+## Installation Options
 
 ### Option 1: Install from GitHub (Recommended)
 
+This option automatically compiles extractHAIRS during installation:
+
 ```bash
 # Clone the repository
-git clone https://github.com/bayesomicslab/pHapCompass.git
+git clone --recursive https://github.com/bayesomicslab/pHapCompass.git
 cd pHapCompass
 
-# Compile extractHAIRS (required for BAM input)
+# Install pHapCompass (this will compile extractHAIRS automatically)
+pip install -e .
+```
+
+**Note:** The `--recursive` flag is important as it downloads required submodules (htslib and samtools).
+
+### Option 2: Manual Compilation (If automatic compilation fails)
+
+If the automatic compilation fails, you can compile extractHAIRS manually:
+
+```bash
+# Clone the repository
+git clone --recursive https://github.com/bayesomicslab/pHapCompass.git
+cd pHapCompass
+
+# Manually compile extractHAIRS
 cd third_party/extract_poly
 make
 cd ../..
@@ -27,9 +75,9 @@ cd ../..
 pip install -e .
 ```
 
-### Option 2: Install with pre-computed fragment files
+### Option 3: Install without extractHAIRS
 
-If you already have fragment files (`.frag`) or plan to use extractHAIRS separately:
+If you plan to use pre-computed fragment files (`.frag`) or install extractHAIRS separately:
 
 ```bash
 pip install git+https://github.com/bayesomicslab/pHapCompass.git
@@ -39,11 +87,35 @@ Then either:
 - Install extractHAIRS separately and add to PATH, OR
 - Use `--frag-path` to provide pre-computed fragment files
 
-### Requirements
+## Troubleshooting Installation
 
-- Python 3.10 or higher
-- gcc and make (for compiling extractHAIRS)
-- Python packages: pandas, scipy, opt_einsum, pysam (installed automatically)
+### Common Issues
+
+**1. "gcc: command not found" or "make: command not found"**
+- Install build tools using the commands in the Prerequisites section above
+
+**2. "git submodule" errors**
+- Ensure you cloned with `--recursive` flag
+- Or manually initialize submodules:
+  ```bash
+  git submodule update --init --recursive
+  ```
+
+**3. Compilation errors related to htslib or samtools**
+- Make sure git submodules are initialized (see above)
+- Try cleaning and rebuilding:
+  ```bash
+  cd third_party/extract_poly
+  make clean
+  make
+  ```
+
+**4. "extractHAIRS binary not found" during runtime**
+- Check if extractHAIRS was compiled:
+  ```bash
+  ls -lh src/phapcompass/bin/extractHAIRS
+  ```
+- If not present, manually compile as shown in Option 2
 
 ### Verifying Installation
 
@@ -51,13 +123,15 @@ Then either:
 # Check that pHapCompass is installed
 phapcompass --help
 
+# Check that extractHAIRS is available
+phapcompass --data-type short --help
+
 # Test with example data
 phapcompass --data-type short \
   --bam-path test_data/short_data_example/0.bam \
   --vcf-path test_data/ref_example/Chr1_unphased.vcf \
   --result-path output.vcf.gz
 ```
-
 
 ---
 
@@ -168,7 +242,7 @@ phapcompass   --data-type long   --frag-path sample.frag   --vcf-path sample.vcf
 
 ## **Other**
 - `--epsilon` sequencing error rate  
-- `--uncertainty [N]` enable sampling mode (N samples; default = 3)  
+- `--uncertainty [N]` enable sampling mode (N samples; default = 3)  
 - `--verbose`  
 
 ---
