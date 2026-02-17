@@ -3,12 +3,33 @@
 pHapCompass is a unified probabilistic framework for **polyploid haplotype assembly** supporting both  
 **short-read** and **long-read** sequencing data. 
 
+---
+
+## Table of Contents
+
+- [Installation](#installation)
+  - [Prerequisites](#prerequisites)
+  - [Installation Options](#installation-options)
+  - [Troubleshooting Installation](#troubleshooting-installation)
+  - [Verifying Installation](#verifying-installation)
+- [Input Requirements](#input-requirements)
+- [Basic Usage](#basic-usage)
+  - [Short-read model](#short-read-model)
+  - [Long-read model](#long-read-model)
+- [Command-line Arguments](#command-line-arguments)
+- [Simulation Pipeline](#simulation-pipeline)
+- [Evaluation](#evaluation)
+- [Output Format](#output-format)
+- [Example Output](#example-output)
+- [Availability of Simulated Datasets](#availability-of-simulated-datasets)
+- [Citation](#citation)
+- [Contact](#contact)
 
 ---
 
-# 1. Installation
+## Installation
 
-## Prerequisites
+### Prerequisites
 
 Before installing pHapCompass, ensure you have:
 
@@ -18,9 +39,7 @@ Before installing pHapCompass, ensure you have:
 - **git** (for downloading submodules)
 - **zlib development headers** (required for compiling extractHAIRS)
 
-### Installing Prerequisites by OS
-
-> **Note:** pHapCompass has been tested on Ubuntu, Debian, Fedora, and RHEL/Rocky Linux. Windows and macOS are not officially supported.
+> **Note:** pHapCompass has been tested on Ubuntu, Debian, Fedora, and RHEL/Rocky Linux.
 
 **Ubuntu/Debian:**
 ```bash
@@ -33,38 +52,38 @@ sudo apt-get install build-essential git python3-pip zlib1g-dev libbz2-dev liblz
 sudo dnf install -y git gcc make zlib-devel bzip2-devel xz-devel python3-pip
 ```
 
-**RHEL/Rocky Linux/CentOS:**
+**RHEL/Rocky Linux:**
 ```bash
 sudo dnf install -y git gcc make zlib-devel bzip2-devel xz-devel epel-release
-# RHEL default Python may be 3.9 - install Python 3.11 explicitly:
+# RHEL ships with Python 3.9 by default - install Python 3.11 explicitly:
 sudo dnf install -y python3.11 python3.11-pip
-# Then use python3.11 instead of pip when installing pHapCompass:
-python3.11 -m pip install -e .
+# Then use python3.11 instead of pip when installing pHapCompass (see below)
 ```
 
-## Installation Options
+---
 
-### Option 1: Install from GitHub (Recommended)
+### Installation Options
 
-This option automatically compiles extractHAIRS during installation:
+**Option 1: Install from GitHub (Recommended)**
+
+This automatically compiles extractHAIRS during installation:
 
 ```bash
-# Clone the repository
 git clone --recursive https://github.com/bayesomicslab/pHapCompass.git
 cd pHapCompass
-
-# Install pHapCompass (this will compile extractHAIRS automatically)
 pip install -e .
 ```
 
-**Note:** The `--recursive` flag is important as it downloads required submodules (htslib and samtools).
+> The `--recursive` flag is important — it downloads required submodules (htslib and samtools).
 
-### Option 2: Manual Compilation (If automatic compilation fails)
+On **RHEL/Rocky Linux**, use Python 3.11 explicitly:
+```bash
+python3.11 -m pip install -e .
+```
 
-If the automatic compilation fails, you can compile extractHAIRS manually:
+**Option 2: Manual Compilation (if automatic compilation fails)**
 
 ```bash
-# Clone the repository
 git clone --recursive https://github.com/bayesomicslab/pHapCompass.git
 cd pHapCompass
 
@@ -77,47 +96,62 @@ cd ../..
 pip install -e .
 ```
 
-### Option 3: Install without extractHAIRS
+**Option 3: Install without extractHAIRS**
 
-If you plan to use pre-computed fragment files (`.frag`) or install extractHAIRS separately:
+If you plan to use pre-computed fragment files (`.frag`):
 
 ```bash
 pip install git+https://github.com/bayesomicslab/pHapCompass.git
 ```
 
-Then either:
-- Install extractHAIRS separately and add to PATH, OR
-- Use `--frag-path` to provide pre-computed fragment files
+Then use `--frag-path` to provide pre-computed fragment files.
 
-## Troubleshooting Installation
+---
 
-### Common Issues
+### Troubleshooting Installation
 
-**1. "gcc: command not found" or "make: command not found"**
-- Install build tools using the commands in the Prerequisites section above
+**"gcc: command not found" or "make: command not found"**
+- Install build tools using the commands in the Prerequisites section above.
 
-**2. "git submodule" errors**
-- Ensure you cloned with `--recursive` flag
-- Or manually initialize submodules:
+**"zlib.h: No such file or directory" during compilation**
+- Install zlib development headers:
+  ```bash
+  # Ubuntu/Debian
+  sudo apt-get install zlib1g-dev
+
+  # Fedora/RHEL
+  sudo dnf install zlib-devel
+  ```
+
+**"Package requires a different Python: 3.9.x not in >=3.10" on RHEL/Rocky Linux**
+- Install Python 3.11 and use it explicitly:
+  ```bash
+  sudo dnf install -y epel-release python3.11 python3.11-pip
+  python3.11 -m pip install -e .
+  ```
+- Or use conda to manage the Python version:
+  ```bash
+  conda create -n phapcompass python=3.10 -y
+  conda activate phapcompass
+  pip install -e .
+  ```
+
+**Git submodule errors**
+- Ensure you cloned with `--recursive`, or initialize manually:
   ```bash
   git submodule update --init --recursive
   ```
 
-**3. Compilation errors related to htslib or samtools**
-- Make sure git submodules are initialized (see above)
-- Try cleaning and rebuilding:
-  ```bash
-  cd third_party/extract_poly
-  make clean
-  make
-  ```
-
-**4. "extractHAIRS binary not found" during runtime**
-- Check if extractHAIRS was compiled:
+**"extractHAIRS binary not found" during runtime**
+- Check if the binary was compiled:
   ```bash
   ls -lh src/phapcompass/bin/extractHAIRS
   ```
-- If not present, manually compile as shown in Option 2
+- If not present, manually compile as shown in Option 2 above.
+
+For more detailed troubleshooting, see [TROUBLESHOOTING.md](TROUBLESHOOTING.md).
+
+---
 
 ### Verifying Installation
 
@@ -125,10 +159,7 @@ Then either:
 # Check that pHapCompass is installed
 phapcompass --help
 
-# Check that extractHAIRS is available
-phapcompass --data-type short --help
-
-# Test with example data
+# Test with example data (this also exercises extractHAIRS)
 phapcompass --data-type short \
   --bam-path test_data/short_data_example/0.bam \
   --vcf-path test_data/ref_example/Chr1_unphased.vcf \
@@ -137,90 +168,109 @@ phapcompass --data-type short \
 
 ---
 
-# 2. Input Requirements
+## Input Requirements
 
 To run pHapCompass, you need:
 
-### **Required**
+**Required**
 - **BAM file**: aligned reads from a single individual  
 - **VCF file**: containing heterozygous SNPs (biallelic or multiallelic)
 
-### **Optional**
-- A pre‑computed `.frag` fragment file. 
+**Optional**
+- A pre-computed `.frag` fragment file
 
 The tool infers ploidy automatically from the VCF unless specified.
 
 ---
 
-# 3. Basic Usage
+## Basic Usage
 
-The standard and most common usage is to run pHapCompass **directly from BAM + VCF**, letting the internal  
-polyploid extractHAIRS generate fragments.
+The standard usage is to run pHapCompass directly from BAM + VCF, letting the internal polyploid extractHAIRS generate fragments.
 
-## **Short‑read model**
+### Short-read model
 
-### **From BAM + VCF (recommended)**
+**From BAM + VCF (recommended)**
 
 ```bash
-phapcompass   --data-type short   --bam-path sample.bam   --vcf-path sample.vcf.gz   --result-path output_short.vcf.gz 
+phapcompass --data-type short \
+  --bam-path sample.bam \
+  --vcf-path sample.vcf.gz \
+  --result-path output_short.vcf.gz
 ```
 
-Optionally, you may adjust the hyperparameters of the short-read model:
+Optional hyperparameters:
 
 - `--mw` : MEC weight (default: 10.0)
 - `--lw` : likelihood weight (default: 1.0)
 - `--sw` : FFBS sample weight (default: 1.0)
 - `--epsilon` : sequencing error rate (default: 1e-5)
-- `--uncertainty [N]` : enable N-sample FFBS solution sampling (default N=3 when no value is provided)
+- `--uncertainty [N]` : enable N-sample FFBS solution sampling (default N=3)
 
 Example with custom parameters:
 
 ```bash
-phapcompass  --data-type short --bam-path sample.bam  --vcf-path sample.vcf.gz  --result-path output_short.vcf.gz   --mw 8 --lw 2 --sw 0.5 
+phapcompass --data-type short \
+  --bam-path sample.bam \
+  --vcf-path sample.vcf.gz \
+  --result-path output_short.vcf.gz \
+  --mw 8 --lw 2 --sw 0.5
 ```
-Note: The weights do not have to be between 0 and 1 as inputs.
 
-### **Using a precomputed fragment file**
+Note: The weights do not have to be between 0 and 1.
+
+**Using a precomputed fragment file**
 
 ```bash
-phapcompass   --data-type short   --frag-path sample.frag   --vcf-path sample.vcf.gz   --result-path output_short.vcf.gz
+phapcompass --data-type short \
+  --frag-path sample.frag \
+  --vcf-path sample.vcf.gz \
+  --result-path output_short.vcf.gz
 ```
 
 ---
 
-## **Long‑read model**
+### Long-read model
 
-### **From BAM + VCF**
+**From BAM + VCF**
 
 ```bash
-phapcompass   --data-type long   --bam-path sample.bam   --vcf-path sample.vcf.gz   --result-path output_long.vcf.gz 
+phapcompass --data-type long \
+  --bam-path sample.bam \
+  --vcf-path sample.vcf.gz \
+  --result-path output_long.vcf.gz
 ```
 
-Optionally, you may adjust the hyperparameters of the long-read model:
+Optional hyperparameters:
 
 - `--delta` : transition penalty parameter (default: 5)
 - `--learning-rate` : optimization learning rate (default: 0.02)
 - `--epsilon` : sequencing error rate (default: 1e-5)
-- `--uncertainty [N]` : enable N-sample solution sampling (default N=3 when no value is provided)
+- `--uncertainty [N]` : enable N-sample solution sampling (default N=3)
 
 Example with custom parameters:
 
 ```bash
-phapcompass --data-type long --bam-path sample.bam  --vcf-path sample.vcf.gz  --result-path output_long.vcf.gz  --delta 4 --learning-rate 0.01 --epsilon 0.00002 
+phapcompass --data-type long \
+  --bam-path sample.bam \
+  --vcf-path sample.vcf.gz \
+  --result-path output_long.vcf.gz \
+  --delta 4 --learning-rate 0.01 --epsilon 0.00002
 ```
 
-
-### **Using a precomputed fragment file**
+**Using a precomputed fragment file**
 
 ```bash
-phapcompass   --data-type long   --frag-path sample.frag   --vcf-path sample.vcf.gz   --result-path output_long.vcf.gz
+phapcompass --data-type long \
+  --frag-path sample.frag \
+  --vcf-path sample.vcf.gz \
+  --result-path output_long.vcf.gz
 ```
 
 ---
 
-# 4. Command‑line Arguments
+## Command-line Arguments
 
-## **Core I/O**
+**Core I/O**
 | Argument | Description |
 |---------|-------------|
 | `--bam-path PATH` | BAM file; triggers internal extractHAIRS. |
@@ -229,37 +279,35 @@ phapcompass   --data-type long   --frag-path sample.frag   --vcf-path sample.vcf
 | `--result-path PATH` | Required. Output VCF path. |
 | `--ploidy INT` | Optional. If omitted, inferred from VCF. |
 
-## **Model selection**
+**Model selection**
 - `--data-type short`
 - `--data-type long`
 
-## **Short‑read model hyperparameters**
+**Short-read model hyperparameters**
 - `--mw` MEC weight  
 - `--lw` likelihood weight  
 - `--sw` FFBS sample weight  
 
-## **Long‑read model hyperparameters**
+**Long-read model hyperparameters**
 - `--delta`  
 - `--learning-rate`  
 
-## **Other**
+**Other**
 - `--epsilon` sequencing error rate  
 - `--uncertainty [N]` enable sampling mode (N samples; default = 3)  
 - `--verbose`  
 
 ---
 
-# 5. Simulation Pipeline (Haplotype References and Optional Reads)
+## Simulation Pipeline
 
-pHapCompass includes a simulator for generating polyploid haplotype references (and optionally reads) for benchmarking.
-Read simulation depends on simulated haplotypes, so the pipeline is organized as:
+pHapCompass includes a simulator for generating polyploid haplotype references (and optionally reads) for benchmarking. The pipeline is organized as:
 
 1. **Haplotype simulation** (required)
 2. **Read simulation** (optional; uses output of step 1)
 
-### 5.1 Simulate haplotype references
+**Simulate haplotype references**
 
-Help:
 ```bash
 phapcompass simulation haplotypes -h
 ```
@@ -286,25 +334,23 @@ phapcompass simulation haplotypes \
   --mutation_rates 0.00005 0.0001
 ```
 
-**Reference length note:** the haplotype simulator uses a fixed region window (`500000–1000000`) when `shifted=True`.
-Ensure your reference contig is long enough, or adjust the window in `src/phapcompass/simulator/simulate_haplotypes.py`.
+> **Note:** the haplotype simulator uses a fixed region window (`500000–1000000`) when `shifted=True`. Ensure your reference contig is long enough, or adjust the window in `src/phapcompass/simulator/simulate_haplotypes.py`.
 
-### 5.2 Simulate reads (planned)
+**Simulate reads** (planned)
 
-Read simulation is under development and will be exposed through the same pipeline entry. It will always run **after** haplotype simulation.
+Read simulation is under development and will be exposed through the same pipeline entry.
 
 ---
 
-# 6. Evaluation (VER, MEC, Geometric MEC)
+## Evaluation
 
 pHapCompass includes utilities to evaluate predicted polyploid haplotypes against truth.
 
-Help:
 ```bash
 phapcompass eval -h
 ```
 
-### 6.1 VER (Vector Error Rate)
+**VER (Vector Error Rate)**
 
 ```bash
 phapcompass eval ver \
@@ -313,7 +359,7 @@ phapcompass eval ver \
   --ploidy 4
 ```
 
-### 6.2 MEC (Minimum Error Correction)
+**MEC (Minimum Error Correction)**
 
 Using a fragment file:
 ```bash
@@ -323,7 +369,7 @@ phapcompass eval mec \
   --frag path/to/reads.frag
 ```
 
-Using a BAM file (runs extractHAIRS; requires the VCF used for extraction):
+Using a BAM file:
 ```bash
 phapcompass eval mec \
   --pred-vcf path/to/pred.vcf.gz \
@@ -332,7 +378,7 @@ phapcompass eval mec \
   --vcf path/to/input_unphased.vcf.gz
 ```
 
-### 6.3 Geometric MEC
+**Geometric MEC**
 
 ```bash
 phapcompass eval geom-mec \
@@ -343,40 +389,32 @@ phapcompass eval geom-mec \
 
 ---
 
-# 7. Output Format (Updated VCF Specification)
+## Output Format
 
-pHapCompass outputs a single **phased polyploid VCF** with:
+pHapCompass outputs a single **phased polyploid VCF** with the following FORMAT fields:
 
-### FORMAT fields:
 ```
 GT   Genotype (phased or unphased)
-PS   Phase‑set identifier
+PS   Phase-set identifier
 ```
 
-If uncertainty mode is enabled, we also add **probability headers** (one per solution):
+If uncertainty mode is enabled, probability headers are added (one per solution):
 
 ```
 ##phapcompass_solution=<ID=i,Probability=p_i>
 ```
 
-### **GT formatting**
-- Phased alleles use **pipes**: `0|1|0`
-- Unphased alleles use **slashes**: `0/1/0`
-- Values correspond to REF/ALT encodings in the VCF.
+**GT formatting**
+- Phased alleles use pipes: `0|1|0`
+- Unphased alleles use slashes: `0/1/0`
 
-### **PS formatting**
+**PS formatting**
 - Integer block ID for phased SNPs  
 - `.` for unphased positions  
 
-### **Multisolution output (uncertainty mode)**
+**Multisolution output (uncertainty mode)**
 
-If `--uncertainty N` is used:
-
-- GT fields for different solutions appear **separated by ':'**  
-- PS fields also appear **separated by ':'**  
-- Probabilities appear in VCF **header only**, not per‑SNP
-
-Example:
+If `--uncertainty N` is used, GT and PS fields for different solutions appear separated by `:`, and probabilities appear in the VCF header only:
 
 ```
 GT:PS
@@ -385,7 +423,7 @@ GT:PS
 
 ---
 
-# 8. Example Output (Truncated)
+## Example Output
 
 ```
 ##fileformat=VCFv4.2
@@ -401,7 +439,7 @@ Chr1   5934 .  A   T   .    PASS   .    GT:PS   1|0|0:0
 
 ---
 
-# 9. Availability of Simulated Datasets
+## Availability of Simulated Datasets
 
 A subset of our simulated polyploid benchmarking data is publicly available:
 
@@ -412,7 +450,7 @@ The remaining datasets will be released upon acceptance of the manuscript.
 
 ---
 
-# 10. Citation
+## Citation
 
 If you use pHapCompass, please cite our preprint:
 
@@ -420,8 +458,6 @@ If you use pHapCompass, please cite our preprint:
 *pHapCompass: Probabilistic Assembly and Uncertainty Quantification of Polyploid Haplotype Phase*  
 arXiv:2512.04393  
 https://doi.org/10.48550/arXiv.2512.04393
-
-BibTeX:
 
 ```
 @article{hosseini2025phapcompass,
@@ -434,6 +470,6 @@ BibTeX:
 
 ---
 
-# 11. Contact
+## Contact
 
 For questions or issues, please open a GitHub issue on the project repository.
